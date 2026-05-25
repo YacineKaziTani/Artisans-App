@@ -12,10 +12,10 @@ import {
 
 import { User } from "../users/entities/user.entities";
 import { Category } from "../category/category.entities";
-import { Service } from "./Service";
-import { Review } from "./Review";
-import { Photo } from "./Photo";
-import { Booking } from "./Booking";
+import { Service } from "../services/service.entities";
+import { Review } from "../reviews/review.entities";
+import { Photo } from "../photos/photo.entities";
+import { Booking } from "../booking/booking.entities";
 
 export enum ShopStatus {
   ACTIVE = "active",
