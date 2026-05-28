@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 
-const JWT_SECRET = process.env.JWT_SECRET!;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export interface JwtPayload {
   sub: string;
@@ -26,6 +26,8 @@ export const authMiddleware = (
   }
 
   try {
+    if (!JWT_SECRET) throw new Error("JWT_SECRET is not defined in .env");
+
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
     (req as any).user = {
       id: payload.sub,

@@ -53,7 +53,7 @@ export class Shop {
   @Column({ type: "float", default: 0 })
   averageRating!: number;
 
-  @OneToOne(() => User, (user) => user.shops)
+  @OneToOne(() => User, (user) => user.shop)
   @JoinColumn()
   owner!: User;
 

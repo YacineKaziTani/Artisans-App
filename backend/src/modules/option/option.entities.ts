@@ -19,9 +19,6 @@ export class Option {
     onDelete: "CASCADE",
   })
   product!: Product;
-
-  @OneToMany(() => Value, (value) => value.option, { cascade: true })
-  values!: Value[];
 }
 
 @Entity("values")
@@ -34,7 +31,4 @@ export class Value {
 
   @Column({ type: "decimal", precision: 10, scale: 2 })
   priceModifier!: number;
-
-  @ManyToOne(() => Option, (option) => option.values, { onDelete: "CASCADE" })
-  option!: Option;
 }

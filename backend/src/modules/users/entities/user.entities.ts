@@ -4,7 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
+  OneToOne,
 } from "typeorm";
 import { Shop } from "../../shop/shop.entities";
 
@@ -31,7 +31,7 @@ export class User {
   @Column({ type: "varchar" })
   password!: string;
 
-  @Column({ type: "varchar", default: true })
+  @Column({ type: "boolean", default: true })
   isActive!: boolean;
 
   @Column({
@@ -50,6 +50,6 @@ export class User {
   @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 
-  @OneToMany(() => Shop, (shop) => shop.owner)
-  shops!: Shop[];
+  @OneToOne(() => Shop, (shop) => shop.owner)
+  shop!: Shop;
 }
