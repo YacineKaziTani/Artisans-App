@@ -43,6 +43,9 @@ export class Shop {
   @Column({ type: "varchar", nullable: true })
   logoUrl?: string;
 
+  @Column({ type: "varchar", nullable: true })
+  phone!: string;
+
   @Column({
     type: "enum",
     enum: ShopStatus,

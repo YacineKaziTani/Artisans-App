@@ -30,8 +30,8 @@ export class Product {
   @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 
-  @ManyToOne(() => Shop, (shop) => shop.products, { onDelete: "CASCADE" })
-  shop!: Shop;
+  // @ManyToOne(() => Shop, (shop) => shop.products, { onDelete: "CASCADE" })
+  // shop!: Shop;
 
   @OneToMany(() => Option, (option) => option.product, { cascade: true })
   options!: Option[];
