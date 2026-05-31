@@ -25,6 +25,7 @@
     "typescript": "^6.0.3"
   },
   "scripts": {
+      "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts",
     "migration:create": "typeorm-ts-node-commonjs migration:create",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/data-source.ts",
