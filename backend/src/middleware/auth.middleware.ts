@@ -1,8 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
-
-const JWT_SECRET = process.env.JWT_SECRET!;
 
 export interface JwtPayload {
   sub: string;
@@ -11,6 +8,9 @@ export interface JwtPayload {
   iat?: number;
   exp?: number;
 }
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error("JWT_SECRET is not defined in .env");
 
 export const authMiddleware = (
   req: Request,
@@ -21,7 +21,7 @@ export const authMiddleware = (
 
   if (!token) {
     return res.status(401).json({
-      message: "Unauthorized",
+      message: "Unauthorized no token provided",
     });
   }
 
@@ -33,9 +33,13 @@ export const authMiddleware = (
       email: payload.email,
     };
     next();
-  } catch {
-    return res.status(401).json({
-      message: "Invalid token",
-    });
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ message: "Token expired" });
+    }
+    if (err instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+    return res.status(500).json({ message: "Internal server error" });
   }
 };

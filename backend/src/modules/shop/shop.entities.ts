@@ -43,6 +43,9 @@ export class Shop {
   @Column({ type: "varchar", nullable: true })
   logoUrl?: string;
 
+  @Column({ type: "varchar", nullable: true })
+  phone!: string;
+
   @Column({
     type: "enum",
     enum: ShopStatus,
@@ -53,7 +56,7 @@ export class Shop {
   @Column({ type: "float", default: 0 })
   averageRating!: number;
 
-  @OneToOne(() => User, (user) => user.shops)
+  @OneToOne(() => User, (user) => user.shop)
   @JoinColumn()
   owner!: User;
 
