@@ -5,6 +5,8 @@ import { User } from "./modules/users/entities/user.entities";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import shopRoutes from "./modules/shop/shop.routes";
+import categoryRoutes from "./modules/category/category.routes";
+import serviceRoutes from "./modules/services/service.routes";
 
 async function bootstrap() {
   await AppDataSource.initialize();
@@ -24,7 +26,9 @@ async function bootstrap() {
 
   const userRepo = AppDataSource.getRepository(User);
 
-  app.use("api/shops", shopRoutes);
+  app.use("/api/shops", shopRoutes);
+  app.use("/api/categories", categoryRoutes);
+  app.use("/api/services", serviceRoutes);
 
   app.get("/users", async (_req, res) => {
     const users = await userRepo.find();

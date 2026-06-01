@@ -13,15 +13,15 @@ import { UserRole } from "../users/entities/user.entities";
 const router = Router();
 
 router.get("/", getAllShops);
-router.get("/:id", getShopById);
+router.get("/mine", authMiddleware, getMyShop);
+router.put("/mine", authMiddleware, authorize(UserRole.ARTISAN), updateMyShop);
 
 router.post(
   "/",
   authMiddleware,
-  authorize(UserRole.ARTISAN, UserRole.CLIENT),
+  authorize(UserRole.ARTISAN), //UserRole.CLIENT )
   createShop,
 );
-router.get("/mine", authMiddleware, getMyShop);
-router.put("/mine", authMiddleware, authorize(UserRole.ARTISAN), updateMyShop);
+router.get("/:id", getShopById);
 
 export default router;
