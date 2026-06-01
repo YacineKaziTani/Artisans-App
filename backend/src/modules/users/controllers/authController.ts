@@ -24,20 +24,27 @@ export const register = async (req: Request, res: Response) => {
     });
 
     await userRepo.save(user);
-
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, {
+    //ingredients for the auth
+    const payload = {
+      sub: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    };
+    const token = jwt.sign(payload, process.env.JWT_SECRET!, {
       expiresIn: "7d",
     });
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false,
+      secure: false, //in production we need to make this true "bach maansawch"
       sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.status(201).json({ message: "User created" });
+    res.status(201).json({ message: "User created and logged in" });
   } catch (err) {
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ error: "Server error during registration" });
   }
 };
 
@@ -50,17 +57,24 @@ export const login = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(400).json({ message: "Invalid user" });
     }
-
+    //checkng password
     const isValid = await bcrypt.compare(password, user.password);
 
     if (!isValid) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
-
-    const token = jwt.sign({ userId: user.id }, "SECRET_KEY", {
+    //The payload that authmiddleware exprects
+    const payload = {
+      sub: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    };
+    const token = jwt.sign(payload, process.env.JWT_SECRET!, {
       expiresIn: "7d",
     });
 
+    //setting the cookie
     res.cookie("token", token, {
       httpOnly: true,
       secure: false, // true in production HTTPS
