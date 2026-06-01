@@ -17,7 +17,7 @@ export class Review {
   rating!: number;
 
   @Column({ type: "text", nullable: true })
-  comment!: string;
+  comment?: string;
 
   @ManyToOne(() => User)
   author!: User;

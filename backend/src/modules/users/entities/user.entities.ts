@@ -37,12 +37,12 @@ export class User {
   @Column({
     type: "enum",
     enum: UserRole,
-    default: UserRole.ARTISAN,
+    default: UserRole.CLIENT,
   })
   role!: UserRole;
 
   @Column({ type: "varchar", nullable: true })
-  avatarUrl!: string;
+  avatarUrl?: string;
 
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;

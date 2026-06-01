@@ -22,7 +22,7 @@ export class Service {
   price!: number;
 
   @Column({ nullable: true })
-  duration!: string;
+  duration?: string;
 
   @Column({ default: true })
   isAvailable!: boolean;

@@ -32,19 +32,19 @@ export class Shop {
   shopName!: string;
 
   @Column({ type: "varchar", nullable: true })
-  description!: string;
+  description?: string;
 
   @Column({ type: "varchar", nullable: true })
   address?: string;
 
   @Column({ type: "varchar", nullable: true })
-  city!: string;
+  city?: string;
 
   @Column({ type: "varchar", nullable: true })
   logoUrl?: string;
 
   @Column({ type: "varchar", nullable: true })
-  phone!: string;
+  phone?: string;
 
   @Column({
     type: "enum",
