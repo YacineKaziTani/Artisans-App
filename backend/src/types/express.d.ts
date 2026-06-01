@@ -1,3 +1,5 @@
+import { Request } from "express";
+
 import { UserRole } from "../entities/User";
 
 declare global {
@@ -7,6 +9,7 @@ declare global {
         id: string;
         role: UserRole;
         email: string;
+        name: string;
       };
     }
   }
