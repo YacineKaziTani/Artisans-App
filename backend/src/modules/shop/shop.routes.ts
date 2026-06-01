@@ -14,14 +14,14 @@ const router = Router();
 
 router.get("/", getAllShops);
 router.get("/mine", authMiddleware, getMyShop);
+router.put("/mine", authMiddleware, authorize(UserRole.ARTISAN), updateMyShop);
 
-router.get("/:id", getShopById);
 router.post(
   "/",
   authMiddleware,
   authorize(UserRole.ARTISAN), //UserRole.CLIENT )
   createShop,
 );
-router.put("/mine", authMiddleware, authorize(UserRole.ARTISAN), updateMyShop);
+router.get("/:id", getShopById);
 
 export default router;
