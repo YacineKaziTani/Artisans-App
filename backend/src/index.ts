@@ -7,6 +7,7 @@ import cors from "cors";
 import shopRoutes from "./modules/shop/shop.routes";
 import categoryRoutes from "./modules/category/category.routes";
 import serviceRoutes from "./modules/services/service.routes";
+import authRouter from "./modules/users/routes/auth.routes";
 
 async function bootstrap() {
   await AppDataSource.initialize();
@@ -29,6 +30,7 @@ async function bootstrap() {
   app.use("/api/shops", shopRoutes);
   app.use("/api/categories", categoryRoutes);
   app.use("/api/services", serviceRoutes);
+  app.use("/api/auth", authRouter);
 
   app.get("/users", async (_req, res) => {
     const users = await userRepo.find();
