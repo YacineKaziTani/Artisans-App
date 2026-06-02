@@ -1,7 +1,6 @@
 import "reflect-metadata";
 import "dotenv/config";
 import { DataSource } from "typeorm";
-import { User } from "./modules/users/entities/user.entities";
 import { Shop } from "./modules/shop/shop.entities";
 import { Category } from "./modules/category/category.entities";
 import { Photo } from "./modules/photos/photo.entities";
@@ -10,6 +9,7 @@ import { Product } from "./modules/products/product.entities";
 import { Review } from "./modules/reviews/review.entities";
 import { Service } from "./modules/services/service.entities";
 import { Booking } from "./modules/booking/booking.entities";
+import { User } from "./modules/users/entities/user.entities";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -18,7 +18,7 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  synchronize: true ,//false, 
+  synchronize: true, //false,
 
   logging: process.env.NODE_ENV === "development", // 'production'
   entities: [

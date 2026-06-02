@@ -10,12 +10,12 @@ import {
   OneToOne,
 } from "typeorm";
 
-import { User } from "../users/entities/user.entities";
 import { Category } from "../category/category.entities";
 import { Service } from "../services/service.entities";
 import { Review } from "../reviews/review.entities";
 import { Photo } from "../photos/photo.entities";
 import { Booking } from "../booking/booking.entities";
+import { User } from "../users/entities/user.entities";
 
 export enum ShopStatus {
   ACTIVE = "active",

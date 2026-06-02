@@ -1,22 +1,25 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../../../data-source";
-import { User } from "../entities/user.entities";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { User } from "../entities/user.entities";
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, name, password } = req.body;
+    const { email, name, password, phone } = req.body;
     const userRepo = AppDataSource.getRepository(User);
 
     if (!email || !name || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    const existingUser = await userRepo.findOneBy({ email });
+    const existingUser = await userRepo.findOne({
+      where: [{ email }, { phone }],
+    });
 
     if (existingUser) {
-      return res.status(400).json({ message: "Email already exists" });
+      const field = existingUser.email === email ? "Email" : "Phone number";
+      return res.status(400).json({ message: `${field} already exists` });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
@@ -24,6 +27,7 @@ export const register = async (req: Request, res: Response) => {
     const user = userRepo.create({
       name,
       email,
+      phone,
       password: hashedPassword,
     });
 
