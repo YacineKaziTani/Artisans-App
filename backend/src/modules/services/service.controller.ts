@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { Service } from "./service.entities";
 
-//creating new servie
+//creating new service
 export const createService = async (req: Request, res: Response) => {
   try {
     const { name, description, price, shopId } = req.body;

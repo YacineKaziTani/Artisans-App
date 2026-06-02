@@ -9,7 +9,7 @@ export const register = async (req: Request, res: Response) => {
     const { email, name, password, phone } = req.body;
     const userRepo = AppDataSource.getRepository(User);
 
-    if (!email || !name || !password) {
+    if (!email || !name || !password || !phone) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -89,7 +89,7 @@ export const login = async (req: Request, res: Response) => {
     });
     res.json({ message: "Logged in successfully" });
   } catch (error) {
-    res.status(500).json({ error: "server error" });
+    res.status(500).json({ message: "server error", error });
   }
 };
 

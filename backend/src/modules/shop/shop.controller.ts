@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { Shop, ShopStatus } from "./shop.entities";
-import { User, UserRole } from "../users/entities/user.entities";
 import { Category } from "../category/category.entities";
+import { User, UserRole } from "../users/entities/user.entities";
 
 const shopRepo = AppDataSource.getRepository(Shop);
 const userRepo = AppDataSource.getRepository(User);

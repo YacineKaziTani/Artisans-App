@@ -8,9 +8,9 @@ export const getCategories = async (req: Request, res: Response) => {
   try {
     const categoryRepo = AppDataSource.getRepository(Category);
     const category = await categoryRepo.find();
-    res.json({ msg: "request succes", category });
+    res.json({ msg: "request success", category });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching categories" });
+    res.status(500).json({ message: "Error fetching categories", error });
   }
 };
 
@@ -27,6 +27,6 @@ export const createCategory = async (req: Request, res: Response) => {
       .status(201)
       .json({ message: "category created successfully", data: newCategory });
   } catch (error) {
-    res.status(500).json({ messge: "Error creating category" });
+    res.status(500).json({ message: "Error creating category", error });
   }
 };
