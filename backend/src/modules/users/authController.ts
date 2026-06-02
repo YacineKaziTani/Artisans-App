@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
-import { AppDataSource } from "../../../data-source";
-import { User } from "../entities/user.entities";
+import { AppDataSource } from "../../data-source";
+import { User } from "./user.entities";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, name, password } = req.body;
+    const { email, name, password, phone } = req.body;
     const userRepo = AppDataSource.getRepository(User);
 
     const existingUser = await userRepo.findOneBy({ email });
@@ -20,6 +20,7 @@ export const register = async (req: Request, res: Response) => {
     const user = userRepo.create({
       name,
       email,
+      phone,
       password: hashedPassword,
     });
 
@@ -63,7 +64,7 @@ export const login = async (req: Request, res: Response) => {
     if (!isValid) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
-    //The payload that authmiddleware exprects
+    //The payload that authmiddleware exprects 
     const payload = {
       sub: user.id,
       name: user.name,

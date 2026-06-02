@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { UserRole } from "../modules/users/entities/user.entities";
+import { UserRole } from "../modules/users/user.entities";
 
 export interface JwtPayload {
   sub: string;
@@ -8,7 +8,21 @@ export interface JwtPayload {
   email: string;
   iat?: number;
   exp?: number;
-  role: UserRole;// The User's Clearance Level (Artisan or Client)
+  role: UserRole; // The User's Clearance Level (Artisan or Client)
+}
+
+// Extend the Express Request type to include the user object
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        name: string;
+        email: string;
+        role: UserRole;
+      };
+    }
+  }
 }
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -30,7 +44,7 @@ export const authMiddleware = (
   try {
     //using this token to unloak the suitcase (token)
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    (req as any).user = {
+    req.user = {
       id: payload.sub,
       name: payload.name,
       email: payload.email,
