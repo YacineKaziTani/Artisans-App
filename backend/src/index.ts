@@ -1,13 +1,14 @@
 import "reflect-metadata";
 import express from "express";
 import { AppDataSource } from "./data-source";
-import { User, UserRole } from "./modules/users/user.entities";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import shopRoutes from "./modules/shop/shop.routes";
 import categoryRoutes from "./modules/category/category.routes";
 import serviceRoutes from "./modules/services/service.routes";
-import userRoutes from "./modules/users/user.routes";
+import authRoutes from "./modules/users/routes/auth.routes";
+import userRoutes from "./modules/users/routes/user.routes";
+
 async function bootstrap() {
   await AppDataSource.initialize();
   console.log("Database connected");
@@ -27,6 +28,7 @@ async function bootstrap() {
   app.use("/api/shops", shopRoutes);
   app.use("/api/categories", categoryRoutes);
   app.use("/api/services", serviceRoutes);
+  app.use("/api/auth", authRoutes);
   app.use("/api/users", userRoutes);
 
   app.listen(3000, () => console.log("Listening on http://localhost:3000"));

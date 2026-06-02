@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import { AppDataSource } from "../../data-source";
-import { User } from "./user.entities";
+import { AppDataSource } from "../../../data-source";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { User } from "../entities/user.entities";
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -89,4 +89,9 @@ export const login = async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ error: "server error" });
   }
+};
+
+export const logout = (_req: Request, res: Response) => {
+  res.clearCookie("token");
+  res.json({ message: "Logged out" });
 };
