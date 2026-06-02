@@ -28,7 +28,6 @@ export const register = async (req: Request, res: Response) => {
     });
 
     await userRepo.save(user);
-    //ingredients for the auth
     const payload = {
       sub: user.id,
       name: user.name,
@@ -62,13 +61,11 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid user" });
     }
 
-    //checkng password
     const isValid = await bcrypt.compare(password, user.password);
 
     if (!isValid) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
-    //The payload that authmiddleware exprects
     const payload = {
       sub: user.id,
       name: user.name,
