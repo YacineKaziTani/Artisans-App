@@ -9,6 +9,10 @@ export const register = async (req: Request, res: Response) => {
     const { email, name, password, phone } = req.body;
     const userRepo = AppDataSource.getRepository(User);
 
+    if (!email || !name || !password) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
     const existingUser = await userRepo.findOne({
       where: [{ email }, { phone }],
     });
@@ -28,7 +32,6 @@ export const register = async (req: Request, res: Response) => {
     });
 
     await userRepo.save(user);
-    //ingredients for the auth
     const payload = {
       sub: user.id,
       name: user.name,
@@ -41,7 +44,7 @@ export const register = async (req: Request, res: Response) => {
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false, //in production we need to make this true "bach maansawch"
+      secure: false, //in production we need to make this true
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -59,15 +62,14 @@ export const login = async (req: Request, res: Response) => {
     const user = await userRepo.findOneBy({ email });
 
     if (!user) {
-      return res.status(400).json({ message: "Invalid user" });
+      return res.status(401).json({ message: "Invalid user" });
     }
-    //checkng password
+
     const isValid = await bcrypt.compare(password, user.password);
 
     if (!isValid) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
-    //The payload that authmiddleware exprects
     const payload = {
       sub: user.id,
       name: user.name,
@@ -85,7 +87,7 @@ export const login = async (req: Request, res: Response) => {
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-    res.json({ token });
+    res.json({ message: "Logged in successfully" });
   } catch (error) {
     res.status(500).json({ error: "server error" });
   }

@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
   OneToOne,
 } from "typeorm";
-import { Shop } from "../shop/shop.entities";
+import { Shop } from "../../shop/shop.entities";
 
 export enum UserRole {
   ARTISAN = "artisan",
@@ -33,7 +33,7 @@ export class User {
 
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
- 
+
   @Column({
     type: "enum",
     enum: UserRole,
@@ -42,7 +42,7 @@ export class User {
   role!: UserRole;
 
   @Column({ type: "varchar", nullable: true })
-  avatarUrl!: string;
+  avatarUrl?: string;
 
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;

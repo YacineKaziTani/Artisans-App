@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../../../data-source";
-import { User } from "./user.entities";
+import { User } from "../entities/user.entities";
 
 const userRepo = AppDataSource.getRepository(User);
 
@@ -27,7 +27,7 @@ export const getUsers = async (req: Request, res: Response) => {
 export const getUserById = async (req: Request, res: Response) => {
   try {
     const user = await userRepo.findOne({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id) },
       select: {
         id: true,
         name: true,
@@ -95,7 +95,7 @@ export const updateMe = async (req: Request, res: Response) => {
 
 export const deleteUser = async (req: Request, res: Response) => {
   try {
-    const user = await userRepo.findOneBy({ id: req.params.id });
+    const user = await userRepo.findOneBy({ id: String(req.params.id) });
     if (!user) return res.status(404).json({ error: "User not found" });
 
     await userRepo.remove(user);
