@@ -24,8 +24,6 @@ async function bootstrap() {
     }),
   );
 
-  const userRepo = AppDataSource.getRepository(User);
-
   app.use("/api/shops", shopRoutes);
   app.use("/api/categories", categoryRoutes);
   app.use("/api/services", serviceRoutes);

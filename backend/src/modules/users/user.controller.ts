@@ -7,16 +7,16 @@ const userRepo = AppDataSource.getRepository(User);
 export const getUsers = async (req: Request, res: Response) => {
   try {
     const users = await userRepo.find({
-      select: [
-        "id",
-        "name",
-        "email",
-        "phone",
-        "role",
-        "isActive",
-        "avatarUrl",
-        "createdAt",
-      ],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
     });
     res.json(users);
   } catch (error) {
@@ -28,16 +28,16 @@ export const getUserById = async (req: Request, res: Response) => {
   try {
     const user = await userRepo.findOne({
       where: { id: req.params.id },
-      select: [
-        "id",
-        "name",
-        "email",
-        "phone",
-        "role",
-        "isActive",
-        "avatarUrl",
-        "createdAt",
-      ],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
     });
     if (!user) return res.status(404).json({ error: "User not found" });
     res.json(user);
@@ -52,12 +52,21 @@ export const getMe = async (req: Request, res: Response) => {
     if (!userReq.user)
       return res.status(401).json({ error: "Not authenticated" });
 
-    // Using 'sub' as defined in authController.ts JWT payload
-    const user = await userRepo.findOneBy({ id: userReq.user.sub });
+    const user = await userRepo.findOne({
+      where: { id: userReq.user.sub },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
+    });
     if (!user) return res.status(404).json({ error: "User not found" });
-
-    const { password, ...userData } = user;
-    res.json(userData);
+    res.json(user);
   } catch (error) {
     res.status(500).json({ error: "Server error fetching profile" });
   }

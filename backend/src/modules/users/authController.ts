@@ -9,10 +9,13 @@ export const register = async (req: Request, res: Response) => {
     const { email, name, password, phone } = req.body;
     const userRepo = AppDataSource.getRepository(User);
 
-    const existingUser = await userRepo.findOneBy({ email });
+    const existingUser = await userRepo.findOne({
+      where: [{ email }, { phone }],
+    });
 
     if (existingUser) {
-      return res.status(400).json({ message: "Email already exists" });
+      const field = existingUser.email === email ? "Email" : "Phone number";
+      return res.status(400).json({ message: `${field} already exists` });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
@@ -64,7 +67,7 @@ export const login = async (req: Request, res: Response) => {
     if (!isValid) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
-    //The payload that authmiddleware exprects 
+    //The payload that authmiddleware exprects
     const payload = {
       sub: user.id,
       name: user.name,
