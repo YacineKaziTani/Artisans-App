@@ -21,7 +21,13 @@ router.post(
 );
 router.get("/", getAllShops);
 router.get("/mine", authMiddleware, getMyShop);
-router.put("/mine", authMiddleware, authorize(UserRole.ARTISAN), updateMyShop);
+router.put(
+  "/mine",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  parser.single("image"),
+  updateMyShop,
+);
 
 router.post(
   "/create",
