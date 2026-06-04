@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { UserRole } from "../modules/users/user.entities";
+import { UserRole } from "../modules/users/entities/user.entities";
 
 // Usage: router.post("/", authenticate, authorize(UserRole.ARTISAN), controller)
 // You can pass multiple roles: authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN)

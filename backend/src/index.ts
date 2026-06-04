@@ -8,6 +8,7 @@ import categoryRoutes from "./modules/category/category.routes";
 import serviceRoutes from "./modules/services/service.routes";
 import authRoutes from "./modules/users/routes/auth.routes";
 import userRoutes from "./modules/users/routes/user.routes";
+import reviewsRoutes from "./modules/reviews/review.routes";
 
 async function bootstrap() {
   await AppDataSource.initialize();
@@ -26,6 +27,7 @@ async function bootstrap() {
   );
 
   app.use("/api/shops", shopRoutes);
+  app.use("/api/reviews", reviewsRoutes);
   app.use("/api/categories", categoryRoutes);
   app.use("/api/services", serviceRoutes);
   app.use("/api/auth", authRoutes);
