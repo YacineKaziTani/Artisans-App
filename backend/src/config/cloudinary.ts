@@ -1,5 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
+// Using a version-agnostic require pattern to solve the "is not a constructor" error
+const multerStorage = require("multer-storage-cloudinary");
+const CloudinaryStorage = multerStorage.CloudinaryStorage || multerStorage;
 import multer from "multer";
 
 cloudinary.config({
@@ -12,7 +14,7 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: "artisan_app",
-    allowd_formats: ["jpg", "pnj", "jpeg"],
+    allowed_formats: ["jpg", "png", "jpeg"],
   } as any,
 });
 export const parser = multer({ storage: storage });

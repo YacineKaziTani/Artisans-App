@@ -11,14 +11,14 @@ export const uploadShopPhoto = async (req: Request, res: Response) => {
   try {
     const imageUrl = req.file?.path;
     if (!imageUrl) {
-      return res.status(400).json({ msg: "No image file provided" });
+      return res.status(400).json({ message: "No image file provided" });
     }
     res.status(200).json({
-      succes: true,
+      success: true,
       url: imageUrl,
     });
   } catch (error) {
-    return res.status(500).json({ msg: "failed to upload image", error });
+    return res.status(500).json({ message: "failed to upload image", error });
   }
 };
 export const createShop = async (req: Request, res: Response) => {
@@ -100,7 +100,7 @@ export const updateMyShop = async (req: Request, res: Response) => {
     const updated = await shopRepo.save(shop);
     return res.json({ message: "Shop updated", shop: updated });
   } catch (error) {
-    return res.status(500).json({ message: " server error", error });
+    return res.status(500).json({ message: "server error", error });
   }
 };
 
@@ -139,7 +139,7 @@ export const getAllShops = async (req: Request, res: Response) => {
       qb.andWhere("LOWER(category.name) = LOWER(:category)", { category });
     }
     if (city) {
-      qb.andWhere("LOWER(shop.city LIKE LOWER(:city)", { city: `%${city}%` });
+      qb.andWhere("LOWER(shop.city) LIKE LOWER(:city)", { city: `%${city}%` });
     }
 
     const take = Math.min(Number(limit), 50);
