@@ -7,11 +7,25 @@ import { User, UserRole } from "../users/entities/user.entities";
 const shopRepo = AppDataSource.getRepository(Shop);
 const userRepo = AppDataSource.getRepository(User);
 const CategoryRepo = AppDataSource.getRepository(Category);
-
+export const uploadShopPhoto = async (req: Request, res: Response) => {
+  try {
+    const imageUrl = req.file?.path;
+    if (!imageUrl) {
+      return res.status(400).json({ msg: "No image file provided" });
+    }
+    res.status(200).json({
+      succes: true,
+      url: imageUrl,
+    });
+  } catch (error) {
+    return res.status(500).json({ msg: "failed to upload image", error });
+  }
+};
 export const createShop = async (req: Request, res: Response) => {
   try {
     const { shopName, description, address, city, phone, categoryId } =
       req.body;
+    const imageUrl = req.file?.path;
     const userId = req.user!.id;
 
     const existing = await shopRepo.findOne({
@@ -35,6 +49,7 @@ export const createShop = async (req: Request, res: Response) => {
       city,
       phone,
       category,
+      logoUrl: imageUrl,
       owner: owner!,
       status: ShopStatus.PENDING,
     });
