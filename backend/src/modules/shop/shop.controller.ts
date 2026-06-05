@@ -6,12 +6,31 @@ import { User, UserRole } from "../users/entities/user.entities";
 
 const shopRepo = AppDataSource.getRepository(Shop);
 const userRepo = AppDataSource.getRepository(User);
-const CategoryRepo = AppDataSource.getRepository(Category);
-
+const categoryRepo = AppDataSource.getRepository(Category);
+export const uploadShopPhoto = async (req: Request, res: Response) => {
+  try {
+    const imageUrl = req.file?.path;
+    if (!imageUrl) {
+      return res.status(400).json({ message: "No image file provided" });
+    }
+    res.status(200).json({
+      success: true,
+      url: imageUrl,
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({
+        message: "Failed to upload image",
+        error: error instanceof Error ? error.message : error,
+      });
+  }
+};
 export const createShop = async (req: Request, res: Response) => {
   try {
     const { shopName, description, address, city, phone, categoryId } =
       req.body;
+    const imageUrl = req.file?.path;
     const userId = req.user!.id;
 
     const existing = await shopRepo.findOne({
@@ -21,12 +40,17 @@ export const createShop = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "You already have a shop" });
     }
 
-    const category = await CategoryRepo.findOne({ where: { id: categoryId } });
+    const category = await categoryRepo.findOne({
+      where: { id: String(categoryId) },
+    });
     if (!category) {
       return res.status(404).json({ message: "Category not found" });
     }
 
     const owner = await userRepo.findOne({ where: { id: userId } });
+    if (!owner) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
     const shop = shopRepo.create({
       shopName,
@@ -35,7 +59,8 @@ export const createShop = async (req: Request, res: Response) => {
       city,
       phone,
       category,
-      owner: owner!,
+      logoUrl: imageUrl,
+      owner,
       status: ShopStatus.PENDING,
     });
 
@@ -57,6 +82,7 @@ export const updateMyShop = async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { shopName, description, address, city, phone, categoryId } =
       req.body;
+    const imageUrl = req.file?.path;
 
     const shop = await shopRepo.findOne({
       where: { owner: { id: userId } },
@@ -72,20 +98,22 @@ export const updateMyShop = async (req: Request, res: Response) => {
     if (address) shop.address = address;
     if (city) shop.city = city;
     if (phone) shop.phone = phone;
+    if (imageUrl) shop.logoUrl = imageUrl;
 
     if (categoryId) {
-      const category = await CategoryRepo.findOne({
+      const category = await categoryRepo.findOne({
         where: { id: categoryId },
       });
-      if (!category)
+      if (!category) {
         return res.status(404).json({ message: "Category not found" });
+      }
       shop.category = category;
     }
 
     const updated = await shopRepo.save(shop);
     return res.json({ message: "Shop updated", shop: updated });
   } catch (error) {
-    return res.status(500).json({ message: " server error", error });
+    return res.status(500).json({ message: "server error", error });
   }
 };
 
@@ -124,7 +152,7 @@ export const getAllShops = async (req: Request, res: Response) => {
       qb.andWhere("LOWER(category.name) = LOWER(:category)", { category });
     }
     if (city) {
-      qb.andWhere("LOWER(shop.city LIKE LOWER(:city)", { city: `%${city}%` });
+      qb.andWhere("LOWER(shop.city) LIKE LOWER(:city)", { city: `%${city}%` });
     }
 
     const take = Math.min(Number(limit), 50);
