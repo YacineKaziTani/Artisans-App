@@ -1,27 +1,19 @@
-import { createBrowserRouter, Navigate } from 'react-router'
-import { RootLayout } from '@/components/layout/RootLayout'
-import { DashboardLayout } from '@/components/layout/DashboardLayout'
-import { AuthGuard } from '@/components/layout/AuthGuard'
-import { GuestGuard } from '@/components/layout/GuestGuard'
-
-// Pages — lazy loaded for code splitting
-import { lazy, Suspense } from 'react'
-import { PageLoader } from '@/components/ui/PageLoader'
-
-const LoginPage = lazy(() => import('@/pages/auth/LoginPage'))
-const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'))
-const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'))
-const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
-
-const withSuspense = (Component: React.ComponentType) => (
-  <Suspense fallback={<PageLoader />}>
-    <Component />
-  </Suspense>
-)
+import { createBrowserRouter, Navigate } from "react-router";
+import { RootLayout } from "@/components/layout/RootLayout";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { AuthGuard } from "@/components/layout/AuthGuard";
+import { GuestGuard } from "@/components/layout/GuestGuard";
+import { withSuspense } from "@/components/layout/withSuspense";
+import {
+  LoginPage,
+  RegisterPage,
+  DashboardPage,
+  NotFoundPage,
+} from "./lazyPages";
 
 export const router = createBrowserRouter([
   {
-    path: '/',
+    path: "/",
     element: <RootLayout />,
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
@@ -30,8 +22,8 @@ export const router = createBrowserRouter([
       {
         element: <GuestGuard />,
         children: [
-          { path: 'login', element: withSuspense(LoginPage) },
-          { path: 'register', element: withSuspense(RegisterPage) },
+          { path: "login", element: withSuspense(LoginPage) },
+          { path: "register", element: withSuspense(RegisterPage) },
         ],
       },
 
@@ -42,14 +34,14 @@ export const router = createBrowserRouter([
           {
             element: <DashboardLayout />,
             children: [
-              { path: 'dashboard', element: withSuspense(DashboardPage) },
+              { path: "dashboard", element: withSuspense(DashboardPage) },
               // 👇 Add more protected routes here
             ],
           },
         ],
       },
 
-      { path: '*', element: withSuspense(NotFoundPage) },
+      { path: "*", element: withSuspense(NotFoundPage) },
     ],
   },
-])
+]);

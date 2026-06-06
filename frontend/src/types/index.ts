@@ -1,35 +1,37 @@
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export interface User {
-  id: string
-  email: string
-  name: string
-  role: 'admin' | 'user'
-  createdAt: string
+  id: string;
+  email: string;
+  name: string;
+  role: "admin" | "user";
+  createdAt: string;
 }
 
 export interface AuthResponse {
-  accessToken: string
-  user: User
+  accessToken: string;
+  user: User;
 }
 
 export interface LoginPayload {
-  email: string
-  password: string
+  email: string;
+  password: string;
 }
 
 export interface RegisterPayload extends LoginPayload {
-  name: string
+  name: string;
+  phone: string;
+  role: "client" | "artisan";
 }
 
 // ── API Helpers ───────────────────────────────────────────────────────────────
 export interface PaginatedResponse<T> {
-  data: T[]
-  total: number
-  page: number
-  limit: number
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface ApiError {
-  message: string
-  statusCode: number
+  message: string;
+  statusCode: number;
 }

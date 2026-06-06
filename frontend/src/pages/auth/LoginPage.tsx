@@ -1,79 +1,95 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { useLogin } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useLogin } from "@/hooks/useAuth";
+import axios from "axios";
 
 export default function LoginPage() {
-  const login = useLogin();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const { mutate: login, isPending, error } = useLogin();
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    login.mutate({ email, password });
+    login({ email, password });
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <span className="text-3xl font-bold text-[var(--color-primary)]">
-            ⬡ Artisans App
-          </span>
-          <h1 className="mt-3 text-2xl font-semibold">Welcome back</h1>
-          <p className="mt-1 text-sm text-[var(--color-muted)]">
-            Sign in to your account
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 px-4">
+      <div className="w-full max-w-md bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl border-2 border-orange-200 p-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-700 to-amber-600 bg-clip-text text-transparent text-center">
+            Welcome Back
+          </h1>
+          <p className="text-amber-900 text-center text-sm mt-2">
+            Sign in to your artisan marketplace account
           </p>
         </div>
 
-        {/* Card */}
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8 shadow-sm space-y-4"
-        >
-          {login.isError && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-[var(--color-danger)]">
-              {(login.error as any)?.response?.data?.message ??
-                "Invalid credentials"}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="p-3 bg-red-100 border-2 border-red-400 rounded-lg text-red-800 text-sm font-medium">
+              {(axios.isAxiosError(error) && error.response?.data?.message) ||
+                "Login failed"}
             </div>
           )}
 
-          <Input
-            label="Email"
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
+          <div>
+            <label
+              htmlFor="email"
+              className="block text-sm font-semibold text-orange-900 mb-2"
+            >
+              Email Address
+            </label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="you@example.com"
+            />
+          </div>
 
-          <Input
-            label="Password"
-            type="password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-          />
+          <div>
+            <label
+              htmlFor="password"
+              className="block text-sm font-semibold text-orange-900 mb-2"
+            >
+              Password
+            </label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="••••••••"
+            />
+          </div>
 
-          <Button type="submit" className="w-full" loading={login.isPending}>
-            Sign in
+          <Button
+            type="submit"
+            disabled={isPending}
+            className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-semibold py-2 mt-6"
+          >
+            {isPending ? "Signing in..." : "Sign In"}
           </Button>
         </form>
 
-        <p className="text-center text-sm text-[var(--color-muted)]">
-          Don't have an account?{" "}
-          <Link
-            to="/register"
-            className="font-medium text-[var(--color-primary)] hover:underline"
-          >
-            Sign up
-          </Link>
-        </p>
+        <div className="pt-6 text-center border-t border-orange-200">
+          <p className="text-amber-900 text-sm">
+            Don't have an account?{" "}
+            <Link
+              to="/register"
+              className="text-orange-700 hover:text-orange-800 font-bold underline"
+            >
+              Register here
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

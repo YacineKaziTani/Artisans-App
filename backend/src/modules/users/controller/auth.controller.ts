@@ -6,10 +6,10 @@ import { User } from "../entities/user.entities";
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, name, password, phone } = req.body;
+    const { email, name, password, phone, role } = req.body;
     const userRepo = AppDataSource.getRepository(User);
 
-    if (!email || !name || !password || !phone) {
+    if (!email || !name || !password || !phone || !role) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -29,6 +29,7 @@ export const register = async (req: Request, res: Response) => {
       email,
       phone,
       password: hashedPassword,
+      role,
     });
 
     await userRepo.save(user);
@@ -49,7 +50,15 @@ export const register = async (req: Request, res: Response) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.status(201).json({ message: "User created and logged in" });
+    res.status(201).json({
+      message: "User created and logged in",
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
   } catch (err) {
     res.status(500).json({ error: "Server error during registration" });
   }
@@ -96,4 +105,16 @@ export const login = async (req: Request, res: Response) => {
 export const logout = (_req: Request, res: Response) => {
   res.clearCookie("token");
   res.json({ message: "Logged out" });
+};
+
+export const me = (req: Request, res: Response) => {
+  const token = req.cookies.token;
+  if (!token) return res.status(401).json({ message: "Not authenticated" });
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET!);
+    res.json(payload);
+  } catch {
+    res.status(401).json({ message: "Invalid token" });
+  }
 };

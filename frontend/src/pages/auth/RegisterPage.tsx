@@ -1,85 +1,164 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { useRegister } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useRegister } from "@/hooks/useAuth";
+import axios from "axios";
 
 export default function RegisterPage() {
-  const register = useRegister();
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [userType, setUserType] = useState<"client" | "artisan">("client");
 
-  const set =
-    (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  const { mutate: register, isPending, error } = useRegister();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    register.mutate(form);
+    register({ name, email, password, phone, role: userType });
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <span className="text-3xl font-bold text-[var(--color-primary)]">
-            ⬡ Artisans App
-          </span>
-          <h1 className="mt-3 text-2xl font-semibold">Create an account</h1>
-          <p className="mt-1 text-sm text-[var(--color-muted)]">
-            Start your journey today
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 px-4">
+      <div className="w-full max-w-md bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl border-2 border-orange-200 p-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-700 to-amber-600 bg-clip-text text-transparent text-center">
+            Join Artisan Hub
+          </h1>
+          <p className="text-amber-900 text-center text-sm mt-2">
+            Create your account and get started today
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8 shadow-sm space-y-4"
-        >
-          {register.isError && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-[var(--color-danger)]">
-              {(register.error as any)?.response?.data?.message ??
-                "Registration failed"}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="p-3 bg-red-100 border-2 border-red-400 rounded-lg text-red-800 text-sm font-medium">
+              {(axios.isAxiosError(error) && error.response?.data?.message) ||
+                "Login failed"}
             </div>
           )}
 
-          <Input
-            label="Full name"
-            placeholder="John Doe"
-            value={form.name}
-            onChange={set("name")}
-            required
-          />
-          <Input
-            label="Email"
-            type="email"
-            placeholder="you@example.com"
-            value={form.email}
-            onChange={set("email")}
-            required
-          />
-          <Input
-            label="Password"
-            type="password"
-            placeholder="••••••••"
-            value={form.password}
-            onChange={set("password")}
-            required
-            minLength={8}
-          />
+          <div>
+            <label
+              htmlFor="name"
+              className="block text-sm font-semibold text-orange-900 mb-2"
+            >
+              Full Name
+            </label>
+            <Input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              placeholder="John Doe"
+            />
+          </div>
 
-          <Button type="submit" className="w-full" loading={register.isPending}>
-            Create account
+          <div>
+            <label
+              htmlFor="email"
+              className="block text-sm font-semibold text-orange-900 mb-2"
+            >
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="you@example.com"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="phone"
+              className="block text-sm font-semibold text-orange-900 mb-2"
+            >
+              Phone Number
+            </label>
+            <Input
+              id="phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              required
+              placeholder="+1 234 567 8900"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="password"
+              className="block text-sm font-semibold text-orange-900 mb-2"
+            >
+              Password
+            </label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="••••••••"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-orange-900 mb-3">
+              I am a...
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="client"
+                  checked={userType === "client"}
+                  onChange={(e) =>
+                    setUserType(e.target.value as "client" | "artisan")
+                  }
+                  className="w-4 h-4 accent-orange-600"
+                />
+                <span className="text-sm font-medium text-amber-900">
+                  Client
+                </span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="artisan"
+                  checked={userType === "artisan"}
+                  onChange={(e) =>
+                    setUserType(e.target.value as "client" | "artisan")
+                  }
+                  className="w-4 h-4 accent-orange-600"
+                />
+                <span className="text-sm font-medium text-amber-900">
+                  Artisan
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <Button type="submit" disabled={isPending} className="w-full mt-6">
+            {isPending ? "Creating account..." : "Register"}
           </Button>
         </form>
 
-        <p className="text-center text-sm text-[var(--color-muted)]">
-          Already have an account?{" "}
-          <Link
-            to="/login"
-            className="font-medium text-[var(--color-primary)] hover:underline"
-          >
-            Sign in
-          </Link>
-        </p>
+        <div className="pt-6 text-center border-t border-orange-200">
+          <p className="text-amber-900 text-sm">
+            Already have an account?{" "}
+            <Link
+              to="/login"
+              className="text-orange-700 hover:text-orange-800 font-bold underline"
+            >
+              Login here
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );
