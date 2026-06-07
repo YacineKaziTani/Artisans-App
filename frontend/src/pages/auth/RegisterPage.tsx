@@ -20,10 +20,10 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-orange-50 via-amber-50 to-orange-100 px-4">
       <div className="w-full max-w-md bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl border-2 border-orange-200 p-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-700 to-amber-600 bg-clip-text text-transparent text-center">
+          <h1 className="text-3xl font-bold bg-linear-to-r from-orange-700 to-amber-600 bg-clip-text text-transparent text-center">
             Join Artisan Hub
           </h1>
           <p className="text-amber-900 text-center text-sm mt-2">
