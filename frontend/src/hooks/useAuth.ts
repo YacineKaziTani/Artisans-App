@@ -10,7 +10,7 @@ export const authKeys = {
 };
 
 export function useMe() {
-  const { setAuth, isAuthenticated } = useAuthStore();
+  const { setAuth, isAuthenticated, logout } = useAuthStore();
 
   const query = useQuery({
     queryKey: authKeys.me,
@@ -18,11 +18,14 @@ export function useMe() {
     retry: false,
     staleTime: Infinity,
     enabled: isAuthenticated,
+    // Allow checking the session even if local storage is empty
+    // This allows auto-login via cookies.
   });
 
   useEffect(() => {
     if (query.data) setAuth(query.data);
-  }, [query.data, setAuth]);
+    if (query.isError) logout(); // If session check fails, clear local state
+  }, [query.data, query.isError, setAuth, logout]);
 
   return query;
 }
@@ -45,11 +48,13 @@ export function useLogin() {
 export function useRegister() {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
   return useMutation({
     mutationFn: (payload: RegisterPayload) => authApi.register(payload),
     onSuccess: ({ user }) => {
       setAuth(user);
+      qc.setQueryData(authKeys.me, user); // Prime the cache like login does
       navigate("/dashboard");
     },
   });
