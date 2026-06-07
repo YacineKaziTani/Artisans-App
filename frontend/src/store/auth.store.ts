@@ -10,7 +10,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isAuthenticated: false, // will be hydrated by useMe() on app load
+  isAuthenticated: false,
 
   setAuth: (user) => {
     set({ user, isAuthenticated: true });

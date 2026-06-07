@@ -3,7 +3,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "user";
+  role: "admin" | "client" | "artisan";
   createdAt: string;
 }
 
@@ -20,7 +20,7 @@ export interface LoginPayload {
 export interface RegisterPayload extends LoginPayload {
   name: string;
   phone: string;
-  role: "client" | "artisan";
+  role: "admin" | "client" | "artisan";
 }
 
 // ── API Helpers ───────────────────────────────────────────────────────────────
