@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  :root {
+    /* Legacy dashboard tokens (used by the existing Button/Input/dashboard UI) */
+    --color-bg: #f8f9fc;
+    --color-surface: #ffffff;
+    --color-border: #e5e7eb;
+    --color-text: #111827;
+    --color-muted: #6b7280;
+    --color-primary: #4f46e5;
+    --color-primary-hover: #4338ca;
+    --color-danger: #ef4444;
+
+    /* Marketplace design tokens (shadcn-style, used by components/ui/*.tsx lowercase) */
+    --background: #faf8f3;
+    --foreground: #2b1f18;
+    --card: #fff9f0;
+    --card-foreground: #2b1f18;
+    --popover: #fff9f0;
+    --popover-foreground: #2b1f18;
+    --primary: #c85a17;
+    --primary-foreground: #ffffff;
+    --secondary: #d4a574;
+    --secondary-foreground: #2b1f18;
+    --muted: #f0e6d8;
+    --muted-foreground: #7a6555;
+    --accent: #e8932f;
+    --accent-foreground: #ffffff;
+    --destructive: #dc2626;
+    --destructive-foreground: #ffffff;
+    --border: #e8dcc8;
+    --input: #fff9f0;
+    --ring: #c85a17;
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: #1a1410;
+    --foreground: #faf8f3;
+    --card: #2b2015;
+    --card-foreground: #faf8f3;
+    --popover: #2b2015;
+    --popover-foreground: #faf8f3;
+    --primary: #e8932f;
+    --primary-foreground: #1a1410;
+    --secondary: #d4a574;
+    --secondary-foreground: #1a1410;
+    --muted: #3d3028;
+    --muted-foreground: #a89d91;
+    --accent: #f5a623;
+    --accent-foreground: #1a1410;
+    --destructive: #ff4757;
+    --destructive-foreground: #1a1410;
+    --border: #3d3028;
+    --input: #2b2015;
+    --ring: #e8932f;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
