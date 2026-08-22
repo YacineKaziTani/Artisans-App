@@ -12,6 +12,9 @@ import {
   CategoryDetailPage,
   ArtisanShopPage,
   CartPage,
+  MessagesLayout,
+  MessagesEmptyPage,
+  MessageThreadPage,
   ClientProfilePage,
   ArtisanProfilePage,
   LoginPage,
@@ -25,6 +28,13 @@ import {
   AdminServicesPage,
   AdminBookingsPage,
   AdminOrdersPage,
+  AdminConversationsPage,
+  AdminConversationThreadPage,
+  AdminReportsPage,
+  AdminDisputesPage,
+  TermsPage,
+  PrivacyPage,
+  RefundPolicyPage,
   NotFoundPage,
 } from "./lazyPages";
 
@@ -42,6 +52,9 @@ export const router = createBrowserRouter([
           { path: "category/:id", element: withSuspense(CategoryDetailPage) },
           { path: "artisan/:id", element: withSuspense(ArtisanShopPage) },
           { path: "cart", element: withSuspense(CartPage) },
+          { path: "terms", element: withSuspense(TermsPage) },
+          { path: "privacy", element: withSuspense(PrivacyPage) },
+          { path: "refund-policy", element: withSuspense(RefundPolicyPage) },
         ],
       },
 
@@ -81,6 +94,14 @@ export const router = createBrowserRouter([
             ],
           },
           {
+            element: withSuspense(MessagesLayout),
+            path: "messages",
+            children: [
+              { index: true, element: withSuspense(MessagesEmptyPage) },
+              { path: ":id", element: withSuspense(MessageThreadPage) },
+            ],
+          },
+          {
             element: <DashboardLayout />,
             children: [
               {
@@ -115,6 +136,24 @@ export const router = createBrowserRouter([
                   {
                     path: "dashboard/orders",
                     element: withSuspense(AdminOrdersPage),
+                  },
+                  {
+                    path: "dashboard/messages",
+                    element: withSuspense(AdminConversationsPage),
+                    children: [
+                      {
+                        path: ":id",
+                        element: withSuspense(AdminConversationThreadPage),
+                      },
+                    ],
+                  },
+                  {
+                    path: "dashboard/reports",
+                    element: withSuspense(AdminReportsPage),
+                  },
+                  {
+                    path: "dashboard/disputes",
+                    element: withSuspense(AdminDisputesPage),
                   },
                 ],
               },

@@ -11,6 +11,20 @@ export const ArtisanShopPage = lazy(
   () => import("@/pages/marketplace/ArtisanShopPage"),
 );
 export const CartPage = lazy(() => import("@/pages/marketplace/CartPage"));
+export const MessagesLayout = lazy(
+  () => import("@/pages/messages/MessagesLayout"),
+);
+export const MessagesEmptyPage = lazy(
+  () => import("@/pages/messages/MessagesEmptyPage"),
+);
+export const MessageThreadPage = lazy(
+  () => import("@/pages/messages/MessageThreadPage"),
+);
+export const TermsPage = lazy(() => import("@/pages/legal/TermsPage"));
+export const PrivacyPage = lazy(() => import("@/pages/legal/PrivacyPage"));
+export const RefundPolicyPage = lazy(
+  () => import("@/pages/legal/RefundPolicyPage"),
+);
 export const ClientProfilePage = lazy(
   () => import("@/pages/marketplace/ClientProfilePage"),
 );
@@ -45,5 +59,17 @@ export const AdminBookingsPage = lazy(
 );
 export const AdminOrdersPage = lazy(
   () => import("@/pages/dashboard/admin/AdminOrdersPage"),
+);
+export const AdminConversationsPage = lazy(
+  () => import("@/pages/dashboard/admin/AdminConversationsPage"),
+);
+export const AdminConversationThreadPage = lazy(
+  () => import("@/pages/dashboard/admin/AdminConversationThreadPage"),
+);
+export const AdminReportsPage = lazy(
+  () => import("@/pages/dashboard/admin/AdminReportsPage"),
+);
+export const AdminDisputesPage = lazy(
+  () => import("@/pages/dashboard/admin/AdminDisputesPage"),
 );
 export const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));

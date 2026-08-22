@@ -16,12 +16,13 @@ export default function RegisterPage() {
   const [userType, setUserType] = useState<"client" | "artisan">(
     initialType === "artisan" ? "artisan" : "client",
   );
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   const { mutate: register, isPending, error } = useRegister();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    register({ name, email, password, phone, role: userType });
+    register({ name, email, password, phone, role: userType, acceptTerms });
   };
 
   return (
@@ -148,7 +149,27 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <Button type="submit" disabled={isPending} className="w-full mt-6">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={acceptTerms}
+              onChange={(e) => setAcceptTerms(e.target.checked)}
+              required
+              className="w-4 h-4 mt-0.5 accent-orange-600"
+            />
+            <span className="text-sm text-amber-900">
+              I agree to the{" "}
+              <Link to="/terms" target="_blank" className="text-orange-700 hover:underline">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link to="/privacy" target="_blank" className="text-orange-700 hover:underline">
+                Privacy Policy
+              </Link>
+            </span>
+          </label>
+
+          <Button type="submit" disabled={isPending || !acceptTerms} className="w-full mt-6">
             {isPending ? "Creating account..." : "Register"}
           </Button>
         </form>

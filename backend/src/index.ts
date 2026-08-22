@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import express from "express";
+import { createServer } from "http";
 import { AppDataSource } from "./data-source";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -13,8 +14,12 @@ import bookingRoutes from "./modules/booking/booking.routes";
 import photoRoutes from "./modules/photos/photo.routes";
 import productRoutes from "./modules/products/product.routes";
 import orderRoutes from "./modules/orders/order.routes";
+import conversationRoutes from "./modules/messaging/conversation.routes";
+import reportRoutes from "./modules/reports/report.routes";
+import disputeRoutes from "./modules/disputes/dispute.routes";
 import { stripeWebhook } from "./modules/booking/booking.controller";
 import { generalLimiter } from "./middleware/rate-limit.middleware";
+import { initSocketServer } from "./realtime/socket";
 
 async function bootstrap() {
   await AppDataSource.initialize();
@@ -53,8 +58,14 @@ async function bootstrap() {
   app.use("/api/photos", photoRoutes);
   app.use("/api/products", productRoutes);
   app.use("/api/orders", orderRoutes);
+  app.use("/api/conversations", conversationRoutes);
+  app.use("/api/reports", reportRoutes);
+  app.use("/api/disputes", disputeRoutes);
 
-  app.listen(3000, () => console.log("Listening on http://localhost:3000"));
+  const httpServer = createServer(app);
+  initSocketServer(httpServer);
+
+  httpServer.listen(3000, () => console.log("Listening on http://localhost:3000"));
 }
 
 bootstrap().catch((err) => {

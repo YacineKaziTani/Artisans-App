@@ -9,6 +9,7 @@ import {
 import { useAuthStore } from "@/store/auth.store";
 import { useCartStore } from "@/store/cart.store";
 import { useLogout } from "@/hooks/useAuth";
+import { useMyConversations } from "@/hooks/useConversations";
 
 export function MarketplaceNavbar() {
   const user = useAuthStore((s) => s.user);
@@ -17,6 +18,10 @@ export function MarketplaceNavbar() {
   const cartCount = useCartStore((s) =>
     s.items.reduce((sum, i) => sum + i.quantity, 0),
   );
+  const { data: conversations } = useMyConversations({ enabled: isAuthenticated });
+  const unreadMessages = isAuthenticated
+    ? (conversations ?? []).reduce((sum, c) => sum + (c.unreadCount ?? 0), 0)
+    : 0;
 
   return (
     <nav className="border-b border-border bg-card">
@@ -43,6 +48,19 @@ export function MarketplaceNavbar() {
           </div>
 
           <div className="flex items-center gap-4">
+            {isAuthenticated && (
+              <Link to="/messages" className="relative">
+                <Button variant="outline" size="sm">
+                  💬 Messages
+                </Button>
+                {unreadMessages > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-orange-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {unreadMessages}
+                  </span>
+                )}
+              </Link>
+            )}
+
             <Link to="/cart" className="relative">
               <Button variant="outline" size="sm">
                 🛒 Cart

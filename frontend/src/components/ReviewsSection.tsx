@@ -7,6 +7,7 @@ import {
   useShopReviews,
 } from "@/hooks/useReviews";
 import { useAuthStore } from "@/store/auth.store";
+import { ReportDialog } from "@/components/ReportDialog";
 
 function StarPicker({
   value,
@@ -51,6 +52,7 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [reportingReviewId, setReportingReviewId] = useState<string | null>(null);
 
   const myReview = reviews?.find((r) => r.author?.id === user?.id);
 
@@ -106,7 +108,7 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
                   </p>
                   <Stars rating={review.rating} />
                 </div>
-                {review.author?.id === user?.id && (
+                {review.author?.id === user?.id ? (
                   <Button
                     size="sm"
                     variant="destructive"
@@ -115,6 +117,16 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
                   >
                     Delete
                   </Button>
+                ) : (
+                  isAuthenticated && (
+                    <button
+                      type="button"
+                      className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+                      onClick={() => setReportingReviewId(review.id)}
+                    >
+                      Report
+                    </button>
+                  )
                 )}
               </div>
               {review.comment && (
@@ -172,6 +184,17 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
         <p className="text-sm text-amber-800">
           Log in to leave a review.
         </p>
+      )}
+
+      {reportingReviewId && (
+        <ReportDialog
+          targetType="review"
+          targetId={reportingReviewId}
+          open={Boolean(reportingReviewId)}
+          onOpenChange={(open) => {
+            if (!open) setReportingReviewId(null);
+          }}
+        />
       )}
     </div>
   );

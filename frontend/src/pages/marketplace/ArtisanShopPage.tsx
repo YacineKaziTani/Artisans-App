@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { useShop } from "@/hooks/useShops";
 import { useAuthStore } from "@/store/auth.store";
 import { useCartStore } from "@/store/cart.store";
+import { useStartConversation } from "@/hooks/useConversations";
 import { BookServiceDialog } from "@/components/booking/BookServiceDialog";
 import { BuyProductDialog } from "@/components/booking/BuyProductDialog";
 import { ReviewsSection } from "@/components/ReviewsSection";
+import { ReportDialog } from "@/components/ReportDialog";
 import type { Product, Service } from "@/types";
 
 function digitsOnly(phone: string) {
@@ -15,12 +17,17 @@ function digitsOnly(phone: string) {
 
 export default function ArtisanShopPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: shop, isLoading, isError } = useShop(id);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
   const addToCart = useCartStore((s) => s.addItem);
+  const startConversation = useStartConversation();
+  const isOwnShop = shop?.owner?.id === user?.id;
   const [bookingService, setBookingService] = useState<Service | null>(null);
   const [buyingProduct, setBuyingProduct] = useState<Product | null>(null);
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -87,6 +94,23 @@ export default function ArtisanShopPage() {
                     ⭐ {shop.averageRating.toFixed(1)}
                   </span>
                 )}
+                {shop.verificationStatus === "verified" && (
+                  <span
+                    className="text-sm font-semibold text-blue-800 bg-blue-100 px-3 py-1 rounded-full border border-blue-300"
+                    title="This shop has been verified by our team"
+                  >
+                    ✓ Verified
+                  </span>
+                )}
+                {isAuthenticated && !isOwnShop && (
+                  <button
+                    type="button"
+                    className="text-xs text-gray-500 hover:text-gray-700 hover:underline ml-auto"
+                    onClick={() => setReportOpen(true)}
+                  >
+                    Report
+                  </button>
+                )}
               </div>
               {shop.description && (
                 <p className="text-amber-900 text-lg max-w-2xl leading-relaxed">
@@ -131,6 +155,28 @@ export default function ArtisanShopPage() {
                   )}
                 </div>
               )}
+
+              <div className="flex gap-3 pt-4 flex-wrap">
+                {isAuthenticated && !isOwnShop && (
+                  <Button
+                    variant="outline"
+                    disabled={startConversation.isPending}
+                    onClick={() =>
+                      startConversation.mutate(shop.id, {
+                        onSuccess: (conversation) =>
+                          navigate(`/messages/${conversation.id}`),
+                      })
+                    }
+                  >
+                    {startConversation.isPending ? "Opening..." : "✉️ Message"}
+                  </Button>
+                )}
+                {!isAuthenticated && (
+                  <Link to="/login">
+                    <Button variant="outline">✉️ Message</Button>
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -316,6 +362,14 @@ export default function ArtisanShopPage() {
           }}
         />
       )}
+
+      <ReportDialog
+        targetType="shop"
+        targetId={shop.id}
+        targetLabel={shop.shopName}
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+      />
     </main>
   );
 }

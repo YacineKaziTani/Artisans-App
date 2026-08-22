@@ -50,6 +50,9 @@ export class User {
   @Column({ type: "timestamptz", nullable: true, select: false })
   resetPasswordExpiresAt?: Date;
 
+  @Column({ type: "timestamptz", nullable: true })
+  acceptedTermsAt?: Date;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 

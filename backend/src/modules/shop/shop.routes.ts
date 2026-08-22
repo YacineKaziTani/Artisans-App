@@ -10,6 +10,8 @@ import {
   updateShopStatus,
   closeMyShop,
   reopenMyShop,
+  requestShopVerification,
+  resolveShopVerification,
 } from "./shop.controller";
 import { authorize } from "../../middleware/authorize.middleware";
 import { authMiddleware } from "../../middleware/auth.middleware";
@@ -51,6 +53,18 @@ router.patch(
   authMiddleware,
   authorize(UserRole.ARTISAN),
   reopenMyShop,
+);
+router.patch(
+  "/mine/request-verification",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  requestShopVerification,
+);
+router.patch(
+  "/:id/verification",
+  authMiddleware,
+  authorize(UserRole.SUPER_ADMIN),
+  resolveShopVerification,
 );
 router.get("/:id", getShopById);
 

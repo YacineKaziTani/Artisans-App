@@ -15,6 +15,7 @@ import {
   useCreateShop,
   useCloseMyShop,
   useReopenMyShop,
+  useRequestVerification,
 } from "@/hooks/useShops";
 import { useCreateService, useDeleteService } from "@/hooks/useServices";
 import { useCategories } from "@/hooks/useCategories";
@@ -157,6 +158,51 @@ function CreateShopForm() {
   );
 }
 
+function VerificationBanner({ shop }: { shop: Shop }) {
+  const requestVerification = useRequestVerification();
+
+  if (shop.verificationStatus === "verified") {
+    return (
+      <div className="p-4 bg-blue-50 border border-blue-300 rounded-lg text-sm text-blue-800 flex items-center gap-2">
+        <span>✓</span>
+        <span>Your shop is verified — the badge is visible to clients.</span>
+      </div>
+    );
+  }
+
+  if (shop.verificationStatus === "pending") {
+    return (
+      <div className="p-4 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-700">
+        Verification request submitted — an admin will review it soon.
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-white border border-gray-200 rounded-lg flex items-center justify-between flex-wrap gap-2">
+      <div>
+        <p className="text-sm font-medium text-gray-900">Get verified</p>
+        <p className="text-sm text-gray-600">
+          Verified shops get a badge that builds trust with clients.
+          {shop.verificationStatus === "rejected" && shop.verificationNote && (
+            <span className="block text-red-700 mt-1">
+              Previous request rejected: {shop.verificationNote}
+            </span>
+          )}
+        </p>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={requestVerification.isPending}
+        onClick={() => requestVerification.mutate()}
+      >
+        {requestVerification.isPending ? "Requesting..." : "Request Verification"}
+      </Button>
+    </div>
+  );
+}
+
 function ShopProfileForm({ shop }: { shop: Shop }) {
   const updateShop = useUpdateMyShop();
   const closeShop = useCloseMyShop();
@@ -199,6 +245,8 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
           Your shop is pending admin approval and isn't publicly visible yet.
         </div>
       )}
+
+      <VerificationBanner shop={shop} />
 
       <Card>
       <CardHeader>

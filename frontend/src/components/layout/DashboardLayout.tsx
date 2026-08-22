@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router";
+import { Link, NavLink, Outlet } from "react-router";
 import { useLogout } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/auth.store";
 
@@ -15,6 +15,9 @@ const ADMIN_NAV = [
   { to: "/dashboard/services", label: "Services", icon: "🛠️" },
   { to: "/dashboard/bookings", label: "Bookings", icon: "📅" },
   { to: "/dashboard/orders", label: "Orders", icon: "📦" },
+  { to: "/dashboard/messages", label: "Messages", icon: "💬" },
+  { to: "/dashboard/reports", label: "Reports", icon: "🚩" },
+  { to: "/dashboard/disputes", label: "Disputes", icon: "⚖️" },
 ];
 
 export function DashboardLayout() {
@@ -29,9 +32,11 @@ export function DashboardLayout() {
       <aside className="flex w-60 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)]">
         {/* Logo */}
         <div className="flex h-16 items-center gap-2 border-b border-[var(--color-border)] px-5">
-          <span className="text-xl font-bold text-[var(--color-primary)]">
-            ⬡ MyApp
-          </span>
+          <Link to="/">
+            <span className="text-xl font-bold text-[var(--color-primary)]">
+              ⬡ MyApp
+            </span>
+          </Link>
         </div>
 
         {/* Nav */}

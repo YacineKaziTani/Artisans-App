@@ -14,11 +14,16 @@ function hashToken(token: string) {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, name, password, phone, role } = req.body;
+    const { email, name, password, phone, role, acceptTerms } = req.body;
     const userRepo = AppDataSource.getRepository(User);
 
     if (!email || !name || !password || !phone || !role) {
       return res.status(400).json({ message: "All fields are required" });
+    }
+    if (acceptTerms !== true) {
+      return res
+        .status(400)
+        .json({ message: "You must accept the Terms of Service to register" });
     }
 
     const existingUser = await userRepo.findOne({
@@ -38,6 +43,7 @@ export const register = async (req: Request, res: Response) => {
       phone,
       password: hashedPassword,
       role,
+      acceptedTermsAt: new Date(),
     });
 
     await userRepo.save(user);

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../../data-source";
-import { Shop, ShopStatus } from "./shop.entities";
+import { Shop, ShopStatus, VerificationStatus } from "./shop.entities";
 import { Category } from "../category/category.entities";
 import { User, UserRole } from "../users/entities/user.entities";
 
@@ -296,6 +296,60 @@ export const reopenMyShop = async (req: Request, res: Response) => {
     shop.status = ShopStatus.ACTIVE;
     const saved = await shopRepo.save(shop);
     return res.json({ message: "Shop reopened", shop: saved });
+  } catch (error) {
+    return res.status(500).json({ message: "Server error", error });
+  }
+};
+
+// Artisan requests a verification badge for their own shop.
+export const requestShopVerification = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+
+    if (shop.verificationStatus === VerificationStatus.VERIFIED) {
+      return res.status(400).json({ message: "Shop is already verified" });
+    }
+    if (shop.verificationStatus === VerificationStatus.PENDING) {
+      return res
+        .status(400)
+        .json({ message: "A verification request is already pending" });
+    }
+
+    shop.verificationStatus = VerificationStatus.PENDING;
+    shop.verificationNote = undefined;
+    const saved = await shopRepo.save(shop);
+    return res.json({ message: "Verification requested", shop: saved });
+  } catch (error) {
+    return res.status(500).json({ message: "Server error", error });
+  }
+};
+
+// Admin approves or rejects a shop's verification request.
+export const resolveShopVerification = async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const { status, note } = req.body as {
+      status: VerificationStatus;
+      note?: string;
+    };
+
+    if (
+      ![VerificationStatus.VERIFIED, VerificationStatus.REJECTED].includes(
+        status,
+      )
+    ) {
+      return res.status(400).json({ message: "Invalid verification status" });
+    }
+
+    const shop = await shopRepo.findOne({ where: { id } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+
+    shop.verificationStatus = status;
+    shop.verificationNote = note;
+    const saved = await shopRepo.save(shop);
+    return res.json({ message: "Verification updated", shop: saved });
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
   }

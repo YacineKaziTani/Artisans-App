@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAdminShops, useUpdateShopStatusAdmin } from "@/hooks/useAdminShops";
+import { useResolveVerification } from "@/hooks/useShops";
 import type { Shop } from "@/types";
 
 const STATUS_STYLES: Record<Shop["status"], string> = {
@@ -19,6 +20,7 @@ const STATUS_STYLES: Record<Shop["status"], string> = {
 export default function AdminShopsPage() {
   const { data, isLoading, isError } = useAdminShops();
   const updateStatus = useUpdateShopStatusAdmin();
+  const resolveVerification = useResolveVerification();
   const shops = data?.data ?? [];
 
   return (
@@ -57,6 +59,9 @@ export default function AdminShopsPage() {
             shops.map((shop) => {
               const isUpdating =
                 updateStatus.isPending && updateStatus.variables?.id === shop.id;
+              const isResolvingVerification =
+                resolveVerification.isPending &&
+                resolveVerification.variables?.id === shop.id;
 
               return (
                 <div
@@ -69,12 +74,47 @@ export default function AdminShopsPage() {
                       {shop.category?.name} · {shop.city ?? "—"}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span
                       className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_STYLES[shop.status]}`}
                     >
                       {shop.status}
                     </span>
+                    {shop.verificationStatus === "verified" && (
+                      <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-blue-100 text-blue-800 border-blue-300">
+                        ✓ verified
+                      </span>
+                    )}
+                    {shop.verificationStatus === "pending" && (
+                      <>
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-gray-100 text-gray-700 border-gray-300">
+                          verification pending
+                        </span>
+                        <Button
+                          size="sm"
+                          disabled={isResolvingVerification}
+                          onClick={() =>
+                            resolveVerification.mutate({ id: shop.id, status: "verified" })
+                          }
+                        >
+                          Approve Verification
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isResolvingVerification}
+                          onClick={() =>
+                            resolveVerification.mutate({
+                              id: shop.id,
+                              status: "rejected",
+                              note: "Did not meet verification criteria",
+                            })
+                          }
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    )}
                     {shop.status !== "active" && (
                       <Button
                         size="sm"

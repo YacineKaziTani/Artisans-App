@@ -25,6 +25,13 @@ export enum ShopStatus {
   CLOSED = "closed",
 }
 
+export enum VerificationStatus {
+  NONE = "none",
+  PENDING = "pending",
+  VERIFIED = "verified",
+  REJECTED = "rejected",
+}
+
 @Entity("shops")
 export class Shop {
   @PrimaryGeneratedColumn("uuid")
@@ -57,6 +64,16 @@ export class Shop {
 
   @Column({ type: "float", default: 0 })
   averageRating!: number;
+
+  @Column({
+    type: "enum",
+    enum: VerificationStatus,
+    default: VerificationStatus.NONE,
+  })
+  verificationStatus!: VerificationStatus;
+
+  @Column({ type: "text", nullable: true })
+  verificationNote?: string;
 
   @OneToOne(() => User, (user) => user.shop)
   @JoinColumn()

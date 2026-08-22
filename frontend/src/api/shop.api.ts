@@ -61,4 +61,21 @@ export const shopApi = {
     api
       .patch<{ message: string; shop: Shop }>(`/shops/${id}/status`, { status })
       .then((r) => r.data.shop),
+
+  requestVerification: () =>
+    api
+      .patch<{ message: string; shop: Shop }>("/shops/mine/request-verification")
+      .then((r) => r.data.shop),
+
+  resolveVerification: (
+    id: string,
+    status: "verified" | "rejected",
+    note?: string,
+  ) =>
+    api
+      .patch<{ message: string; shop: Shop }>(`/shops/${id}/verification`, {
+        status,
+        note,
+      })
+      .then((r) => r.data.shop),
 };

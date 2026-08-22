@@ -23,7 +23,8 @@ export interface LoginPayload {
 export interface RegisterPayload extends LoginPayload {
   name: string;
   phone: string;
-  role: "admin" | "client" | "artisan";
+  role: "client" | "artisan";
+  acceptTerms: boolean;
 }
 
 // ── API Helpers ───────────────────────────────────────────────────────────────
@@ -74,7 +75,10 @@ export interface Shop {
   phone?: string;
   status: "active" | "suspended" | "pending" | "closed";
   averageRating: number;
+  verificationStatus?: "none" | "pending" | "verified" | "rejected";
+  verificationNote?: string;
   category?: Category;
+  owner?: User;
   services?: Service[];
   products?: Product[];
   photos?: Photo[];
@@ -128,6 +132,56 @@ export interface Order {
   shop?: Shop;
   product?: Product;
   client?: User;
+  createdAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  content: string;
+  sender?: User;
+  readAt?: string;
+  createdAt: string;
+}
+
+export interface Conversation {
+  id: string;
+  client?: User;
+  shop?: Shop;
+  createdAt: string;
+  updatedAt: string;
+  unreadCount?: number;
+}
+
+export type ReportTargetType = "shop" | "product" | "service" | "review";
+export type ReportStatus = "pending" | "dismissed" | "actioned";
+
+export interface Report {
+  id: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  targetLabel?: string;
+  reason: string;
+  status: ReportStatus;
+  adminNote?: string;
+  reporter?: User;
+  createdAt: string;
+}
+
+export type DisputeTargetType = "booking" | "order";
+export type DisputeStatus =
+  | "open"
+  | "resolved_refunded"
+  | "resolved_denied"
+  | "resolved_other";
+
+export interface Dispute {
+  id: string;
+  targetType: DisputeTargetType;
+  targetId: string;
+  reason: string;
+  status: DisputeStatus;
+  resolutionNote?: string;
+  raisedBy?: User;
   createdAt: string;
 }
 

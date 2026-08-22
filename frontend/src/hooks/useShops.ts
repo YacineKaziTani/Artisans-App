@@ -68,3 +68,29 @@ export function useReopenMyShop() {
     onSuccess: (shop) => qc.setQueryData(shopKeys.mine(), shop),
   });
 }
+
+export function useRequestVerification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: shopApi.requestVerification,
+    onSuccess: (shop) => qc.setQueryData(shopKeys.mine(), shop),
+  });
+}
+
+export function useResolveVerification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      status,
+      note,
+    }: {
+      id: string;
+      status: "verified" | "rejected";
+      note?: string;
+    }) => shopApi.resolveVerification(id, status, note),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "shops"] });
+    },
+  });
+}

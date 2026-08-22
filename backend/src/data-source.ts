@@ -11,6 +11,10 @@ import { Service } from "./modules/services/service.entities";
 import { Booking } from "./modules/booking/booking.entities";
 import { Order } from "./modules/orders/order.entities";
 import { ProcessedWebhookEvent } from "./modules/webhook-events/webhook-event.entities";
+import { Conversation } from "./modules/messaging/conversation.entities";
+import { Message } from "./modules/messaging/message.entities";
+import { Report } from "./modules/reports/report.entities";
+import { Dispute } from "./modules/disputes/dispute.entities";
 import { User } from "./modules/users/entities/user.entities";
 
 export const AppDataSource = new DataSource({
@@ -35,6 +39,10 @@ export const AppDataSource = new DataSource({
     Booking,
     Order,
     ProcessedWebhookEvent,
+    Conversation,
+    Message,
+    Report,
+    Dispute,
   ],
   migrations: ["src/migrations/*.ts"],
 });

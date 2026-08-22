@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { useMyProfile, useUpdateMyProfile } from "@/hooks/useProfile";
 import { useMyBookings, useCancelMyBooking } from "@/hooks/useBookings";
 import { useMyOrders, useCancelMyOrder } from "@/hooks/useOrders";
+import { DisputeDialog } from "@/components/DisputeDialog";
 import type { User, BookingStatus, OrderStatus } from "@/types";
 
 const ORDER_STATUS_STYLES: Record<OrderStatus, string> = {
@@ -151,6 +152,7 @@ export default function ClientProfilePage() {
 function MyBookingsCard() {
   const { data: bookings, isLoading, isError } = useMyBookings();
   const cancelBooking = useCancelMyBooking();
+  const [disputingBookingId, setDisputingBookingId] = useState<string | null>(null);
 
   return (
     <Card>
@@ -217,6 +219,15 @@ function MyBookingsCard() {
                         {isCancelling ? "…" : "Cancel"}
                       </Button>
                     )}
+                    {booking.paymentStatus === "paid" && (
+                      <button
+                        type="button"
+                        className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+                        onClick={() => setDisputingBookingId(booking.id)}
+                      >
+                        Dispute
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -224,6 +235,17 @@ function MyBookingsCard() {
           </div>
         )}
       </CardContent>
+
+      {disputingBookingId && (
+        <DisputeDialog
+          targetType="booking"
+          targetId={disputingBookingId}
+          open={Boolean(disputingBookingId)}
+          onOpenChange={(open) => {
+            if (!open) setDisputingBookingId(null);
+          }}
+        />
+      )}
     </Card>
   );
 }
@@ -231,6 +253,7 @@ function MyBookingsCard() {
 function MyOrdersCard() {
   const { data: orders, isLoading, isError } = useMyOrders();
   const cancelOrder = useCancelMyOrder();
+  const [disputingOrderId, setDisputingOrderId] = useState<string | null>(null);
 
   return (
     <Card>
@@ -296,6 +319,15 @@ function MyOrdersCard() {
                         {isCancelling ? "…" : "Cancel"}
                       </Button>
                     )}
+                    {order.paymentStatus === "paid" && (
+                      <button
+                        type="button"
+                        className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+                        onClick={() => setDisputingOrderId(order.id)}
+                      >
+                        Dispute
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -303,6 +335,17 @@ function MyOrdersCard() {
           </div>
         )}
       </CardContent>
+
+      {disputingOrderId && (
+        <DisputeDialog
+          targetType="order"
+          targetId={disputingOrderId}
+          open={Boolean(disputingOrderId)}
+          onOpenChange={(open) => {
+            if (!open) setDisputingOrderId(null);
+          }}
+        />
+      )}
     </Card>
   );
 }
