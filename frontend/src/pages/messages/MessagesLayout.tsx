@@ -10,7 +10,7 @@ export default function MessagesLayout() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link to="/">Go Back to App</Link>
+        <Link to="/">Go back to app</Link>
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Messages</h1>
 
         <div className="flex gap-6 bg-white rounded-xl border border-gray-200 overflow-hidden min-h-[70vh]">

@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAdminDisputes, useResolveDispute } from "@/hooks/useDisputes";
 import type { DisputeStatus } from "@/types";
 
@@ -22,6 +23,7 @@ export default function AdminDisputesPage() {
   const { data: disputes, isLoading, isError } = useAdminDisputes(filter);
   const resolveDispute = useResolveDispute();
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
+  const [refundAmountDraft, setRefundAmountDraft] = useState<Record<string, string>>({});
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -120,6 +122,25 @@ export default function AdminDisputesPage() {
                         rows={2}
                         className="w-full text-sm border border-gray-300 rounded-md p-2"
                       />
+                      <div>
+                        <label className="text-xs text-gray-600 block mb-1">
+                          Refund amount (leave blank for full refund)
+                        </label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Full amount"
+                          value={refundAmountDraft[dispute.id] ?? ""}
+                          onChange={(e) =>
+                            setRefundAmountDraft((prev) => ({
+                              ...prev,
+                              [dispute.id]: e.target.value,
+                            }))
+                          }
+                          className="w-40"
+                        />
+                      </div>
                       <div className="flex gap-2 flex-wrap">
                         <Button
                           size="sm"
@@ -129,6 +150,9 @@ export default function AdminDisputesPage() {
                               id: dispute.id,
                               status: "resolved_refunded",
                               resolutionNote: noteDraft[dispute.id],
+                              refundAmount: refundAmountDraft[dispute.id]
+                                ? Number(refundAmountDraft[dispute.id])
+                                : undefined,
                             })
                           }
                         >

@@ -17,6 +17,7 @@ import orderRoutes from "./modules/orders/order.routes";
 import conversationRoutes from "./modules/messaging/conversation.routes";
 import reportRoutes from "./modules/reports/report.routes";
 import disputeRoutes from "./modules/disputes/dispute.routes";
+import favoriteRoutes from "./modules/favorites/favorite.routes";
 import { stripeWebhook } from "./modules/booking/booking.controller";
 import { generalLimiter } from "./middleware/rate-limit.middleware";
 import { initSocketServer } from "./realtime/socket";
@@ -61,6 +62,7 @@ async function bootstrap() {
   app.use("/api/conversations", conversationRoutes);
   app.use("/api/reports", reportRoutes);
   app.use("/api/disputes", disputeRoutes);
+  app.use("/api/favorites", favoriteRoutes);
 
   const httpServer = createServer(app);
   initSocketServer(httpServer);

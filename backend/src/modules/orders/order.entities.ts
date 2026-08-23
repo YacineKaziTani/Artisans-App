@@ -16,9 +16,15 @@ export enum OrderStatus {
   CANCELLED = "cancelled",
 }
 
+export enum DeliveryMethod {
+  PICKUP = "pickup",
+  DELIVERY = "delivery",
+}
+
 export enum OrderPaymentStatus {
   UNPAID = "unpaid",
   PAID = "paid",
+  PARTIALLY_REFUNDED = "partially_refunded",
   REFUNDED = "refunded",
   FAILED = "failed",
 }
@@ -53,6 +59,21 @@ export class Order {
   // order still belongs to a single shop+product for artisan fulfillment.
   @Column({ nullable: true })
   checkoutGroupId?: string;
+
+  @Column({
+    type: "enum",
+    enum: DeliveryMethod,
+    default: DeliveryMethod.PICKUP,
+  })
+  deliveryMethod!: DeliveryMethod;
+
+  @Column({ type: "text", nullable: true })
+  shippingAddress?: string;
+
+  // Free-text carrier tracking reference, set by the artisan when fulfilling
+  // a delivery order. No carrier API integration — just a reference field.
+  @Column({ nullable: true })
+  trackingInfo?: string;
 
   @ManyToOne(() => User)
   client!: User;

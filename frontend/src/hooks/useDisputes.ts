@@ -38,11 +38,13 @@ export function useResolveDispute() {
       id,
       status,
       resolutionNote,
+      refundAmount,
     }: {
       id: string;
       status: DisputeStatus;
       resolutionNote?: string;
-    }) => disputeApi.resolve(id, status, resolutionNote),
+      refundAmount?: number;
+    }) => disputeApi.resolve(id, status, resolutionNote, refundAmount),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["disputes"] });
       qc.invalidateQueries({ queryKey: ["bookings"] });

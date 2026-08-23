@@ -20,8 +20,17 @@ export const disputeApi = {
       })
       .then((r) => r.data),
 
-  resolve: (id: string, status: DisputeStatus, resolutionNote?: string) =>
+  resolve: (
+    id: string,
+    status: DisputeStatus,
+    resolutionNote?: string,
+    refundAmount?: number,
+  ) =>
     api
-      .patch<Dispute>(`/disputes/${id}/resolve`, { status, resolutionNote })
+      .patch<Dispute>(`/disputes/${id}/resolve`, {
+        status,
+        resolutionNote,
+        refundAmount,
+      })
       .then((r) => r.data),
 };

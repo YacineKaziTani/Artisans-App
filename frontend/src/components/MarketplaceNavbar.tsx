@@ -44,6 +44,12 @@ export function MarketplaceNavbar() {
               >
                 Categories
               </Link>
+              <Link
+                to="/products"
+                className="text-foreground/80 hover:text-foreground"
+              >
+                Products
+              </Link>
             </div>
           </div>
 
@@ -96,6 +102,9 @@ export function MarketplaceNavbar() {
                   )}
                   <DropdownMenuItem asChild>
                     <Link to="/profile-client">My Profile</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/favorites">Favorites</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onSelect={() => logout.mutate()}

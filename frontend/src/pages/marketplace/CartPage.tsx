@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Elements } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { useCartStore } from "@/store/cart.store";
 import { useAuthStore } from "@/store/auth.store";
 import { useCartCheckout } from "@/hooks/useOrders";
 import { stripePromise } from "@/lib/stripe";
 import { BookingPaymentForm } from "@/components/booking/BookingPaymentForm";
+import type { DeliveryMethod } from "@/types";
 
 export default function CartPage() {
   const items = useCartStore((s) => s.items);
@@ -19,12 +21,21 @@ export default function CartPage() {
   const checkout = useCartCheckout();
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("pickup");
+  const [shippingAddress, setShippingAddress] = useState("");
 
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
   const handleCheckout = () => {
+    if (deliveryMethod === "delivery" && !shippingAddress.trim()) return;
     checkout.mutate(
-      items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      {
+        items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        delivery: {
+          deliveryMethod,
+          shippingAddress: deliveryMethod === "delivery" ? shippingAddress : undefined,
+        },
+      },
       { onSuccess: (result) => setClientSecret(result.clientSecret) },
     );
   };
@@ -123,6 +134,43 @@ export default function CartPage() {
             </div>
 
             <div className="bg-white/90 border-2 border-orange-200 rounded-xl p-6 space-y-4">
+              <div>
+                <p className="text-sm font-medium text-orange-900 mb-2">Delivery</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryMethod("pickup")}
+                    className={`flex-1 text-sm py-2 rounded-md border ${
+                      deliveryMethod === "pickup"
+                        ? "border-orange-600 bg-orange-50 text-orange-800"
+                        : "border-gray-300 text-gray-600"
+                    }`}
+                  >
+                    Pickup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryMethod("delivery")}
+                    className={`flex-1 text-sm py-2 rounded-md border ${
+                      deliveryMethod === "delivery"
+                        ? "border-orange-600 bg-orange-50 text-orange-800"
+                        : "border-gray-300 text-gray-600"
+                    }`}
+                  >
+                    Delivery
+                  </button>
+                </div>
+              </div>
+              {deliveryMethod === "delivery" && (
+                <Textarea
+                  value={shippingAddress}
+                  onChange={(e) => setShippingAddress(e.target.value)}
+                  placeholder="Shipping address"
+                  rows={2}
+                  required
+                />
+              )}
+
               <div className="flex justify-between text-xl font-bold text-orange-900">
                 <span>Total</span>
                 <span>${total.toFixed(2)}</span>

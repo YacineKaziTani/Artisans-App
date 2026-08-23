@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useShopOrders, useUpdateOrderStatus } from "@/hooks/useOrders";
 import type { OrderStatus } from "@/types";
 
@@ -12,6 +14,7 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
 const PAYMENT_STYLES: Record<string, string> = {
   unpaid: "bg-gray-100 text-gray-700 border-gray-300",
   paid: "bg-green-100 text-green-800 border-green-300",
+  partially_refunded: "bg-orange-100 text-orange-800 border-orange-300",
   refunded: "bg-orange-100 text-orange-800 border-orange-300",
   failed: "bg-red-100 text-red-800 border-red-300",
 };
@@ -19,6 +22,7 @@ const PAYMENT_STYLES: Record<string, string> = {
 export function ShopOrdersTab() {
   const { data: orders, isLoading, isError } = useShopOrders();
   const updateStatus = useUpdateOrderStatus();
+  const [trackingDraft, setTrackingDraft] = useState<Record<string, string>>({});
 
   return (
     <Card>
@@ -65,6 +69,13 @@ export function ShopOrdersTab() {
                         {order.client?.name} · $
                         {Number(order.totalAmount).toFixed(2)}
                       </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {order.deliveryMethod === "delivery" ? "🚚 Delivery" : "🏬 Pickup"}
+                        {order.shippingAddress && ` · ${order.shippingAddress}`}
+                      </p>
+                      {order.trackingInfo && (
+                        <p className="text-xs text-gray-500">Tracking: {order.trackingInfo}</p>
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span
@@ -81,26 +92,44 @@ export function ShopOrdersTab() {
                   </div>
 
                   {order.status === "pending" && (
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        disabled={isUpdating}
-                        onClick={() =>
-                          updateStatus.mutate({ id: order.id, status: "fulfilled" })
-                        }
-                      >
-                        Mark Fulfilled
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={isUpdating}
-                        onClick={() =>
-                          updateStatus.mutate({ id: order.id, status: "cancelled" })
-                        }
-                      >
-                        Cancel
-                      </Button>
+                    <div className="space-y-2">
+                      {order.deliveryMethod === "delivery" && (
+                        <Input
+                          placeholder="Tracking number (optional)"
+                          value={trackingDraft[order.id] ?? ""}
+                          onChange={(e) =>
+                            setTrackingDraft((prev) => ({
+                              ...prev,
+                              [order.id]: e.target.value,
+                            }))
+                          }
+                        />
+                      )}
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          disabled={isUpdating}
+                          onClick={() =>
+                            updateStatus.mutate({
+                              id: order.id,
+                              status: "fulfilled",
+                              trackingInfo: trackingDraft[order.id],
+                            })
+                          }
+                        >
+                          Mark Fulfilled
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={isUpdating}
+                          onClick={() =>
+                            updateStatus.mutate({ id: order.id, status: "cancelled" })
+                          }
+                        >
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>

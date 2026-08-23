@@ -302,6 +302,12 @@ function MyOrdersCard() {
                       {order.shop?.shopName} · $
                       {Number(order.totalAmount).toFixed(2)}
                     </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {order.deliveryMethod === "delivery" ? "🚚 Delivery" : "🏬 Pickup"}
+                    </p>
+                    {order.trackingInfo && (
+                      <p className="text-xs text-gray-500">Tracking: {order.trackingInfo}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span

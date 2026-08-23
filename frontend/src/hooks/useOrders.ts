@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { orderApi } from "@/api/order.api";
+import { orderApi, type DeliveryInfo } from "@/api/order.api";
 import type { OrderStatus } from "@/types";
 
 export const orderKeys = {
@@ -22,8 +22,13 @@ export function useCreateOrder() {
 export function useCartCheckout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (items: { productId: string; quantity: number }[]) =>
-      orderApi.checkout(items),
+    mutationFn: ({
+      items,
+      delivery,
+    }: {
+      items: { productId: string; quantity: number }[];
+      delivery: DeliveryInfo;
+    }) => orderApi.checkout(items, delivery),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: orderKeys.mine() });
     },
@@ -54,8 +59,15 @@ export function useAdminOrders() {
 export function useUpdateOrderStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) =>
-      orderApi.updateStatus(id, status),
+    mutationFn: ({
+      id,
+      status,
+      trackingInfo,
+    }: {
+      id: string;
+      status: OrderStatus;
+      trackingInfo?: string;
+    }) => orderApi.updateStatus(id, status, trackingInfo),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: orderKeys.shop() });
     },

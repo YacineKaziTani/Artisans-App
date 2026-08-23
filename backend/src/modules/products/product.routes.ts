@@ -5,6 +5,8 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  addProductImage,
+  removeProductImage,
 } from "./product.controller";
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
@@ -26,7 +28,6 @@ router.put(
   "/:id",
   authMiddleware,
   authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
-  parser.single("image"),
   updateProduct,
 );
 router.delete(
@@ -34,6 +35,19 @@ router.delete(
   authMiddleware,
   authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
   deleteProduct,
+);
+router.post(
+  "/:id/images",
+  authMiddleware,
+  authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
+  parser.single("image"),
+  addProductImage,
+);
+router.delete(
+  "/images/:imageId",
+  authMiddleware,
+  authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
+  removeProductImage,
 );
 
 export default router;

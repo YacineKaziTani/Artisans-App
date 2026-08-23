@@ -86,7 +86,7 @@ export interface Shop {
 }
 
 export type BookingStatus = "pending" | "confirmed" | "cancelled" | "completed";
-export type PaymentStatus = "unpaid" | "paid" | "refunded" | "failed";
+export type PaymentStatus = "unpaid" | "paid" | "partially_refunded" | "refunded" | "failed";
 
 export interface Booking {
   id: string;
@@ -108,8 +108,14 @@ export interface Product {
   description?: string;
   basePrice: string | number;
   imageUrl?: string;
+  images?: ProductImage[];
   shop?: Shop;
   createdAt?: string;
+}
+
+export interface ProductImage {
+  id: string;
+  url: string;
 }
 
 export interface Review {
@@ -121,7 +127,13 @@ export interface Review {
 }
 
 export type OrderStatus = "pending" | "fulfilled" | "cancelled";
-export type OrderPaymentStatus = "unpaid" | "paid" | "refunded" | "failed";
+export type OrderPaymentStatus =
+  | "unpaid"
+  | "paid"
+  | "partially_refunded"
+  | "refunded"
+  | "failed";
+export type DeliveryMethod = "pickup" | "delivery";
 
 export interface Order {
   id: string;
@@ -129,6 +141,9 @@ export interface Order {
   totalAmount: string | number;
   status: OrderStatus;
   paymentStatus: OrderPaymentStatus;
+  deliveryMethod?: DeliveryMethod;
+  shippingAddress?: string;
+  trackingInfo?: string;
   shop?: Shop;
   product?: Product;
   client?: User;
@@ -194,4 +209,11 @@ export interface PaginatedMeta {
 export interface PaginatedShops {
   data: Shop[];
   meta: PaginatedMeta;
+}
+
+export type FavoriteTargetType = "shop" | "product";
+
+export interface MyFavorites {
+  shops: Shop[];
+  products: Product[];
 }

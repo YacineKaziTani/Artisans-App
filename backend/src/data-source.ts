@@ -6,6 +6,7 @@ import { Category } from "./modules/category/category.entities";
 import { Photo } from "./modules/photos/photo.entities";
 import { Option } from "./modules/option/option.entities";
 import { Product } from "./modules/products/product.entities";
+import { ProductImage } from "./modules/products/product-image.entities";
 import { Review } from "./modules/reviews/review.entities";
 import { Service } from "./modules/services/service.entities";
 import { Booking } from "./modules/booking/booking.entities";
@@ -15,6 +16,7 @@ import { Conversation } from "./modules/messaging/conversation.entities";
 import { Message } from "./modules/messaging/message.entities";
 import { Report } from "./modules/reports/report.entities";
 import { Dispute } from "./modules/disputes/dispute.entities";
+import { Favorite } from "./modules/favorites/favorite.entities";
 import { User } from "./modules/users/entities/user.entities";
 
 export const AppDataSource = new DataSource({
@@ -34,6 +36,7 @@ export const AppDataSource = new DataSource({
     Photo,
     Option,
     Product,
+    ProductImage,
     Review,
     Service,
     Booking,
@@ -43,6 +46,7 @@ export const AppDataSource = new DataSource({
     Message,
     Report,
     Dispute,
+    Favorite,
   ],
   migrations: ["src/migrations/*.ts"],
 });

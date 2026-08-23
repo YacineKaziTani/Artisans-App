@@ -119,9 +119,10 @@ export const getAllDisputesAdmin = async (req: Request, res: Response) => {
 export const resolveDispute = async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { status, resolutionNote } = req.body as {
+    const { status, resolutionNote, refundAmount } = req.body as {
       status: DisputeStatus;
       resolutionNote?: string;
+      refundAmount?: number;
     };
 
     if (
@@ -150,11 +151,16 @@ export const resolveDispute = async (req: Request, res: Response) => {
           booking.paymentStatus === PaymentStatus.PAID &&
           booking.stripePaymentIntentId
         ) {
+          const isPartial =
+            refundAmount !== undefined && refundAmount < Number(booking.totalAmount);
           await stripe.refunds.create({
             payment_intent: booking.stripePaymentIntentId,
+            ...(isPartial ? { amount: Math.round(refundAmount! * 100) } : {}),
           });
-          booking.paymentStatus = PaymentStatus.REFUNDED;
-          booking.status = BookingStatus.CANCELLED;
+          booking.paymentStatus = isPartial
+            ? PaymentStatus.PARTIALLY_REFUNDED
+            : PaymentStatus.REFUNDED;
+          if (!isPartial) booking.status = BookingStatus.CANCELLED;
           await bookingRepo.save(booking);
         }
       } else {
@@ -164,11 +170,16 @@ export const resolveDispute = async (req: Request, res: Response) => {
           order.paymentStatus === OrderPaymentStatus.PAID &&
           order.stripePaymentIntentId
         ) {
+          const isPartial =
+            refundAmount !== undefined && refundAmount < Number(order.totalAmount);
           await stripe.refunds.create({
             payment_intent: order.stripePaymentIntentId,
+            ...(isPartial ? { amount: Math.round(refundAmount! * 100) } : {}),
           });
-          order.paymentStatus = OrderPaymentStatus.REFUNDED;
-          order.status = OrderStatus.CANCELLED;
+          order.paymentStatus = isPartial
+            ? OrderPaymentStatus.PARTIALLY_REFUNDED
+            : OrderPaymentStatus.REFUNDED;
+          if (!isPartial) order.status = OrderStatus.CANCELLED;
           await orderRepo.save(order);
         }
       }

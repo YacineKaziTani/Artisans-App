@@ -10,10 +10,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useCreateOrder } from "@/hooks/useOrders";
 import { stripePromise } from "@/lib/stripe";
 import { BookingPaymentForm } from "@/components/booking/BookingPaymentForm";
-import type { Product } from "@/types";
+import type { DeliveryMethod, Product } from "@/types";
 
 export function BuyProductDialog({
   product,
@@ -25,6 +26,8 @@ export function BuyProductDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [quantity, setQuantity] = useState(1);
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("pickup");
+  const [shippingAddress, setShippingAddress] = useState("");
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
 
@@ -32,6 +35,8 @@ export function BuyProductDialog({
 
   const reset = () => {
     setQuantity(1);
+    setDeliveryMethod("pickup");
+    setShippingAddress("");
     setClientSecret(null);
     setConfirmed(false);
     createOrder.reset();
@@ -45,8 +50,14 @@ export function BuyProductDialog({
   const handleRequestOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (quantity < 1) return;
+    if (deliveryMethod === "delivery" && !shippingAddress.trim()) return;
     createOrder.mutate(
-      { productId: product.id, quantity },
+      {
+        productId: product.id,
+        quantity,
+        deliveryMethod,
+        shippingAddress: deliveryMethod === "delivery" ? shippingAddress : undefined,
+      },
       { onSuccess: (result) => setClientSecret(result.clientSecret) },
     );
   };
@@ -107,6 +118,46 @@ export function BuyProductDialog({
                   onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Delivery</Label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryMethod("pickup")}
+                    className={`flex-1 text-sm py-2 rounded-md border ${
+                      deliveryMethod === "pickup"
+                        ? "border-orange-600 bg-orange-50 text-orange-800"
+                        : "border-gray-300 text-gray-600"
+                    }`}
+                  >
+                    Pickup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryMethod("delivery")}
+                    className={`flex-1 text-sm py-2 rounded-md border ${
+                      deliveryMethod === "delivery"
+                        ? "border-orange-600 bg-orange-50 text-orange-800"
+                        : "border-gray-300 text-gray-600"
+                    }`}
+                  >
+                    Delivery
+                  </button>
+                </div>
+              </div>
+              {deliveryMethod === "delivery" && (
+                <div className="space-y-2">
+                  <Label htmlFor="shippingAddress">Shipping Address</Label>
+                  <Textarea
+                    id="shippingAddress"
+                    value={shippingAddress}
+                    onChange={(e) => setShippingAddress(e.target.value)}
+                    placeholder="Street, city, postal code"
+                    rows={2}
+                    required
+                  />
+                </div>
+              )}
               <p className="text-sm text-gray-600">
                 Total: <span className="font-semibold">${total.toFixed(2)}</span>
               </p>

@@ -7,6 +7,10 @@ export const CategoriesPage = lazy(
 export const CategoryDetailPage = lazy(
   () => import("@/pages/marketplace/CategoryDetailPage"),
 );
+export const ProductsPage = lazy(() => import("@/pages/marketplace/ProductsPage"));
+export const MyFavoritesPage = lazy(
+  () => import("@/pages/marketplace/MyFavoritesPage"),
+);
 export const ArtisanShopPage = lazy(
   () => import("@/pages/marketplace/ArtisanShopPage"),
 );

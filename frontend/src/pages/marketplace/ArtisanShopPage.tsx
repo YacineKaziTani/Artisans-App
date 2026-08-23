@@ -5,6 +5,8 @@ import { useShop } from "@/hooks/useShops";
 import { useAuthStore } from "@/store/auth.store";
 import { useCartStore } from "@/store/cart.store";
 import { useStartConversation } from "@/hooks/useConversations";
+import { useFavoriteIds } from "@/hooks/useFavorites";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import { BookServiceDialog } from "@/components/booking/BookServiceDialog";
 import { BuyProductDialog } from "@/components/booking/BuyProductDialog";
 import { ReviewsSection } from "@/components/ReviewsSection";
@@ -23,6 +25,7 @@ export default function ArtisanShopPage() {
   const user = useAuthStore((s) => s.user);
   const addToCart = useCartStore((s) => s.addItem);
   const startConversation = useStartConversation();
+  const { data: favoriteIds } = useFavoriteIds("shop", { enabled: isAuthenticated });
   const isOwnShop = shop?.owner?.id === user?.id;
   const [bookingService, setBookingService] = useState<Service | null>(null);
   const [buyingProduct, setBuyingProduct] = useState<Product | null>(null);
@@ -101,6 +104,13 @@ export default function ArtisanShopPage() {
                   >
                     ✓ Verified
                   </span>
+                )}
+                {isAuthenticated && !isOwnShop && (
+                  <FavoriteButton
+                    targetType="shop"
+                    targetId={shop.id}
+                    isFavorited={(favoriteIds ?? []).includes(shop.id)}
+                  />
                 )}
                 {isAuthenticated && !isOwnShop && (
                   <button

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -9,7 +9,63 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateProduct, useDeleteProduct, useMyProducts } from "@/hooks/useProducts";
+import {
+  useAddProductImage,
+  useCreateProduct,
+  useDeleteProduct,
+  useMyProducts,
+  useRemoveProductImage,
+} from "@/hooks/useProducts";
+import type { Product } from "@/types";
+
+function ProductImagesManager({ product }: { product: Product }) {
+  const addImage = useAddProductImage();
+  const removeImage = useRemoveProductImage();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2 overflow-x-auto">
+        {(product.images ?? []).map((image) => (
+          <div key={image.id} className="relative flex-shrink-0">
+            <img
+              src={image.url}
+              alt=""
+              className="w-16 h-16 object-cover rounded-md border border-gray-200"
+            />
+            <button
+              type="button"
+              className="absolute -top-1 -right-1 bg-white rounded-full w-5 h-5 text-xs border border-gray-300 shadow-sm"
+              disabled={removeImage.isPending}
+              onClick={() => removeImage.mutate(image.id)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={addImage.isPending}
+          className="w-16 h-16 flex-shrink-0 rounded-md border-2 border-dashed border-gray-300 text-gray-400 text-2xl flex items-center justify-center hover:border-gray-400"
+        >
+          {addImage.isPending ? "…" : "+"}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/jpg"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) addImage.mutate({ id: product.id, file });
+            e.target.value = "";
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function ShopProductsTab() {
   const { data: products, isLoading, isError } = useMyProducts();
@@ -164,6 +220,10 @@ export function ShopProductsTab() {
                   <p className="text-2xl font-bold text-gray-900">
                     ${Number(product.basePrice).toFixed(2)}
                   </p>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-2">Gallery</p>
+                    <ProductImagesManager product={product} />
+                  </div>
                   <Button
                     variant="destructive"
                     size="sm"

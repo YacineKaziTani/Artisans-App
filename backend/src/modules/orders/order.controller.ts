@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import crypto from "crypto";
 import { AppDataSource } from "../../data-source";
-import { Order, OrderStatus, OrderPaymentStatus } from "./order.entities";
+import { Order, OrderStatus, OrderPaymentStatus, DeliveryMethod } from "./order.entities";
 import { Shop } from "../shop/shop.entities";
 import { Product } from "../products/product.entities";
 import { User } from "../users/entities/user.entities";
@@ -12,16 +12,36 @@ const orderRepo = AppDataSource.getRepository(Order);
 const shopRepo = AppDataSource.getRepository(Shop);
 const productRepo = AppDataSource.getRepository(Product);
 
+function parseDelivery(body: {
+  deliveryMethod?: string;
+  shippingAddress?: string;
+}) {
+  const deliveryMethod =
+    body.deliveryMethod === DeliveryMethod.DELIVERY
+      ? DeliveryMethod.DELIVERY
+      : DeliveryMethod.PICKUP;
+  const shippingAddress =
+    deliveryMethod === DeliveryMethod.DELIVERY ? body.shippingAddress : undefined;
+  return { deliveryMethod, shippingAddress };
+}
+
 // Client orders a product and gets back a Stripe PaymentIntent client secret.
 export const createOrder = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { productId, quantity = 1 } = req.body;
+    const { productId, quantity = 1, deliveryMethod, shippingAddress } = req.body;
 
     if (!productId || quantity < 1) {
       return res
         .status(400)
         .json({ message: "productId and a valid quantity are required" });
+    }
+
+    const delivery = parseDelivery({ deliveryMethod, shippingAddress });
+    if (delivery.deliveryMethod === DeliveryMethod.DELIVERY && !delivery.shippingAddress?.trim()) {
+      return res
+        .status(400)
+        .json({ message: "shippingAddress is required for delivery orders" });
     }
 
     const product = await productRepo.findOne({
@@ -42,6 +62,7 @@ export const createOrder = async (req: Request, res: Response) => {
       totalAmount,
       status: OrderStatus.PENDING,
       paymentStatus: OrderPaymentStatus.UNPAID,
+      ...delivery,
     });
     const saved = await orderRepo.save(order);
 
@@ -73,6 +94,7 @@ export const createCartCheckout = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const items = req.body.items as { productId: string; quantity: number }[];
+    const { deliveryMethod, shippingAddress } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "items must be a non-empty array" });
@@ -81,6 +103,13 @@ export const createCartCheckout = async (req: Request, res: Response) => {
       return res
         .status(400)
         .json({ message: "Each item needs a productId and a valid quantity" });
+    }
+
+    const delivery = parseDelivery({ deliveryMethod, shippingAddress });
+    if (delivery.deliveryMethod === DeliveryMethod.DELIVERY && !delivery.shippingAddress?.trim()) {
+      return res
+        .status(400)
+        .json({ message: "shippingAddress is required for delivery orders" });
     }
 
     const productIds = items.map((i) => i.productId);
@@ -111,6 +140,7 @@ export const createCartCheckout = async (req: Request, res: Response) => {
           status: OrderStatus.PENDING,
           paymentStatus: OrderPaymentStatus.UNPAID,
           checkoutGroupId,
+          ...delivery,
         });
         return orderRepo.save(order);
       }),
@@ -191,7 +221,10 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const id = String(req.params.id);
-    const { status } = req.body as { status: OrderStatus };
+    const { status, trackingInfo } = req.body as {
+      status: OrderStatus;
+      trackingInfo?: string;
+    };
 
     if (!Object.values(OrderStatus).includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
@@ -220,6 +253,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       order.paymentStatus = OrderPaymentStatus.REFUNDED;
     }
 
+    if (trackingInfo !== undefined) order.trackingInfo = trackingInfo;
     order.status = status;
     const saved = await orderRepo.save(order);
     return res.json(saved);
