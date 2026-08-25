@@ -8,6 +8,7 @@ export interface DeliveryInfo {
 
 export interface CreateOrderPayload extends DeliveryInfo {
   productId: string;
+  variantId?: string;
   quantity: number;
 }
 
@@ -20,7 +21,10 @@ export const orderApi = {
   create: (payload: CreateOrderPayload) =>
     api.post<CreateOrderResult>("/orders", payload).then((r) => r.data),
 
-  checkout: (items: { productId: string; quantity: number }[], delivery: DeliveryInfo) =>
+  checkout: (
+    items: { productId: string; variantId?: string; quantity: number }[],
+    delivery: DeliveryInfo,
+  ) =>
     api
       .post<{ orders: Order[]; clientSecret: string }>("/orders/checkout", {
         items,

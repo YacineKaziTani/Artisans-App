@@ -8,8 +8,8 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 import { Shop } from "../shop/shop.entities";
-import { Option } from "../option/option.entities";
 import { ProductImage } from "./product-image.entities";
+import { VariantOption, ProductVariant } from "./variant.entities";
 
 @Entity("products")
 export class Product {
@@ -39,8 +39,11 @@ export class Product {
   @ManyToOne(() => Shop, (shop) => shop.products, { onDelete: "CASCADE" })
   shop!: Shop;
 
-  @OneToMany(() => Option, (option) => option.product, { cascade: true })
-  options!: Option[];
+  @OneToMany(() => VariantOption, (option) => option.product, { cascade: true })
+  variantOptions!: VariantOption[];
+
+  @OneToMany(() => ProductVariant, (variant) => variant.product, { cascade: true })
+  variants!: ProductVariant[];
 
   @OneToMany(() => ProductImage, (image) => image.product, { cascade: true })
   images!: ProductImage[];

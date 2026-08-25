@@ -3,6 +3,7 @@ import { AppDataSource } from "../../data-source";
 import { Dispute, DisputeStatus, DisputeTargetType } from "./dispute.entities";
 import { Booking, PaymentStatus, BookingStatus } from "../booking/booking.entities";
 import { Order, OrderPaymentStatus, OrderStatus } from "../orders/order.entities";
+import { restoreVariantStock } from "../orders/order.controller";
 import { User } from "../users/entities/user.entities";
 import { stripe } from "../../config/stripe";
 
@@ -146,7 +147,13 @@ export const resolveDispute = async (req: Request, res: Response) => {
         const booking = await bookingRepo.findOne({
           where: { id: dispute.targetId },
         });
-        if (
+        if (booking?.stripePaymentIntentId && booking.paymentStatus === PaymentStatus.AUTHORIZED) {
+          // Nothing was ever captured — release the hold instead of refunding.
+          await stripe.paymentIntents.cancel(booking.stripePaymentIntentId);
+          booking.paymentStatus = PaymentStatus.UNPAID;
+          booking.status = BookingStatus.CANCELLED;
+          await bookingRepo.save(booking);
+        } else if (
           booking &&
           booking.paymentStatus === PaymentStatus.PAID &&
           booking.stripePaymentIntentId
@@ -164,8 +171,17 @@ export const resolveDispute = async (req: Request, res: Response) => {
           await bookingRepo.save(booking);
         }
       } else {
-        const order = await orderRepo.findOne({ where: { id: dispute.targetId } });
-        if (
+        const order = await orderRepo.findOne({
+          where: { id: dispute.targetId },
+          relations: ["variant"],
+        });
+        if (order?.stripePaymentIntentId && order.paymentStatus === OrderPaymentStatus.AUTHORIZED) {
+          await stripe.paymentIntents.cancel(order.stripePaymentIntentId);
+          order.paymentStatus = OrderPaymentStatus.UNPAID;
+          order.status = OrderStatus.CANCELLED;
+          await restoreVariantStock(order.variant?.id);
+          await orderRepo.save(order);
+        } else if (
           order &&
           order.paymentStatus === OrderPaymentStatus.PAID &&
           order.stripePaymentIntentId
@@ -179,7 +195,10 @@ export const resolveDispute = async (req: Request, res: Response) => {
           order.paymentStatus = isPartial
             ? OrderPaymentStatus.PARTIALLY_REFUNDED
             : OrderPaymentStatus.REFUNDED;
-          if (!isPartial) order.status = OrderStatus.CANCELLED;
+          if (!isPartial) {
+            order.status = OrderStatus.CANCELLED;
+            await restoreVariantStock(order.variant?.id);
+          }
           await orderRepo.save(order);
         }
       }

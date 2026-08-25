@@ -4,9 +4,9 @@ import { DataSource } from "typeorm";
 import { Shop } from "./modules/shop/shop.entities";
 import { Category } from "./modules/category/category.entities";
 import { Photo } from "./modules/photos/photo.entities";
-import { Option } from "./modules/option/option.entities";
 import { Product } from "./modules/products/product.entities";
 import { ProductImage } from "./modules/products/product-image.entities";
+import { VariantOption, VariantValue, ProductVariant } from "./modules/products/variant.entities";
 import { Review } from "./modules/reviews/review.entities";
 import { Service } from "./modules/services/service.entities";
 import { Booking } from "./modules/booking/booking.entities";
@@ -34,9 +34,11 @@ export const AppDataSource = new DataSource({
     Shop,
     Category,
     Photo,
-    Option,
     Product,
     ProductImage,
+    VariantOption,
+    VariantValue,
+    ProductVariant,
     Review,
     Service,
     Booking,

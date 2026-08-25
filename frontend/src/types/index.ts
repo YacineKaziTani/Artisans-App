@@ -86,7 +86,7 @@ export interface Shop {
 }
 
 export type BookingStatus = "pending" | "confirmed" | "cancelled" | "completed";
-export type PaymentStatus = "unpaid" | "paid" | "partially_refunded" | "refunded" | "failed";
+export type PaymentStatus = "unpaid" | "authorized" | "paid" | "partially_refunded" | "refunded" | "failed";
 
 export interface Booking {
   id: string;
@@ -109,6 +109,8 @@ export interface Product {
   basePrice: string | number;
   imageUrl?: string;
   images?: ProductImage[];
+  variantOptions?: VariantOption[];
+  variants?: ProductVariant[];
   shop?: Shop;
   createdAt?: string;
 }
@@ -116,6 +118,27 @@ export interface Product {
 export interface ProductImage {
   id: string;
   url: string;
+}
+
+export interface VariantOption {
+  id: string;
+  name: string;
+  values?: VariantValue[];
+}
+
+export interface VariantValue {
+  id: string;
+  value: string;
+  priceModifier: string | number;
+  option?: VariantOption;
+}
+
+export interface ProductVariant {
+  id: string;
+  sku?: string;
+  stockQuantity: number;
+  priceOverride?: string | number;
+  values: VariantValue[];
 }
 
 export interface Review {
@@ -129,6 +152,7 @@ export interface Review {
 export type OrderStatus = "pending" | "fulfilled" | "cancelled";
 export type OrderPaymentStatus =
   | "unpaid"
+  | "authorized"
   | "paid"
   | "partially_refunded"
   | "refunded"
@@ -146,6 +170,8 @@ export interface Order {
   trackingInfo?: string;
   shop?: Shop;
   product?: Product;
+  variant?: ProductVariant;
+  variantLabel?: string;
   client?: User;
   createdAt: string;
 }

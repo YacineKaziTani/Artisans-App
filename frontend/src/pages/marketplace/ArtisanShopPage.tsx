@@ -298,22 +298,24 @@ export default function ArtisanShopPage() {
                     </div>
                     {isAuthenticated ? (
                       <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => {
-                            addToCart(product);
-                            setJustAdded(product.id);
-                            setTimeout(() => setJustAdded(null), 1500);
-                          }}
-                        >
-                          {justAdded === product.id ? "Added ✓" : "Add to Cart"}
-                        </Button>
+                        {!product.variantOptions?.length && (
+                          <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => {
+                              addToCart(product);
+                              setJustAdded(product.id);
+                              setTimeout(() => setJustAdded(null), 1500);
+                            }}
+                          >
+                            {justAdded === product.id ? "Added ✓" : "Add to Cart"}
+                          </Button>
+                        )}
                         <Button
                           className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
                           onClick={() => setBuyingProduct(product)}
                         >
-                          Buy Now
+                          {product.variantOptions?.length ? "Select Options" : "Buy Now"}
                         </Button>
                       </div>
                     ) : (

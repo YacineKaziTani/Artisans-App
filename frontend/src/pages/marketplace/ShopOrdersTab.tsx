@@ -13,6 +13,7 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
 
 const PAYMENT_STYLES: Record<string, string> = {
   unpaid: "bg-gray-100 text-gray-700 border-gray-300",
+  authorized: "bg-blue-100 text-blue-800 border-blue-300",
   paid: "bg-green-100 text-green-800 border-green-300",
   partially_refunded: "bg-orange-100 text-orange-800 border-orange-300",
   refunded: "bg-orange-100 text-orange-800 border-orange-300",
@@ -65,6 +66,9 @@ export function ShopOrdersTab() {
                       <p className="font-semibold text-gray-900">
                         {order.product?.title} × {order.quantity}
                       </p>
+                      {order.variantLabel && (
+                        <p className="text-xs text-gray-500">{order.variantLabel}</p>
+                      )}
                       <p className="text-sm text-gray-600">
                         {order.client?.name} · $
                         {Number(order.totalAmount).toFixed(2)}
@@ -93,6 +97,11 @@ export function ShopOrdersTab() {
 
                   {order.status === "pending" && (
                     <div className="space-y-2">
+                      {order.paymentStatus === "authorized" && (
+                        <p className="text-xs text-gray-500">
+                          Marking fulfilled will charge the client's card. Cancelling releases the hold instead.
+                        </p>
+                      )}
                       {order.deliveryMethod === "delivery" && (
                         <Input
                           placeholder="Tracking number (optional)"

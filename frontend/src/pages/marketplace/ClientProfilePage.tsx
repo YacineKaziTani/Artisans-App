@@ -298,6 +298,9 @@ function MyOrdersCard() {
                     <p className="font-semibold text-gray-900">
                       {order.product?.title} × {order.quantity}
                     </p>
+                    {order.variantLabel && (
+                      <p className="text-xs text-gray-500">{order.variantLabel}</p>
+                    )}
                     <p className="text-sm text-gray-600">
                       {order.shop?.shopName} · $
                       {Number(order.totalAmount).toFixed(2)}

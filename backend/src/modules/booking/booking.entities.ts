@@ -19,6 +19,7 @@ export enum BookingStatus {
 
 export enum PaymentStatus {
   UNPAID = "unpaid",
+  AUTHORIZED = "authorized", // card held, not yet charged
   PAID = "paid",
   PARTIALLY_REFUNDED = "partially_refunded",
   REFUNDED = "refunded",

@@ -82,7 +82,11 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
     const userRepo = AppDataSource.getRepository(User);
-    const user = await userRepo.findOneBy({ email });
+    const user = await userRepo
+      .createQueryBuilder("user")
+      .addSelect("user.password")
+      .where("user.email = :email", { email })
+      .getOne();
 
     if (!user) {
       return res.status(401).json({ message: "Invalid user" });

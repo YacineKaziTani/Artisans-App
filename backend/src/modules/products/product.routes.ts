@@ -8,6 +8,15 @@ import {
   addProductImage,
   removeProductImage,
 } from "./product.controller";
+import {
+  createVariantOption,
+  deleteVariantOption,
+  createVariantValue,
+  deleteVariantValue,
+  createProductVariant,
+  updateProductVariant,
+  deleteProductVariant,
+} from "./variant.controller";
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { UserRole } from "../users/entities/user.entities";
@@ -49,5 +58,18 @@ router.delete(
   authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
   removeProductImage,
 );
+
+// ── Variant options/values/SKUs ─────────────────────────────────────────────
+const artisanOrAdmin = authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN);
+
+router.post("/:productId/variant-options", authMiddleware, artisanOrAdmin, createVariantOption);
+router.delete("/variant-options/:id", authMiddleware, artisanOrAdmin, deleteVariantOption);
+
+router.post("/variant-options/:optionId/values", authMiddleware, artisanOrAdmin, createVariantValue);
+router.delete("/variant-values/:id", authMiddleware, artisanOrAdmin, deleteVariantValue);
+
+router.post("/:productId/variants", authMiddleware, artisanOrAdmin, createProductVariant);
+router.patch("/variants/:id", authMiddleware, artisanOrAdmin, updateProductVariant);
+router.delete("/variants/:id", authMiddleware, artisanOrAdmin, deleteProductVariant);
 
 export default router;

@@ -28,7 +28,7 @@ export class User {
   @Column({ type: "varchar", unique: true })
   phone!: string;
 
-  @Column({ type: "varchar" })
+  @Column({ type: "varchar", select: false })
   password!: string;
 
   @Column({ type: "boolean", default: true })

@@ -30,7 +30,11 @@ export default function CartPage() {
     if (deliveryMethod === "delivery" && !shippingAddress.trim()) return;
     checkout.mutate(
       {
-        items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        items: items.map((i) => ({
+          productId: i.productId,
+          variantId: i.variantId,
+          quantity: i.quantity,
+        })),
         delivery: {
           deliveryMethod,
           shippingAddress: deliveryMethod === "delivery" ? shippingAddress : undefined,
@@ -45,9 +49,12 @@ export default function CartPage() {
       <main className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-lg mx-auto text-center bg-white/90 border-2 border-orange-200 rounded-xl p-10 space-y-4">
           <div className="text-5xl">✅</div>
-          <h1 className="text-2xl font-bold text-orange-900">Order Confirmed</h1>
+          <h1 className="text-2xl font-bold text-orange-900">Payment Authorized</h1>
           <p className="text-amber-900">
-            Your payment went through — the artisans have been notified.
+            Your card has been authorized and the artisans have been
+            notified. You'll be charged once each order is fulfilled — if an
+            artisan can't fulfill theirs, that hold is released and you're
+            not charged for it.
           </p>
           <div className="flex gap-2 justify-center">
             <Button onClick={() => navigate("/profile-client")}>
@@ -86,11 +93,14 @@ export default function CartPage() {
             <div className="space-y-4 mb-8">
               {items.map((item) => (
                 <div
-                  key={item.productId}
+                  key={`${item.productId}:${item.variantId ?? ""}`}
                   className="bg-white/90 border-2 border-orange-100 rounded-xl p-5 flex items-center justify-between flex-wrap gap-4"
                 >
                   <div>
                     <p className="font-semibold text-orange-900">{item.title}</p>
+                    {item.variantLabel && (
+                      <p className="text-xs text-amber-700">{item.variantLabel}</p>
+                    )}
                     <p className="text-sm text-amber-700">{item.shopName}</p>
                     <p className="text-sm text-amber-800 mt-1">
                       ${item.price.toFixed(2)} each
@@ -102,7 +112,7 @@ export default function CartPage() {
                         type="button"
                         className="w-8 h-8 rounded border border-orange-300 text-orange-700"
                         onClick={() =>
-                          setQuantity(item.productId, item.quantity - 1)
+                          setQuantity(item.productId, item.variantId, item.quantity - 1)
                         }
                       >
                         −
@@ -112,7 +122,7 @@ export default function CartPage() {
                         type="button"
                         className="w-8 h-8 rounded border border-orange-300 text-orange-700"
                         onClick={() =>
-                          setQuantity(item.productId, item.quantity + 1)
+                          setQuantity(item.productId, item.variantId, item.quantity + 1)
                         }
                       >
                         +
@@ -124,7 +134,7 @@ export default function CartPage() {
                     <button
                       type="button"
                       className="text-red-600 text-sm hover:underline"
-                      onClick={() => removeItem(item.productId)}
+                      onClick={() => removeItem(item.productId, item.variantId)}
                     >
                       Remove
                     </button>
@@ -212,7 +222,7 @@ export default function CartPage() {
         {clientSecret && (
           <div className="bg-white/90 border-2 border-orange-200 rounded-xl p-6">
             <h2 className="text-xl font-bold text-orange-900 mb-4">
-              Pay ${total.toFixed(2)}
+              Authorize ${total.toFixed(2)}
             </h2>
             <Elements stripe={stripePromise} options={{ clientSecret }}>
               <BookingPaymentForm

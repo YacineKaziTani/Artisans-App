@@ -66,9 +66,11 @@ export function BookServiceDialog({
         {confirmed ? (
           <div className="text-center py-6 space-y-3">
             <div className="text-5xl">✅</div>
-            <DialogTitle>Booking Confirmed</DialogTitle>
+            <DialogTitle>Payment Authorized</DialogTitle>
             <DialogDescription>
-              Your payment went through and the artisan has been notified.
+              Your card has been authorized and the artisan has been notified.
+              You'll be charged once they confirm the booking — if they can't
+              take it, the hold is released and you're never charged.
             </DialogDescription>
             <Button onClick={() => handleClose(false)} className="mt-2">
               Done
@@ -77,10 +79,10 @@ export function BookServiceDialog({
         ) : clientSecret ? (
           <>
             <DialogHeader>
-              <DialogTitle>Pay for {service.name}</DialogTitle>
+              <DialogTitle>Authorize Payment for {service.name}</DialogTitle>
               <DialogDescription>
-                ${Number(service.price).toFixed(2)} — payment is required to
-                confirm your booking.
+                ${Number(service.price).toFixed(2)} — your card is authorized
+                now and charged only once the artisan confirms.
               </DialogDescription>
             </DialogHeader>
             <Elements stripe={stripePromise} options={{ clientSecret }}>

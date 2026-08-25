@@ -1,7 +1,5 @@
 import { v2 as cloudinary } from "cloudinary";
-// Using a version-agnostic require pattern to solve the "is not a constructor" error
-const multerStorage = require("multer-storage-cloudinary");
-const CloudinaryStorage = multerStorage.CloudinaryStorage || multerStorage;
+import { CloudinaryStorage } from "multer-storage-cloudinary";
 import multer from "multer";
 
 cloudinary.config({
@@ -11,10 +9,19 @@ cloudinary.config({
 });
 
 const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
+  cloudinary,
+  // multer-storage-cloudinary's types don't know about the newer keys added
+  // to the installed cloudinary package's UploadApiOptions (its `KnownKeys`
+  // helper collapses to `never` once that interface gained a catch-all index
+  // signature) — this is a type-only mismatch, not a runtime one; the
+  // library just spreads these into the upload call.
   params: {
     folder: "artisan_app",
     allowed_formats: ["jpg", "png", "jpeg"],
-  } as any,
+  } as CloudinaryStorage["params"],
 });
-export const parser = multer({ storage: storage });
+
+export const parser = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+});

@@ -16,6 +16,15 @@ import {
   useMyProducts,
   useRemoveProductImage,
 } from "@/hooks/useProducts";
+import {
+  useCreateProductVariant,
+  useCreateVariantOption,
+  useCreateVariantValue,
+  useRemoveProductVariant,
+  useRemoveVariantOption,
+  useRemoveVariantValue,
+  useUpdateProductVariant,
+} from "@/hooks/useVariants";
 import type { Product } from "@/types";
 
 function ProductImagesManager({ product }: { product: Product }) {
@@ -63,6 +72,265 @@ function ProductImagesManager({ product }: { product: Product }) {
           }}
         />
       </div>
+    </div>
+  );
+}
+
+function AddValueRow({ optionId }: { optionId: string }) {
+  const [value, setValue] = useState("");
+  const [priceModifier, setPriceModifier] = useState("");
+  const createValue = useCreateVariantValue();
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!value.trim()) return;
+    createValue.mutate(
+      {
+        optionId,
+        value: value.trim(),
+        priceModifier: priceModifier ? Number(priceModifier) : undefined,
+      },
+      { onSuccess: () => { setValue(""); setPriceModifier(""); } },
+    );
+  };
+
+  return (
+    <form onSubmit={submit} className="flex gap-1 mt-2">
+      <Input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="e.g. M"
+        className="h-8 text-xs"
+      />
+      <Input
+        type="number"
+        step="0.01"
+        value={priceModifier}
+        onChange={(e) => setPriceModifier(e.target.value)}
+        placeholder="+$"
+        className="h-8 text-xs w-16"
+      />
+      <Button type="submit" size="sm" className="h-8" disabled={createValue.isPending}>
+        Add
+      </Button>
+    </form>
+  );
+}
+
+function ProductVariantsManager({ product }: { product: Product }) {
+  const createOption = useCreateVariantOption();
+  const removeOption = useRemoveVariantOption();
+  const removeValue = useRemoveVariantValue();
+  const createVariant = useCreateProductVariant();
+  const updateVariant = useUpdateProductVariant();
+  const removeVariant = useRemoveProductVariant();
+
+  const [newOptionName, setNewOptionName] = useState("");
+  const options = product.variantOptions ?? [];
+  const variants = product.variants ?? [];
+
+  const [selectedValues, setSelectedValues] = useState<Record<string, string>>({});
+  const [newSku, setNewSku] = useState("");
+  const [newStock, setNewStock] = useState("");
+  const [newPriceOverride, setNewPriceOverride] = useState("");
+
+  const canBuildVariant =
+    options.length > 0 && options.every((o) => selectedValues[o.id]);
+
+  const handleAddOption = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newOptionName.trim()) return;
+    createOption.mutate(
+      { productId: product.id, name: newOptionName.trim() },
+      { onSuccess: () => setNewOptionName("") },
+    );
+  };
+
+  const handleAddVariant = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canBuildVariant) return;
+    createVariant.mutate(
+      {
+        productId: product.id,
+        payload: {
+          valueIds: Object.values(selectedValues),
+          sku: newSku || undefined,
+          stockQuantity: newStock ? Number(newStock) : 0,
+          priceOverride: newPriceOverride ? Number(newPriceOverride) : undefined,
+        },
+      },
+      {
+        onSuccess: () => {
+          setSelectedValues({});
+          setNewSku("");
+          setNewStock("");
+          setNewPriceOverride("");
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-4 border-t border-gray-100 pt-4">
+      <p className="text-xs font-medium text-gray-500">Variants</p>
+
+      {/* Options + their values */}
+      <div className="space-y-3">
+        {options.map((option) => (
+          <div key={option.id} className="bg-gray-50 rounded-md p-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-800">{option.name}</span>
+              <button
+                type="button"
+                className="text-xs text-red-600 hover:underline"
+                onClick={() => removeOption.mutate(option.id)}
+              >
+                Remove option
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {(option.values ?? []).map((v) => (
+                <span
+                  key={v.id}
+                  className="text-xs bg-white border border-gray-200 rounded px-2 py-1 flex items-center gap-1"
+                >
+                  {v.value}
+                  {Number(v.priceModifier) !== 0 && (
+                    <span className="text-gray-400">
+                      ({Number(v.priceModifier) > 0 ? "+" : ""}
+                      {Number(v.priceModifier)})
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="text-gray-400 hover:text-red-600"
+                    onClick={() => removeValue.mutate(v.id)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            <AddValueRow optionId={option.id} />
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleAddOption} className="flex gap-2">
+        <Input
+          value={newOptionName}
+          onChange={(e) => setNewOptionName(e.target.value)}
+          placeholder="New option, e.g. Size or Color"
+          className="h-9 text-sm"
+        />
+        <Button type="submit" size="sm" disabled={createOption.isPending}>
+          Add Option
+        </Button>
+      </form>
+
+      {/* Existing SKUs/variants */}
+      {variants.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-500">SKUs</p>
+          {variants.map((variant) => (
+            <div
+              key={variant.id}
+              className="flex items-center justify-between gap-2 text-sm border border-gray-200 rounded-md p-2"
+            >
+              <div>
+                <p className="font-medium text-gray-800">
+                  {variant.values.map((v) => `${v.option?.name}: ${v.value}`).join(", ")}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {variant.priceOverride !== undefined && variant.priceOverride !== null
+                    ? `$${Number(variant.priceOverride).toFixed(2)}`
+                    : "uses base price + modifiers"}
+                  {variant.sku && ` · SKU: ${variant.sku}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min="0"
+                  value={variant.stockQuantity}
+                  onChange={(e) =>
+                    updateVariant.mutate({
+                      id: variant.id,
+                      payload: { stockQuantity: Number(e.target.value) },
+                    })
+                  }
+                  className="h-8 w-16 text-xs"
+                />
+                <span className="text-xs text-gray-400">in stock</span>
+                <button
+                  type="button"
+                  className="text-red-600 hover:underline text-xs"
+                  onClick={() => removeVariant.mutate(variant.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Build a new variant combination */}
+      {options.length > 0 && (
+        <form onSubmit={handleAddVariant} className="space-y-2 bg-gray-50 rounded-md p-3">
+          <p className="text-xs font-medium text-gray-500">Add a SKU (pick one value per option)</p>
+          <div className="flex flex-wrap gap-2">
+            {options.map((option) => (
+              <select
+                key={option.id}
+                value={selectedValues[option.id] ?? ""}
+                onChange={(e) =>
+                  setSelectedValues((prev) => ({ ...prev, [option.id]: e.target.value }))
+                }
+                className="h-8 text-xs border border-gray-300 rounded-md px-2"
+              >
+                <option value="">{option.name}...</option>
+                {(option.values ?? []).map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.value}
+                  </option>
+                ))}
+              </select>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={newSku}
+              onChange={(e) => setNewSku(e.target.value)}
+              placeholder="SKU (optional)"
+              className="h-8 text-xs"
+            />
+            <Input
+              type="number"
+              min="0"
+              value={newStock}
+              onChange={(e) => setNewStock(e.target.value)}
+              placeholder="Stock"
+              className="h-8 text-xs w-20"
+            />
+            <Input
+              type="number"
+              step="0.01"
+              value={newPriceOverride}
+              onChange={(e) => setNewPriceOverride(e.target.value)}
+              placeholder="Fixed price (optional)"
+              className="h-8 text-xs"
+            />
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!canBuildVariant || createVariant.isPending}
+          >
+            {createVariant.isPending ? "Adding..." : "Add SKU"}
+          </Button>
+        </form>
+      )}
     </div>
   );
 }
@@ -224,6 +492,7 @@ export function ShopProductsTab() {
                     <p className="text-xs font-medium text-gray-500 mb-2">Gallery</p>
                     <ProductImagesManager product={product} />
                   </div>
+                  <ProductVariantsManager product={product} />
                   <Button
                     variant="destructive"
                     size="sm"

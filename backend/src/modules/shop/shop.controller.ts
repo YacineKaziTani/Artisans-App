@@ -125,7 +125,11 @@ export const getMyShop = async (req: Request, res: Response) => {
         category: true,
         services: true,
         photos: true,
-        products: { images: true },
+        products: {
+          images: true,
+          variantOptions: { values: true },
+          variants: { values: { option: true } },
+        },
         reviews: { author: true },
       },
     });
@@ -195,7 +199,11 @@ export const getShopById = async (req: Request, res: Response) => {
         category: true,
         services: true,
         photos: true,
-        products: { images: true },
+        products: {
+          images: true,
+          variantOptions: { values: true },
+          variants: { values: { option: true } },
+        },
         reviews: { author: true },
         owner: true,
       },

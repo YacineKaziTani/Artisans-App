@@ -177,17 +177,25 @@ export default function ProductsPage() {
                     </span>
                   </div>
                   {isAuthenticated ? (
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        addToCart(product);
-                        setJustAdded(product.id);
-                        setTimeout(() => setJustAdded(null), 1500);
-                      }}
-                    >
-                      {justAdded === product.id ? "Added ✓" : "Add to Cart"}
-                    </Button>
+                    product.variantOptions?.length ? (
+                      <Link to={`/artisan/${product.shop?.id}`} className="block">
+                        <Button variant="outline" className="w-full">
+                          Select Options
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          addToCart(product);
+                          setJustAdded(product.id);
+                          setTimeout(() => setJustAdded(null), 1500);
+                        }}
+                      >
+                        {justAdded === product.id ? "Added ✓" : "Add to Cart"}
+                      </Button>
+                    )
                   ) : (
                     <Link to="/login" className="block">
                       <Button variant="outline" className="w-full">

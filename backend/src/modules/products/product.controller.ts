@@ -25,6 +25,10 @@ export const getAllProducts = async (req: Request, res: Response) => {
       .leftJoinAndSelect("product.shop", "shop")
       .leftJoinAndSelect("shop.category", "category")
       .leftJoinAndSelect("product.images", "images")
+      .leftJoinAndSelect("product.variantOptions", "variantOptions")
+      .leftJoinAndSelect("variantOptions.values", "optionValues")
+      .leftJoinAndSelect("product.variants", "variants")
+      .leftJoinAndSelect("variants.values", "variantValues")
       .where("shop.status = :status", { status: "active" });
 
     if (shopId) {
@@ -62,7 +66,14 @@ export const getMyProducts = async (req: Request, res: Response) => {
 
     const products = await productRepo.find({
       where: { shop: { id: shop.id } },
-      relations: ["images"],
+      relations: [
+        "images",
+        "variantOptions",
+        "variantOptions.values",
+        "variants",
+        "variants.values",
+        "variants.values.option",
+      ],
       order: { createdAt: "DESC" },
     });
     res.json(products);

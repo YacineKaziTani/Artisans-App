@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Product } from "@/types";
+import type { Product, ProductVariant } from "@/types";
 
 export interface CartItem {
   productId: string;
+  variantId?: string;
+  variantLabel?: string;
   title: string;
   price: number;
   shopId: string;
@@ -11,11 +13,15 @@ export interface CartItem {
   quantity: number;
 }
 
+function lineKey(productId: string, variantId?: string) {
+  return `${productId}:${variantId ?? ""}`;
+}
+
 interface CartState {
   items: CartItem[];
-  addItem: (product: Product, quantity?: number) => void;
-  removeItem: (productId: string) => void;
-  setQuantity: (productId: string, quantity: number) => void;
+  addItem: (product: Product, variant?: ProductVariant, quantity?: number) => void;
+  removeItem: (productId: string, variantId?: string) => void;
+  setQuantity: (productId: string, variantId: string | undefined, quantity: number) => void;
   clear: () => void;
 }
 
@@ -24,25 +30,39 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
 
-      addItem: (product, quantity = 1) => {
-        const existing = get().items.find((i) => i.productId === product.id);
+      addItem: (product, variant, quantity = 1) => {
+        const key = lineKey(product.id, variant?.id);
+        const existing = get().items.find((i) => lineKey(i.productId, i.variantId) === key);
         if (existing) {
           set({
             items: get().items.map((i) =>
-              i.productId === product.id
+              lineKey(i.productId, i.variantId) === key
                 ? { ...i, quantity: i.quantity + quantity }
                 : i,
             ),
           });
           return;
         }
+
+        const variantModifier = variant
+          ? variant.values.reduce((sum, v) => sum + Number(v.priceModifier), 0)
+          : 0;
+        const price = variant?.priceOverride
+          ? Number(variant.priceOverride)
+          : Number(product.basePrice) + variantModifier;
+        const variantLabel = variant?.values
+          .map((v) => `${v.option?.name}: ${v.value}`)
+          .join(", ");
+
         set({
           items: [
             ...get().items,
             {
               productId: product.id,
+              variantId: variant?.id,
+              variantLabel,
               title: product.title,
-              price: Number(product.basePrice),
+              price,
               shopId: product.shop?.id ?? "",
               shopName: product.shop?.shopName ?? "",
               quantity,
@@ -51,18 +71,22 @@ export const useCartStore = create<CartState>()(
         });
       },
 
-      removeItem: (productId) => {
-        set({ items: get().items.filter((i) => i.productId !== productId) });
+      removeItem: (productId, variantId) => {
+        const key = lineKey(productId, variantId);
+        set({
+          items: get().items.filter((i) => lineKey(i.productId, i.variantId) !== key),
+        });
       },
 
-      setQuantity: (productId, quantity) => {
+      setQuantity: (productId, variantId, quantity) => {
         if (quantity < 1) {
-          get().removeItem(productId);
+          get().removeItem(productId, variantId);
           return;
         }
+        const key = lineKey(productId, variantId);
         set({
           items: get().items.map((i) =>
-            i.productId === productId ? { ...i, quantity } : i,
+            lineKey(i.productId, i.variantId) === key ? { ...i, quantity } : i,
           ),
         });
       },

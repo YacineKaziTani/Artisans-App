@@ -16,6 +16,7 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
 
 const PAYMENT_STYLES: Record<string, string> = {
   unpaid: "bg-gray-100 text-gray-700 border-gray-300",
+  authorized: "bg-blue-100 text-blue-800 border-blue-300",
   paid: "bg-green-100 text-green-800 border-green-300",
   refunded: "bg-orange-100 text-orange-800 border-orange-300",
   failed: "bg-red-100 text-red-800 border-red-300",
@@ -66,6 +67,9 @@ export default function AdminOrdersPage() {
                   <p className="font-medium text-gray-900">
                     {order.product?.title} × {order.quantity}
                   </p>
+                  {order.variantLabel && (
+                    <p className="text-xs text-gray-500">{order.variantLabel}</p>
+                  )}
                   <p className="text-sm text-gray-500">
                     {order.shop?.shopName} · {order.client?.name} · $
                     {Number(order.totalAmount).toFixed(2)}

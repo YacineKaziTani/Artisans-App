@@ -7,7 +7,7 @@ import { Shop } from "../shop/shop.entities";
 import { Service } from "../services/service.entities";
 import { User } from "../users/entities/user.entities";
 import { stripe } from "../../config/stripe";
-import { handleOrderPaymentEvent } from "../orders/order.controller";
+import { handleOrderPaymentEvent, handleOrderAuthorizedEvent } from "../orders/order.controller";
 import { ProcessedWebhookEvent } from "../webhook-events/webhook-event.entities";
 
 const processedEventRepo = AppDataSource.getRepository(ProcessedWebhookEvent);
@@ -17,7 +17,16 @@ const shopRepo = AppDataSource.getRepository(Shop);
 const serviceRepo = AppDataSource.getRepository(Service);
 
 // Client creates a booking request for a shop's service, and gets back a
-// Stripe PaymentIntent client secret to pay for it.
+// Stripe PaymentIntent client secret to authorize payment for it.
+//
+// capture_method: "manual" means confirming the PaymentIntent only PLACES A
+// HOLD on the client's card — no money moves yet. The artisan's "Confirm"
+// action later calls stripe.paymentIntents.capture() to actually charge it;
+// their "Cancel" action releases the hold instead, so a cancelled booking
+// never charges the client at all. Note: card authorization holds
+// automatically expire after ~7 days if never captured (a card-network
+// rule, not something we control) — an artisan who waits longer than that
+// will find capture fails and the client needs to re-pay.
 export const createBooking = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -76,6 +85,7 @@ export const createBooking = async (req: Request, res: Response) => {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountInCents,
       currency: "usd",
+      capture_method: "manual",
       metadata: { type: "booking", bookingId: saved.id },
       automatic_payment_methods: { enabled: true },
     });
@@ -125,8 +135,23 @@ export const getShopBookings = async (req: Request, res: Response) => {
   }
 };
 
+// Releases an authorization hold without charging the card (used when a
+// booking/order is cancelled before the artisan ever captures payment).
+async function releaseHold(stripePaymentIntentId: string) {
+  await stripe.paymentIntents.cancel(stripePaymentIntentId);
+}
+
+// Captures a previously-authorized hold — this is the moment money actually
+// moves from the client's card to the platform's Stripe balance.
+async function captureHold(stripePaymentIntentId: string) {
+  await stripe.paymentIntents.capture(stripePaymentIntentId);
+}
+
 // Artisan confirms, completes, or cancels a booking on their own shop.
-// Cancelling a paid booking triggers a Stripe refund.
+// Confirming an authorized-but-uncaptured booking captures the payment
+// (charges the client for the first time). Cancelling an authorized booking
+// releases the hold instead — the client is never charged. Cancelling an
+// already-captured (paid) booking refunds it as before.
 export const updateBookingStatus = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -146,15 +171,38 @@ export const updateBookingStatus = async (req: Request, res: Response) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    if (
-      status === BookingStatus.CANCELLED &&
-      booking.paymentStatus === PaymentStatus.PAID &&
-      booking.stripePaymentIntentId
-    ) {
-      await stripe.refunds.create({
-        payment_intent: booking.stripePaymentIntentId,
-      });
-      booking.paymentStatus = PaymentStatus.REFUNDED;
+    if (status === BookingStatus.CONFIRMED) {
+      if (booking.paymentStatus === PaymentStatus.AUTHORIZED && booking.stripePaymentIntentId) {
+        try {
+          await captureHold(booking.stripePaymentIntentId);
+        } catch (err) {
+          return res.status(409).json({
+            message:
+              "Couldn't charge the client's card — the authorization hold may have expired (holds last about 7 days). Ask the client to book again.",
+            error: err instanceof Error ? err.message : err,
+          });
+        }
+        booking.paymentStatus = PaymentStatus.PAID;
+      } else if (booking.paymentStatus === PaymentStatus.UNPAID) {
+        return res.status(400).json({
+          message: "The client hasn't authorized payment for this booking yet",
+        });
+      }
+    }
+
+    if (status === BookingStatus.CANCELLED) {
+      if (booking.paymentStatus === PaymentStatus.AUTHORIZED && booking.stripePaymentIntentId) {
+        await releaseHold(booking.stripePaymentIntentId);
+        booking.paymentStatus = PaymentStatus.UNPAID; // hold released, client was never charged
+      } else if (
+        booking.paymentStatus === PaymentStatus.PAID &&
+        booking.stripePaymentIntentId
+      ) {
+        await stripe.refunds.create({
+          payment_intent: booking.stripePaymentIntentId,
+        });
+        booking.paymentStatus = PaymentStatus.REFUNDED;
+      }
     }
 
     booking.status = status;
@@ -165,7 +213,9 @@ export const updateBookingStatus = async (req: Request, res: Response) => {
   }
 };
 
-// Client cancels their own booking (refunds automatically if it was paid)
+// Client cancels their own booking. If payment was only authorized (not yet
+// captured by the artisan), the hold is released and nothing is charged. If
+// it was already captured, this refunds it.
 export const cancelMyBooking = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -188,7 +238,10 @@ export const cancelMyBooking = async (req: Request, res: Response) => {
         .json({ message: "Can't cancel a completed booking" });
     }
 
-    if (
+    if (booking.paymentStatus === PaymentStatus.AUTHORIZED && booking.stripePaymentIntentId) {
+      await releaseHold(booking.stripePaymentIntentId);
+      booking.paymentStatus = PaymentStatus.UNPAID;
+    } else if (
       booking.paymentStatus === PaymentStatus.PAID &&
       booking.stripePaymentIntentId
     ) {
@@ -219,8 +272,22 @@ export const getAllBookingsAdmin = async (req: Request, res: Response) => {
   }
 };
 
-// Stripe webhook — marks bookings paid/failed based on PaymentIntent events.
-// Mounted with a raw body parser, before the global JSON parser.
+// Marks a booking's hold as placed (authorized) once Stripe confirms it —
+// called from the webhook below.
+export async function handleBookingAuthorizedEvent(bookingId: string) {
+  const booking = await bookingRepo.findOne({ where: { id: bookingId } });
+  if (!booking) return;
+  // Only move forward from UNPAID — never regress an already-captured or
+  // already-cancelled booking if this event arrives out of order.
+  if (booking.paymentStatus === PaymentStatus.UNPAID) {
+    booking.paymentStatus = PaymentStatus.AUTHORIZED;
+    await bookingRepo.save(booking);
+  }
+}
+
+// Stripe webhook — tracks PaymentIntent lifecycle events for both bookings
+// and orders/carts. Mounted with a raw body parser, before the global JSON
+// parser, so the signature can be verified against the exact raw payload.
 export const stripeWebhook = async (req: Request, res: Response) => {
   const sig = req.headers["stripe-signature"];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -251,34 +318,50 @@ export const stripeWebhook = async (req: Request, res: Response) => {
       return res.json({ received: true, duplicate: true });
     }
 
-    if (
-      event.type === "payment_intent.succeeded" ||
-      event.type === "payment_intent.payment_failed"
-    ) {
-      const intent = event.data.object as Stripe.PaymentIntent;
-      const succeeded = event.type === "payment_intent.succeeded";
+    const relevantTypes = [
+      "payment_intent.amount_capturable_updated", // authorization hold placed
+      "payment_intent.succeeded", // captured (money actually moved)
+      "payment_intent.payment_failed",
+    ];
 
-      if (
+    if (relevantTypes.includes(event.type)) {
+      const intent = event.data.object as Stripe.PaymentIntent;
+      const isAuthorized = event.type === "payment_intent.amount_capturable_updated";
+      const isCaptured = event.type === "payment_intent.succeeded";
+      const isFailed = event.type === "payment_intent.payment_failed";
+
+      const isOrder =
         (intent.metadata?.type === "order" && intent.metadata?.orderId) ||
-        (intent.metadata?.type === "cart" && intent.metadata?.orderIds)
-      ) {
+        (intent.metadata?.type === "cart" && intent.metadata?.orderIds);
+
+      if (isOrder) {
         const idsCsv =
           intent.metadata.type === "cart"
             ? intent.metadata.orderIds
             : intent.metadata.orderId;
-        await handleOrderPaymentEvent(idsCsv, succeeded);
+        if (isAuthorized) await handleOrderAuthorizedEvent(idsCsv);
+        else if (isCaptured || isFailed) await handleOrderPaymentEvent(idsCsv, isCaptured);
       } else if (intent.metadata?.bookingId) {
-        const booking = await bookingRepo.findOne({
-          where: { id: intent.metadata.bookingId },
-        });
-        if (booking) {
-          if (succeeded) {
-            booking.paymentStatus = PaymentStatus.PAID;
-            booking.status = BookingStatus.CONFIRMED;
-          } else {
-            booking.paymentStatus = PaymentStatus.FAILED;
+        if (isAuthorized) {
+          await handleBookingAuthorizedEvent(intent.metadata.bookingId);
+        } else if (isCaptured || isFailed) {
+          const booking = await bookingRepo.findOne({
+            where: { id: intent.metadata.bookingId },
+          });
+          if (booking) {
+            if (isCaptured) {
+              // Normally the artisan's "Confirm" action captures directly and
+              // sets this synchronously — this is a safety-net path in case
+              // capture happened some other way.
+              booking.paymentStatus = PaymentStatus.PAID;
+              if (booking.status === BookingStatus.PENDING) {
+                booking.status = BookingStatus.CONFIRMED;
+              }
+            } else {
+              booking.paymentStatus = PaymentStatus.FAILED;
+            }
+            await bookingRepo.save(booking);
           }
-          await bookingRepo.save(booking);
         }
       }
     }

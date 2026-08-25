@@ -9,6 +9,7 @@ import {
 import { User } from "../users/entities/user.entities";
 import { Shop } from "../shop/shop.entities";
 import { Product } from "../products/product.entities";
+import { ProductVariant } from "../products/variant.entities";
 
 export enum OrderStatus {
   PENDING = "pending",
@@ -23,6 +24,7 @@ export enum DeliveryMethod {
 
 export enum OrderPaymentStatus {
   UNPAID = "unpaid",
+  AUTHORIZED = "authorized", // card held, not yet charged
   PAID = "paid",
   PARTIALLY_REFUNDED = "partially_refunded",
   REFUNDED = "refunded",
@@ -83,6 +85,17 @@ export class Order {
 
   @ManyToOne(() => Product)
   product!: Product;
+
+  // Which specific variant (e.g. Size=M, Color=Red) was ordered, if the
+  // product has variants. Nullable since not every product has any.
+  @ManyToOne(() => ProductVariant, { nullable: true, onDelete: "SET NULL" })
+  variant?: ProductVariant;
+
+  // Snapshot of the variant's values at order time (e.g. "Size: M, Color:
+  // Red") so order history stays readable even if the variant is later
+  // edited or deleted.
+  @Column({ nullable: true })
+  variantLabel?: string;
 
   @CreateDateColumn()
   createdAt!: Date;

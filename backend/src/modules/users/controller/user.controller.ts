@@ -53,7 +53,7 @@ export const getMe = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Not authenticated" });
 
     const user = await userRepo.findOne({
-      where: { id: userReq.user.sub },
+      where: { id: userReq.user.id },
       select: {
         id: true,
         name: true,
@@ -78,7 +78,7 @@ export const updateMe = async (req: Request, res: Response) => {
     if (!userReq.user)
       return res.status(401).json({ error: "Not authenticated" });
 
-    const user = await userRepo.findOneBy({ id: userReq.user.sub });
+    const user = await userRepo.findOneBy({ id: userReq.user.id });
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const { name, phone, avatarUrl } = req.body;

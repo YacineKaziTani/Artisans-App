@@ -10,7 +10,6 @@ export default function MessagesLayout() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link to="/">Go back to app</Link>
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Messages</h1>
 
         <div className="flex gap-6 bg-white rounded-xl border border-gray-200 overflow-hidden min-h-[70vh]">
@@ -20,10 +19,7 @@ export default function MessagesLayout() {
             {isLoading && (
               <div className="p-4 space-y-3">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-16 rounded-lg bg-gray-100 animate-pulse"
-                  />
+                  <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
                 ))}
               </div>
             )}
@@ -36,8 +32,8 @@ export default function MessagesLayout() {
 
             {!isLoading && !isError && (conversations ?? []).length === 0 && (
               <p className="p-4 text-sm text-gray-600">
-                No conversations yet. Message an artisan from their shop page to
-                get started.
+                No conversations yet. Message an artisan from their shop page
+                to get started.
               </p>
             )}
 

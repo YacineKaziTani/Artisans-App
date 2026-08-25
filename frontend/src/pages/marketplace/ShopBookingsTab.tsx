@@ -12,6 +12,7 @@ const STATUS_STYLES: Record<BookingStatus, string> = {
 
 const PAYMENT_STYLES: Record<string, string> = {
   unpaid: "bg-gray-100 text-gray-700 border-gray-300",
+  authorized: "bg-blue-100 text-blue-800 border-blue-300",
   paid: "bg-green-100 text-green-800 border-green-300",
   refunded: "bg-orange-100 text-orange-800 border-orange-300",
   failed: "bg-red-100 text-red-800 border-red-300",
@@ -88,39 +89,46 @@ export function ShopBookingsTab() {
                   </div>
 
                   {(booking.status === "pending" || booking.status === "confirmed") && (
-                    <div className="flex gap-2">
-                      {booking.status === "pending" && (
+                    <div className="space-y-1">
+                      {booking.status === "pending" && booking.paymentStatus === "authorized" && (
+                        <p className="text-xs text-gray-500">
+                          Confirming will charge the client's card. Cancelling releases the hold instead.
+                        </p>
+                      )}
+                      <div className="flex gap-2">
+                        {booking.status === "pending" && (
+                          <Button
+                            size="sm"
+                            disabled={isUpdating}
+                            onClick={() =>
+                              updateStatus.mutate({ id: booking.id, status: "confirmed" })
+                            }
+                          >
+                            Confirm
+                          </Button>
+                        )}
+                        {booking.status === "confirmed" && (
+                          <Button
+                            size="sm"
+                            disabled={isUpdating}
+                            onClick={() =>
+                              updateStatus.mutate({ id: booking.id, status: "completed" })
+                            }
+                          >
+                            Mark Completed
+                          </Button>
+                        )}
                         <Button
                           size="sm"
+                          variant="destructive"
                           disabled={isUpdating}
                           onClick={() =>
-                            updateStatus.mutate({ id: booking.id, status: "confirmed" })
+                            updateStatus.mutate({ id: booking.id, status: "cancelled" })
                           }
                         >
-                          Confirm
+                          Cancel
                         </Button>
-                      )}
-                      {booking.status === "confirmed" && (
-                        <Button
-                          size="sm"
-                          disabled={isUpdating}
-                          onClick={() =>
-                            updateStatus.mutate({ id: booking.id, status: "completed" })
-                          }
-                        >
-                          Mark Completed
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={isUpdating}
-                        onClick={() =>
-                          updateStatus.mutate({ id: booking.id, status: "cancelled" })
-                        }
-                      >
-                        Cancel
-                      </Button>
+                      </div>
                     </div>
                   )}
                 </div>
