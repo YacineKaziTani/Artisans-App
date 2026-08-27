@@ -94,3 +94,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Featured products marquee (home page) — an infinite horizontal scroll.
+   The track renders the product list twice back-to-back; animating from
+   -50% to 0% moves it left-to-right while looping seamlessly, since the
+   second half is an exact copy of the first. */
+@keyframes product-marquee {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0%);
+  }
+}
+
+.product-marquee-viewport {
+  overflow: hidden;
+}
+
+.product-marquee-track {
+  display: flex;
+  gap: 1.5rem;
+  width: max-content;
+  animation: product-marquee 45s linear infinite;
+}
+
+.product-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-marquee-track {
+    animation: none;
+  }
+}

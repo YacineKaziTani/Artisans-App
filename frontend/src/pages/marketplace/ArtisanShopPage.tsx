@@ -86,6 +86,13 @@ export default function ArtisanShopPage() {
             ← Back to {shop.category ? shop.category.name : "Categories"}
           </Link>
 
+          {!isOwnShop && !shop.stripeOnboardingComplete && (
+            <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg text-sm text-amber-900">
+              This shop is still setting up payouts — bookings and purchases
+              aren't available yet. Check back soon.
+            </div>
+          )}
+
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-2 border-orange-300 p-8 space-y-6 shadow-lg">
             <div>
               <div className="flex items-center gap-3 flex-wrap mb-2">
@@ -248,9 +255,10 @@ export default function ArtisanShopPage() {
                   {isAuthenticated ? (
                     <Button
                       className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
+                      disabled={!shop.stripeOnboardingComplete}
                       onClick={() => setBookingService(service)}
                     >
-                      Book Now
+                      {shop.stripeOnboardingComplete ? "Book Now" : "Not Available Yet"}
                     </Button>
                   ) : (
                     <Link to="/login" className="block">
@@ -302,6 +310,7 @@ export default function ArtisanShopPage() {
                           <Button
                             variant="outline"
                             className="flex-1"
+                            disabled={!shop.stripeOnboardingComplete}
                             onClick={() => {
                               addToCart(product);
                               setJustAdded(product.id);
@@ -313,9 +322,14 @@ export default function ArtisanShopPage() {
                         )}
                         <Button
                           className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
+                          disabled={!shop.stripeOnboardingComplete}
                           onClick={() => setBuyingProduct(product)}
                         >
-                          {product.variantOptions?.length ? "Select Options" : "Buy Now"}
+                          {!shop.stripeOnboardingComplete
+                            ? "Not Available Yet"
+                            : product.variantOptions?.length
+                              ? "Select Options"
+                              : "Buy Now"}
                         </Button>
                       </div>
                     ) : (

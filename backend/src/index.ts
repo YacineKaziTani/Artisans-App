@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import express from "express";
+import helmet from "helmet";
 import { createServer } from "http";
 import { AppDataSource } from "./data-source";
 import cookieParser from "cookie-parser";
@@ -28,6 +29,14 @@ async function bootstrap() {
 
   const app = express();
 
+  app.use(
+    helmet({
+      // Cross-origin resource policy would block the frontend loading
+      // Cloudinary-hosted images/photos otherwise.
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+    }),
+  );
+
   // Stripe webhook needs the raw request body to verify the signature, so
   // it's mounted before express.json() parses everything else.
   app.post(
@@ -40,9 +49,13 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
+  const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
+    .split(",")
+    .map((o) => o.trim());
+
   app.use(
     cors({
-      origin: "http://localhost:5173",
+      origin: allowedOrigins,
       credentials: true,
     }),
   );

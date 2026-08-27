@@ -78,4 +78,14 @@ export const shopApi = {
         note,
       })
       .then((r) => r.data.shop),
+
+  connectStripe: () =>
+    api.post<{ url: string }>("/shops/mine/connect-stripe").then((r) => r.data),
+
+  getStripeStatus: () =>
+    api
+      .get<{ connected: boolean; onboardingComplete: boolean; detailsSubmitted?: boolean }>(
+        "/shops/mine/stripe-status",
+      )
+      .then((r) => r.data),
 };

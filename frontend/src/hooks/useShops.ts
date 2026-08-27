@@ -94,3 +94,17 @@ export function useResolveVerification() {
     },
   });
 }
+
+export function useConnectStripe() {
+  return useMutation({
+    mutationFn: shopApi.connectStripe,
+  });
+}
+
+export function useStripeStatus(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: [...shopKeys.mine(), "stripe-status"],
+    queryFn: shopApi.getStripeStatus,
+    enabled: options.enabled ?? true,
+  });
+}

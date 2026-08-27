@@ -53,6 +53,12 @@ export class User {
   @Column({ type: "timestamptz", nullable: true })
   acceptedTermsAt?: Date;
 
+  @Column({ type: "int", default: 0, select: false })
+  failedLoginAttempts!: number;
+
+  @Column({ type: "timestamptz", nullable: true, select: false })
+  lockedUntil?: Date;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 

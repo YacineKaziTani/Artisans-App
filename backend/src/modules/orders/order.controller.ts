@@ -7,7 +7,7 @@ import { Product } from "../products/product.entities";
 import { ProductVariant } from "../products/variant.entities";
 import { User } from "../users/entities/user.entities";
 import { UserRole } from "../users/entities/user.entities";
-import { stripe } from "../../config/stripe";
+import { stripe, platformFeeAmountCents } from "../../config/stripe";
 
 const orderRepo = AppDataSource.getRepository(Order);
 const shopRepo = AppDataSource.getRepository(Shop);
@@ -37,6 +37,11 @@ async function resolveLineItem(productId: string, variantId: string | undefined)
     relations: ["shop"],
   });
   if (!product) return { error: "Product not found" as const };
+  if (!product.shop.stripeOnboardingComplete || !product.shop.stripeAccountId) {
+    return {
+      error: "This shop hasn't finished setting up payouts yet and can't accept orders." as const,
+    };
+  }
 
   if (!variantId) {
     return { product, variant: null, unitPrice: Number(product.basePrice), variantLabel: undefined };
@@ -131,6 +136,8 @@ export const createOrder = async (req: Request, res: Response) => {
         capture_method: "manual",
         metadata: { type: "order", orderId: saved.id },
         automatic_payment_methods: { enabled: true },
+        application_fee_amount: platformFeeAmountCents(amountInCents),
+        transfer_data: { destination: product.shop.stripeAccountId! },
       });
     } catch (err) {
       // Payment setup failed — release the stock we just reserved.
@@ -150,10 +157,14 @@ export const createOrder = async (req: Request, res: Response) => {
   }
 };
 
-// Client checks out a cart of multiple products (possibly from different
-// shops) in a single payment. Creates one Order row per line item — so each
-// shop still only sees/fulfills its own orders — but all rows share a
-// checkoutGroupId and a single Stripe PaymentIntent/refund.
+// Client checks out a cart of multiple products — all from the SAME shop,
+// in a single payment. (A cart spanning multiple shops would need one
+// PaymentIntent per shop, since Stripe Connect transfers only support one
+// destination account per intent, and letting one shop's fulfillment
+// capture funds for another shop's not-yet-fulfilled item would be
+// incorrect. Multi-shop cart checkout isn't supported yet — see
+// CartPage/useCartCheckout on the frontend, which groups by shop before
+// calling this.)
 export const createCartCheckout = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -183,6 +194,7 @@ export const createCartCheckout = async (req: Request, res: Response) => {
     const checkoutGroupId = crypto.randomUUID();
     let totalAmountCents = 0;
     const createdOrders: Order[] = [];
+    let checkoutShopId: string | undefined;
 
     try {
       for (const item of items) {
@@ -191,6 +203,15 @@ export const createCartCheckout = async (req: Request, res: Response) => {
           throw new Error(resolved.error);
         }
         const { product, variant, unitPrice, variantLabel } = resolved;
+
+        if (!checkoutShopId) {
+          checkoutShopId = product.shop.id;
+        } else if (product.shop.id !== checkoutShopId) {
+          throw new Error(
+            "All items in one checkout must be from the same shop — check out separately for items from different shops.",
+          );
+        }
+
         const lineTotal = unitPrice * item.quantity;
         totalAmountCents += Math.round(lineTotal * 100);
 
@@ -216,6 +237,8 @@ export const createCartCheckout = async (req: Request, res: Response) => {
       return res.status(404).json({ message });
     }
 
+    const shop = await shopRepo.findOne({ where: { id: checkoutShopId! } });
+
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalAmountCents,
       currency: "usd",
@@ -225,6 +248,8 @@ export const createCartCheckout = async (req: Request, res: Response) => {
         orderIds: createdOrders.map((o) => o.id).join(","),
       },
       automatic_payment_methods: { enabled: true },
+      application_fee_amount: platformFeeAmountCents(totalAmountCents),
+      transfer_data: { destination: shop!.stripeAccountId! },
     });
 
     await Promise.all(
@@ -344,6 +369,8 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       ) {
         await stripe.refunds.create({
           payment_intent: order.stripePaymentIntentId,
+          reverse_transfer: true,
+          refund_application_fee: true,
         });
         order.paymentStatus = OrderPaymentStatus.REFUNDED;
       }
@@ -393,6 +420,8 @@ export const cancelMyOrder = async (req: Request, res: Response) => {
     ) {
       await stripe.refunds.create({
         payment_intent: order.stripePaymentIntentId,
+        reverse_transfer: true,
+        refund_application_fee: true,
       });
       order.paymentStatus = OrderPaymentStatus.REFUNDED;
     }

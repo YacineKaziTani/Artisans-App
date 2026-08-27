@@ -59,7 +59,7 @@ export const register = async (req: Request, res: Response) => {
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false, //in production we need to make this true
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -78,13 +78,16 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
     const userRepo = AppDataSource.getRepository(User);
     const user = await userRepo
       .createQueryBuilder("user")
-      .addSelect("user.password")
+      .addSelect(["user.password", "user.failedLoginAttempts", "user.lockedUntil"])
       .where("user.email = :email", { email })
       .getOne();
 
@@ -92,14 +95,39 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid user" });
     }
 
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+      const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      return res.status(429).json({
+        message: `Too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`,
+      });
+    }
+
     const isValid = await bcrypt.compare(password, user.password);
 
     if (!isValid) {
+      user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1;
+      if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
+        user.lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
+        user.failedLoginAttempts = 0;
+        await userRepo.save(user);
+        return res.status(429).json({
+          message: "Too many failed attempts. Account locked for 15 minutes.",
+        });
+      }
+      await userRepo.save(user);
       return res.status(401).json({ message: "Invalid credentials" });
     }
+
     if (user.isActive === false) {
       return res.status(403).json({ message: "This account has been suspended" });
     }
+
+    if (user.failedLoginAttempts || user.lockedUntil) {
+      user.failedLoginAttempts = 0;
+      user.lockedUntil = undefined;
+      await userRepo.save(user);
+    }
+
     const payload = {
       sub: user.id,
       name: user.name,
@@ -113,7 +141,7 @@ export const login = async (req: Request, res: Response) => {
     //setting the cookie
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false, // true in production HTTPS
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });

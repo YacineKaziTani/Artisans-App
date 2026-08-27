@@ -138,31 +138,59 @@ export function BuyProductDialog({
               )}
               {hasVariants && (
                 <div className="space-y-2">
-                  <Label>Options</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {options.map((option) => (
-                      <select
-                        key={option.id}
-                        value={selectedValues[option.id] ?? ""}
-                        onChange={(e) =>
-                          setSelectedValues((prev) => ({ ...prev, [option.id]: e.target.value }))
-                        }
-                        className="h-9 text-sm border border-gray-300 rounded-md px-2"
-                      >
-                        <option value="">{option.name}...</option>
-                        {(option.values ?? []).map((v) => (
-                          <option key={v.id} value={v.id}>
-                            {v.value}
-                          </option>
-                        ))}
-                      </select>
-                    ))}
-                  </div>
-                  {needsSelection && (
-                    <p className="text-xs text-gray-500">Select an option for each attribute.</p>
+                  <Label>Choose an option</Label>
+                  {(product.variants ?? []).length === 0 ? (
+                    <p className="text-sm text-red-600">
+                      This seller hasn't added any purchasable combinations yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {(product.variants ?? []).map((variant) => {
+                        const label = variant.values
+                          .map((v) => `${v.option?.name}: ${v.value}`)
+                          .join(", ");
+                        const price =
+                          variant.priceOverride !== undefined && variant.priceOverride !== null
+                            ? Number(variant.priceOverride)
+                            : Number(product.basePrice) +
+                              variant.values.reduce((sum, v) => sum + Number(v.priceModifier), 0);
+                        const isSelected = selectedVariant?.id === variant.id;
+                        const isOut = variant.stockQuantity < 1;
+
+                        return (
+                          <button
+                            key={variant.id}
+                            type="button"
+                            disabled={isOut}
+                            onClick={() => {
+                              const next: Record<string, string> = {};
+                              variant.values.forEach((v) => {
+                                if (v.option) next[v.option.id] = v.id;
+                              });
+                              setSelectedValues(next);
+                            }}
+                            className={`w-full flex items-center justify-between gap-2 text-sm rounded-md border px-3 py-2 text-left ${
+                              isOut
+                                ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                                : isSelected
+                                  ? "border-orange-600 bg-orange-50 text-orange-900"
+                                  : "border-gray-300 hover:border-orange-400"
+                            }`}
+                          >
+                            <span>{label}</span>
+                            <span className="flex items-center gap-2 flex-shrink-0">
+                              <span>${price.toFixed(2)}</span>
+                              <span className={isOut ? "" : "text-green-700"}>
+                                {isOut ? "Out of stock" : `${variant.stockQuantity} in stock`}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
-                  {outOfStock && (
-                    <p className="text-xs text-red-600">That combination is out of stock.</p>
+                  {needsSelection && (product.variants ?? []).length > 0 && (
+                    <p className="text-xs text-gray-500">Pick one of the options above.</p>
                   )}
                 </div>
               )}

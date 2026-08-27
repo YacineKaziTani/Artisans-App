@@ -77,6 +77,7 @@ export interface Shop {
   averageRating: number;
   verificationStatus?: "none" | "pending" | "verified" | "rejected";
   verificationNote?: string;
+  stripeOnboardingComplete?: boolean;
   category?: Category;
   owner?: User;
   services?: Service[];

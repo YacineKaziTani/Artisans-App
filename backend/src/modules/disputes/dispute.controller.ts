@@ -162,6 +162,8 @@ export const resolveDispute = async (req: Request, res: Response) => {
             refundAmount !== undefined && refundAmount < Number(booking.totalAmount);
           await stripe.refunds.create({
             payment_intent: booking.stripePaymentIntentId,
+            reverse_transfer: true,
+            refund_application_fee: !isPartial,
             ...(isPartial ? { amount: Math.round(refundAmount! * 100) } : {}),
           });
           booking.paymentStatus = isPartial
@@ -190,6 +192,8 @@ export const resolveDispute = async (req: Request, res: Response) => {
             refundAmount !== undefined && refundAmount < Number(order.totalAmount);
           await stripe.refunds.create({
             payment_intent: order.stripePaymentIntentId,
+            reverse_transfer: true,
+            refund_application_fee: !isPartial,
             ...(isPartial ? { amount: Math.round(refundAmount! * 100) } : {}),
           });
           order.paymentStatus = isPartial

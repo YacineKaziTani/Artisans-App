@@ -95,25 +95,32 @@ function AddValueRow({ optionId }: { optionId: string }) {
   };
 
   return (
-    <form onSubmit={submit} className="flex gap-1 mt-2">
-      <Input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="e.g. M"
-        className="h-8 text-xs"
-      />
-      <Input
-        type="number"
-        step="0.01"
-        value={priceModifier}
-        onChange={(e) => setPriceModifier(e.target.value)}
-        placeholder="+$"
-        className="h-8 text-xs w-16"
-      />
-      <Button type="submit" size="sm" className="h-8" disabled={createValue.isPending}>
-        Add
-      </Button>
-    </form>
+    <div>
+      <form onSubmit={submit} className="flex gap-1 mt-2">
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="e.g. M"
+          className="h-8 text-xs"
+        />
+        <Input
+          type="number"
+          step="0.01"
+          value={priceModifier}
+          onChange={(e) => setPriceModifier(e.target.value)}
+          placeholder="+$"
+          className="h-8 text-xs w-16"
+        />
+        <Button type="submit" size="sm" className="h-8" disabled={createValue.isPending}>
+          {createValue.isPending ? "…" : "Add"}
+        </Button>
+      </form>
+      {createValue.isError && (
+        <p className="text-xs text-red-600 mt-1">
+          Couldn't add that value. Please try again.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -136,6 +143,7 @@ function ProductVariantsManager({ product }: { product: Product }) {
 
   const canBuildVariant =
     options.length > 0 && options.every((o) => selectedValues[o.id]);
+  const optionsWithNoValues = options.filter((o) => (o.values ?? []).length === 0);
 
   const handleAddOption = (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,63 +178,83 @@ function ProductVariantsManager({ product }: { product: Product }) {
     );
   };
 
+  const previewLabel = options
+    .filter((o) => selectedValues[o.id])
+    .map((o) => `${o.name}: ${o.values?.find((v) => v.id === selectedValues[o.id])?.value}`)
+    .join(", ");
+
   return (
     <div className="space-y-4 border-t border-gray-100 pt-4">
-      <p className="text-xs font-medium text-gray-500">Variants</p>
+      <p className="text-xs font-medium text-gray-500">
+        Variants — e.g. Size + Color, each combination with its own stock
+      </p>
 
-      {/* Options + their values */}
+      {/* Step 1: options (the attributes, e.g. Size, Color) */}
       <div className="space-y-3">
-        {options.map((option) => (
-          <div key={option.id} className="bg-gray-50 rounded-md p-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-800">{option.name}</span>
-              <button
-                type="button"
-                className="text-xs text-red-600 hover:underline"
-                onClick={() => removeOption.mutate(option.id)}
-              >
-                Remove option
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-1 mt-1">
-              {(option.values ?? []).map((v) => (
-                <span
-                  key={v.id}
-                  className="text-xs bg-white border border-gray-200 rounded px-2 py-1 flex items-center gap-1"
+        {options.map((option) => {
+          const hasNoValues = (option.values ?? []).length === 0;
+          return (
+            <div key={option.id} className="bg-gray-50 rounded-md p-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-800">{option.name}</span>
+                <button
+                  type="button"
+                  className="text-xs text-red-600 hover:underline"
+                  onClick={() => removeOption.mutate(option.id)}
                 >
-                  {v.value}
-                  {Number(v.priceModifier) !== 0 && (
-                    <span className="text-gray-400">
-                      ({Number(v.priceModifier) > 0 ? "+" : ""}
-                      {Number(v.priceModifier)})
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="text-gray-400 hover:text-red-600"
-                    onClick={() => removeValue.mutate(v.id)}
+                  Remove option
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {(option.values ?? []).map((v) => (
+                  <span
+                    key={v.id}
+                    className="text-xs bg-white border border-gray-200 rounded px-2 py-1 flex items-center gap-1"
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
+                    {v.value}
+                    {Number(v.priceModifier) !== 0 && (
+                      <span className="text-gray-400">
+                        ({Number(v.priceModifier) > 0 ? "+" : ""}
+                        {Number(v.priceModifier)})
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="text-gray-400 hover:text-red-600"
+                      onClick={() => removeValue.mutate(v.id)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              {hasNoValues && (
+                <p className="text-xs text-amber-700 mt-1">
+                  No values yet — add at least one (e.g. "Red") before this option can be used in a SKU.
+                </p>
+              )}
+              <AddValueRow optionId={option.id} />
             </div>
-            <AddValueRow optionId={option.id} />
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      <form onSubmit={handleAddOption} className="flex gap-2">
-        <Input
-          value={newOptionName}
-          onChange={(e) => setNewOptionName(e.target.value)}
-          placeholder="New option, e.g. Size or Color"
-          className="h-9 text-sm"
-        />
-        <Button type="submit" size="sm" disabled={createOption.isPending}>
-          Add Option
-        </Button>
-      </form>
+      <div>
+        <form onSubmit={handleAddOption} className="flex gap-2">
+          <Input
+            value={newOptionName}
+            onChange={(e) => setNewOptionName(e.target.value)}
+            placeholder="New option, e.g. Size or Color"
+            className="h-9 text-sm"
+          />
+          <Button type="submit" size="sm" disabled={createOption.isPending}>
+            {createOption.isPending ? "Adding..." : "Add Option"}
+          </Button>
+        </form>
+        {createOption.isError && (
+          <p className="text-xs text-red-600 mt-1">Couldn't add that option. Please try again.</p>
+        )}
+      </div>
 
       {/* Existing SKUs/variants */}
       {variants.length > 0 && (
@@ -275,10 +303,18 @@ function ProductVariantsManager({ product }: { product: Product }) {
         </div>
       )}
 
-      {/* Build a new variant combination */}
+      {/* Step 2: build a specific combination (e.g. Size=M + Color=Red) with its own stock */}
       {options.length > 0 && (
         <form onSubmit={handleAddVariant} className="space-y-2 bg-gray-50 rounded-md p-3">
-          <p className="text-xs font-medium text-gray-500">Add a SKU (pick one value per option)</p>
+          <p className="text-xs font-medium text-gray-500">
+            Add a SKU — pick one value for every option below, then set its stock
+          </p>
+          {optionsWithNoValues.length > 0 && (
+            <p className="text-xs text-amber-700">
+              {optionsWithNoValues.map((o) => o.name).join(", ")} still{" "}
+              {optionsWithNoValues.length === 1 ? "has" : "have"} no values — add one above first.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             {options.map((option) => (
               <select
@@ -287,7 +323,8 @@ function ProductVariantsManager({ product }: { product: Product }) {
                 onChange={(e) =>
                   setSelectedValues((prev) => ({ ...prev, [option.id]: e.target.value }))
                 }
-                className="h-8 text-xs border border-gray-300 rounded-md px-2"
+                disabled={(option.values ?? []).length === 0}
+                className="h-8 text-xs border border-gray-300 rounded-md px-2 disabled:bg-gray-100 disabled:text-gray-400"
               >
                 <option value="">{option.name}...</option>
                 {(option.values ?? []).map((v) => (
@@ -298,6 +335,9 @@ function ProductVariantsManager({ product }: { product: Product }) {
               </select>
             ))}
           </div>
+          {previewLabel && (
+            <p className="text-xs text-gray-600">Creating: {previewLabel}</p>
+          )}
           <div className="flex gap-2">
             <Input
               value={newSku}
@@ -322,6 +362,11 @@ function ProductVariantsManager({ product }: { product: Product }) {
               className="h-8 text-xs"
             />
           </div>
+          {createVariant.isError && (
+            <p className="text-xs text-red-600">
+              Couldn't create that SKU — it may already exist, or one of the values may no longer be valid.
+            </p>
+          )}
           <Button
             type="submit"
             size="sm"

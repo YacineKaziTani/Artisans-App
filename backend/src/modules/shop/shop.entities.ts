@@ -75,6 +75,17 @@ export class Shop {
   @Column({ type: "text", nullable: true })
   verificationNote?: string;
 
+  // Stripe Connect (Express) account — required before this shop can
+  // receive bookings/orders, since payouts flow through it.
+  @Column({ type: "varchar", nullable: true })
+  stripeAccountId?: string;
+
+  // Mirrors Stripe's charges_enabled && payouts_enabled on the connected
+  // account. Kept in sync by the "account.updated" webhook event, and
+  // refreshed on-demand when the artisan checks their status.
+  @Column({ type: "boolean", default: false })
+  stripeOnboardingComplete!: boolean;
+
   @OneToOne(() => User, (user) => user.shop)
   @JoinColumn()
   owner!: User;

@@ -6,7 +6,7 @@ import { Booking, BookingStatus, PaymentStatus } from "./booking.entities";
 import { Shop } from "../shop/shop.entities";
 import { Service } from "../services/service.entities";
 import { User } from "../users/entities/user.entities";
-import { stripe } from "../../config/stripe";
+import { stripe, platformFeeAmountCents } from "../../config/stripe";
 import { handleOrderPaymentEvent, handleOrderAuthorizedEvent } from "../orders/order.controller";
 import { ProcessedWebhookEvent } from "../webhook-events/webhook-event.entities";
 
@@ -44,6 +44,11 @@ export const createBooking = async (req: Request, res: Response) => {
     });
     if (!service || !service.isAvailable) {
       return res.status(404).json({ message: "Service not found" });
+    }
+    if (!service.shop.stripeOnboardingComplete || !service.shop.stripeAccountId) {
+      return res.status(400).json({
+        message: "This shop hasn't finished setting up payouts yet and can't accept bookings.",
+      });
     }
 
     const scheduledDate = new Date(scheduledAt);
@@ -88,6 +93,10 @@ export const createBooking = async (req: Request, res: Response) => {
       capture_method: "manual",
       metadata: { type: "booking", bookingId: saved.id },
       automatic_payment_methods: { enabled: true },
+      // Destination charge: funds move to the artisan's connected account
+      // automatically on capture, minus the platform's commission.
+      application_fee_amount: platformFeeAmountCents(amountInCents),
+      transfer_data: { destination: service.shop.stripeAccountId },
     });
 
     saved.stripePaymentIntentId = paymentIntent.id;
@@ -200,6 +209,8 @@ export const updateBookingStatus = async (req: Request, res: Response) => {
       ) {
         await stripe.refunds.create({
           payment_intent: booking.stripePaymentIntentId,
+          reverse_transfer: true,
+          refund_application_fee: true,
         });
         booking.paymentStatus = PaymentStatus.REFUNDED;
       }
@@ -247,6 +258,8 @@ export const cancelMyBooking = async (req: Request, res: Response) => {
     ) {
       await stripe.refunds.create({
         payment_intent: booking.stripePaymentIntentId,
+        reverse_transfer: true,
+        refund_application_fee: true,
       });
       booking.paymentStatus = PaymentStatus.REFUNDED;
     }
@@ -365,6 +378,20 @@ export const stripeWebhook = async (req: Request, res: Response) => {
         }
       }
     }
+
+    // Keeps Shop.stripeOnboardingComplete in sync automatically whenever the
+    // artisan's connected account status changes (e.g. they finish
+    // onboarding, or Stripe later restricts the account) — a fallback to
+    // the on-demand check in getStripeAccountStatus.
+    // Note: account status syncing is NOT handled via webhook here. v2
+    // accounts (see shop.controller.ts's connectStripeAccount) use a
+    // separate event-delivery system (Event Destinations) from this classic
+    // v1 webhook endpoint, which can't receive v2-shaped account payloads at
+    // all — a "account.updated" event on this endpoint would be v1-shaped
+    // and wouldn't reflect a v2 account's real capability status anyway.
+    // The reliable sync path is getStripeAccountStatus, called when the
+    // artisan returns from onboarding.
+
     return res.json({ received: true });
   } catch (error) {
     return res.status(500).json({ message: "Error handling webhook", error });

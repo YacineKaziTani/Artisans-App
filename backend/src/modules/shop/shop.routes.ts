@@ -12,6 +12,8 @@ import {
   reopenMyShop,
   requestShopVerification,
   resolveShopVerification,
+  connectStripeAccount,
+  getStripeAccountStatus,
 } from "./shop.controller";
 import { authorize } from "../../middleware/authorize.middleware";
 import { authMiddleware } from "../../middleware/auth.middleware";
@@ -65,6 +67,18 @@ router.patch(
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
   resolveShopVerification,
+);
+router.post(
+  "/mine/connect-stripe",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  connectStripeAccount,
+);
+router.get(
+  "/mine/stripe-status",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  getStripeAccountStatus,
 );
 router.get("/:id", getShopById);
 

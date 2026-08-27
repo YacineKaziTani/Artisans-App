@@ -1,3 +1,4 @@
+import { FeaturedProductsSection } from "@/components/FeaturedProductsSection";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,8 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <FeaturedProductsSection />
 
       {/* How It Works Section */}
       <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gray-50">

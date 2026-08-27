@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isAxiosError } from "axios";
 import {
   Card,
   CardContent,
@@ -16,6 +17,8 @@ import {
   useCloseMyShop,
   useReopenMyShop,
   useRequestVerification,
+  useConnectStripe,
+  useStripeStatus,
 } from "@/hooks/useShops";
 import { useCreateService, useDeleteService } from "@/hooks/useServices";
 import { useCategories } from "@/hooks/useCategories";
@@ -158,6 +161,77 @@ function CreateShopForm() {
   );
 }
 
+function StripeConnectBanner({ shop }: { shop: Shop }) {
+  const connectStripe = useConnectStripe();
+  const { data: status, isLoading, refetch } = useStripeStatus();
+
+  // After returning from Stripe's hosted onboarding, re-check status —
+  // Stripe redirects back with ?stripe=return, but the account.updated
+  // webhook might not have landed yet, so this is the reliable path.
+  const params = new URLSearchParams(window.location.search);
+  const justReturned = params.get("stripe") === "return";
+
+  const handleConnect = () => {
+    connectStripe.mutate(undefined, {
+      onSuccess: (result) => {
+        window.location.href = result.url;
+      },
+    });
+  };
+
+  if (isLoading) {
+    return <div className="p-4 h-16 rounded-lg bg-gray-100 animate-pulse" />;
+  }
+
+  if (status?.onboardingComplete || shop.stripeOnboardingComplete) {
+    return (
+      <div className="p-4 bg-green-50 border border-green-300 rounded-lg text-sm text-green-800 flex items-center gap-2">
+        <span>✓</span>
+        <span>Payouts are set up — bookings and orders will pay out to your account.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-lg space-y-2">
+      <p className="text-sm font-semibold text-amber-900">
+        Set up payouts to start accepting bookings and orders
+      </p>
+      <p className="text-sm text-amber-800">
+        Clients can't book services or buy products from your shop until you
+        connect a payout account with Stripe — it only takes a few minutes.
+        {justReturned && status && !status.onboardingComplete && (
+          <span className="block mt-1">
+            Looks like onboarding isn't finished yet.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => refetch()}
+            >
+              Check again
+            </button>
+            .
+          </span>
+        )}
+      </p>
+      <Button
+        size="sm"
+        disabled={connectStripe.isPending}
+        onClick={handleConnect}
+      >
+        {connectStripe.isPending ? "Redirecting..." : "Connect with Stripe"}
+      </Button>
+      {connectStripe.isError && (
+        <p className="text-xs text-red-700">
+          {isAxiosError(connectStripe.error) && connectStripe.error.response?.data?.message
+            ? connectStripe.error.response.data.message
+            : "Couldn't start Stripe onboarding. Please try again."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function VerificationBanner({ shop }: { shop: Shop }) {
   const requestVerification = useRequestVerification();
 
@@ -246,6 +320,7 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
         </div>
       )}
 
+      <StripeConnectBanner shop={shop} />
       <VerificationBanner shop={shop} />
 
       <Card>

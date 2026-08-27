@@ -3,6 +3,7 @@ import { AppDataSource } from "../../data-source";
 import { Shop, ShopStatus, VerificationStatus } from "./shop.entities";
 import { Category } from "../category/category.entities";
 import { User, UserRole } from "../users/entities/user.entities";
+import { stripe } from "../../config/stripe";
 
 const shopRepo = AppDataSource.getRepository(Shop);
 const userRepo = AppDataSource.getRepository(User);
@@ -360,5 +361,129 @@ export const resolveShopVerification = async (req: Request, res: Response) => {
     return res.json({ message: "Verification updated", shop: saved });
   } catch (error) {
     return res.status(500).json({ message: "Server error", error });
+  }
+};
+
+// Starts (or resumes) Stripe Connect onboarding for the logged-in artisan's
+// shop. Creates an Express connected account on first call, then returns a
+// fresh Stripe-hosted onboarding link every time — clients can't book or buy
+// from this shop until onboarding actually completes.
+//
+// Uses the Accounts v2 API (/v2/core/accounts + /v2/core/account_links) —
+// Stripe now rejects v1 account creation for new integrations. This mirrors
+// Stripe's own "Build a marketplace" guide for the destination-charge
+// pattern this app uses (transfer_data.destination + application_fee_amount
+// on the PaymentIntent): the connected account needs BOTH the "merchant"
+// configuration (to accept the card payment) and the "recipient"
+// configuration (to receive the transferred funds) —
+// https://docs.stripe.com/connect/end-to-end-marketplace
+export const connectStripeAccount = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+
+    if (!shop.stripeAccountId) {
+      // No `identity.country` set: this app doesn't collect the artisan's
+      // country anywhere, so it's left for Stripe's onboarding flow to
+      // collect directly. IMPORTANT: Stripe Connect (and card payouts
+      // generally) is only available in a fixed list of supported
+      // countries — if your artisans are outside that list, this will need
+      // a real country field and per-country handling before it works for
+      // them. See https://docs.stripe.com/connect/supported-countries.
+      const account = await stripe.v2.core.accounts.create({
+        contact_email: req.user!.email,
+        display_name: shop.shopName,
+        dashboard: "express",
+        defaults: {
+          responsibilities: {
+            fees_collector: "application",
+            losses_collector: "application",
+          },
+        },
+        configuration: {
+          merchant: {
+            capabilities: {
+              card_payments: { requested: true },
+            },
+          },
+          recipient: {
+            capabilities: {
+              stripe_balance: {
+                stripe_transfers: { requested: true },
+              },
+            },
+          },
+        },
+      });
+      shop.stripeAccountId = account.id;
+      await shopRepo.save(shop);
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:5173";
+    const accountLink = await stripe.v2.core.accountLinks.create({
+      account: shop.stripeAccountId,
+      use_case: {
+        type: "account_onboarding",
+        account_onboarding: {
+          configurations: ["merchant", "recipient"],
+          // Stripe requires both — refresh_url is used if the link itself
+          // expires or onboarding is abandoned; return_url after completion.
+          refresh_url: `${frontendUrl}/profile-artisan?stripe=refresh`,
+          return_url: `${frontendUrl}/profile-artisan?stripe=return`,
+        },
+      },
+    });
+
+    return res.json({ url: accountLink.url });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Error starting Stripe onboarding";
+    console.error("connectStripeAccount failed:", error);
+    return res.status(500).json({ message });
+  }
+};
+
+// Re-checks the connected account's status directly with Stripe (used after
+// the artisan returns from onboarding, since the account.updated webhook
+// might not have arrived yet, or isn't configured in this environment).
+// "Onboarding complete" for our destination-charge setup means both
+// capabilities we requested are active: the merchant side can accept card
+// payments, and the recipient side can receive the transferred funds.
+export const getStripeAccountStatus = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+
+    if (!shop.stripeAccountId) {
+      return res.json({ connected: false, onboardingComplete: false });
+    }
+
+    const account = await stripe.v2.core.accounts.retrieve(shop.stripeAccountId, {
+      include: ["configuration.merchant", "configuration.recipient", "requirements"],
+    });
+
+    const cardPaymentsActive =
+      account.configuration?.merchant?.capabilities?.card_payments?.status === "active";
+    const transfersActive =
+      account.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers
+        ?.status === "active";
+    const onboardingComplete = cardPaymentsActive && transfersActive;
+
+    if (onboardingComplete !== shop.stripeOnboardingComplete) {
+      shop.stripeOnboardingComplete = onboardingComplete;
+      await shopRepo.save(shop);
+    }
+
+    return res.json({
+      connected: true,
+      onboardingComplete,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Error checking Stripe status";
+    console.error("getStripeAccountStatus failed:", error);
+    return res.status(500).json({ message });
   }
 };
