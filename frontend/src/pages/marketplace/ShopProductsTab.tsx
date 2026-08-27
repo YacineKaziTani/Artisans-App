@@ -15,6 +15,7 @@ import {
   useDeleteProduct,
   useMyProducts,
   useRemoveProductImage,
+  useUpdateProduct,
 } from "@/hooks/useProducts";
 import {
   useCreateProductVariant,
@@ -90,7 +91,12 @@ function AddValueRow({ optionId }: { optionId: string }) {
         value: value.trim(),
         priceModifier: priceModifier ? Number(priceModifier) : undefined,
       },
-      { onSuccess: () => { setValue(""); setPriceModifier(""); } },
+      {
+        onSuccess: () => {
+          setValue("");
+          setPriceModifier("");
+        },
+      },
     );
   };
 
@@ -109,9 +115,14 @@ function AddValueRow({ optionId }: { optionId: string }) {
           value={priceModifier}
           onChange={(e) => setPriceModifier(e.target.value)}
           placeholder="+$"
-          className="h-8 text-xs w-16"
+          className="h-8 text-xs w-24"
         />
-        <Button type="submit" size="sm" className="h-8" disabled={createValue.isPending}>
+        <Button
+          type="submit"
+          size="sm"
+          className="h-8"
+          disabled={createValue.isPending}
+        >
           {createValue.isPending ? "…" : "Add"}
         </Button>
       </form>
@@ -121,6 +132,79 @@ function AddValueRow({ optionId }: { optionId: string }) {
         </p>
       )}
     </div>
+  );
+}
+
+// Title/description/price were creatable but not editable — a typo in a
+// listing meant deleting the product and rebuilding its variants from
+// scratch. (Images are handled separately by ProductImagesManager, which is
+// why they aren't repeated here.)
+function ProductEditForm({
+  product,
+  onDone,
+}: {
+  product: Product;
+  onDone: () => void;
+}) {
+  const updateProduct = useUpdateProduct();
+  const [title, setTitle] = useState(product.title);
+  const [description, setDescription] = useState(product.description ?? "");
+  const [basePrice, setBasePrice] = useState(String(product.basePrice));
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || basePrice === "") return;
+    updateProduct.mutate(
+      {
+        id: product.id,
+        payload: {
+          title: title.trim(),
+          description: description.trim(),
+          basePrice: Number(basePrice),
+        },
+      },
+      { onSuccess: onDone },
+    );
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-2 bg-gray-50 rounded-md p-3">
+      {updateProduct.isError && (
+        <p className="text-xs text-red-600">
+          Couldn't save those changes. Please try again.
+        </p>
+      )}
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Title"
+        className="h-8 text-sm"
+      />
+      <Textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Description"
+        rows={2}
+        className="text-sm"
+      />
+      <Input
+        type="number"
+        min="0"
+        step="0.01"
+        value={basePrice}
+        onChange={(e) => setBasePrice(e.target.value)}
+        placeholder="Price"
+        className="h-8 text-sm"
+      />
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={updateProduct.isPending}>
+          {updateProduct.isPending ? "Saving..." : "Save"}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onDone}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -136,14 +220,18 @@ function ProductVariantsManager({ product }: { product: Product }) {
   const options = product.variantOptions ?? [];
   const variants = product.variants ?? [];
 
-  const [selectedValues, setSelectedValues] = useState<Record<string, string>>({});
+  const [selectedValues, setSelectedValues] = useState<Record<string, string>>(
+    {},
+  );
   const [newSku, setNewSku] = useState("");
   const [newStock, setNewStock] = useState("");
   const [newPriceOverride, setNewPriceOverride] = useState("");
 
   const canBuildVariant =
     options.length > 0 && options.every((o) => selectedValues[o.id]);
-  const optionsWithNoValues = options.filter((o) => (o.values ?? []).length === 0);
+  const optionsWithNoValues = options.filter(
+    (o) => (o.values ?? []).length === 0,
+  );
 
   const handleAddOption = (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,7 +252,9 @@ function ProductVariantsManager({ product }: { product: Product }) {
           valueIds: Object.values(selectedValues),
           sku: newSku || undefined,
           stockQuantity: newStock ? Number(newStock) : 0,
-          priceOverride: newPriceOverride ? Number(newPriceOverride) : undefined,
+          priceOverride: newPriceOverride
+            ? Number(newPriceOverride)
+            : undefined,
         },
       },
       {
@@ -180,7 +270,10 @@ function ProductVariantsManager({ product }: { product: Product }) {
 
   const previewLabel = options
     .filter((o) => selectedValues[o.id])
-    .map((o) => `${o.name}: ${o.values?.find((v) => v.id === selectedValues[o.id])?.value}`)
+    .map(
+      (o) =>
+        `${o.name}: ${o.values?.find((v) => v.id === selectedValues[o.id])?.value}`,
+    )
     .join(", ");
 
   return (
@@ -196,7 +289,9 @@ function ProductVariantsManager({ product }: { product: Product }) {
           return (
             <div key={option.id} className="bg-gray-50 rounded-md p-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-800">{option.name}</span>
+                <span className="text-sm font-medium text-gray-800">
+                  {option.name}
+                </span>
                 <button
                   type="button"
                   className="text-xs text-red-600 hover:underline"
@@ -230,7 +325,8 @@ function ProductVariantsManager({ product }: { product: Product }) {
               </div>
               {hasNoValues && (
                 <p className="text-xs text-amber-700 mt-1">
-                  No values yet — add at least one (e.g. "Red") before this option can be used in a SKU.
+                  No values yet — add at least one (e.g. "Red") before this
+                  option can be used in a SKU.
                 </p>
               )}
               <AddValueRow optionId={option.id} />
@@ -244,7 +340,7 @@ function ProductVariantsManager({ product }: { product: Product }) {
           <Input
             value={newOptionName}
             onChange={(e) => setNewOptionName(e.target.value)}
-            placeholder="New option, e.g. Size or Color"
+            placeholder="New option, e.g. Size or Material"
             className="h-9 text-sm"
           />
           <Button type="submit" size="sm" disabled={createOption.isPending}>
@@ -252,7 +348,9 @@ function ProductVariantsManager({ product }: { product: Product }) {
           </Button>
         </form>
         {createOption.isError && (
-          <p className="text-xs text-red-600 mt-1">Couldn't add that option. Please try again.</p>
+          <p className="text-xs text-red-600 mt-1">
+            Couldn't add that option. Please try again.
+          </p>
         )}
       </div>
 
@@ -267,10 +365,13 @@ function ProductVariantsManager({ product }: { product: Product }) {
             >
               <div>
                 <p className="font-medium text-gray-800">
-                  {variant.values.map((v) => `${v.option?.name}: ${v.value}`).join(", ")}
+                  {variant.values
+                    .map((v) => `${v.option?.name}: ${v.value}`)
+                    .join(", ")}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {variant.priceOverride !== undefined && variant.priceOverride !== null
+                  {variant.priceOverride !== undefined &&
+                  variant.priceOverride !== null
                     ? `$${Number(variant.priceOverride).toFixed(2)}`
                     : "uses base price + modifiers"}
                   {variant.sku && ` · SKU: ${variant.sku}`}
@@ -305,14 +406,19 @@ function ProductVariantsManager({ product }: { product: Product }) {
 
       {/* Step 2: build a specific combination (e.g. Size=M + Color=Red) with its own stock */}
       {options.length > 0 && (
-        <form onSubmit={handleAddVariant} className="space-y-2 bg-gray-50 rounded-md p-3">
+        <form
+          onSubmit={handleAddVariant}
+          className="space-y-2 bg-gray-50 rounded-md p-3"
+        >
           <p className="text-xs font-medium text-gray-500">
-            Add a SKU — pick one value for every option below, then set its stock
+            Add a SKU — pick one value for every option below, then set its
+            stock
           </p>
           {optionsWithNoValues.length > 0 && (
             <p className="text-xs text-amber-700">
               {optionsWithNoValues.map((o) => o.name).join(", ")} still{" "}
-              {optionsWithNoValues.length === 1 ? "has" : "have"} no values — add one above first.
+              {optionsWithNoValues.length === 1 ? "has" : "have"} no values —
+              add one above first.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -321,7 +427,10 @@ function ProductVariantsManager({ product }: { product: Product }) {
                 key={option.id}
                 value={selectedValues[option.id] ?? ""}
                 onChange={(e) =>
-                  setSelectedValues((prev) => ({ ...prev, [option.id]: e.target.value }))
+                  setSelectedValues((prev) => ({
+                    ...prev,
+                    [option.id]: e.target.value,
+                  }))
                 }
                 disabled={(option.values ?? []).length === 0}
                 className="h-8 text-xs border border-gray-300 rounded-md px-2 disabled:bg-gray-100 disabled:text-gray-400"
@@ -364,7 +473,8 @@ function ProductVariantsManager({ product }: { product: Product }) {
           </div>
           {createVariant.isError && (
             <p className="text-xs text-red-600">
-              Couldn't create that SKU — it may already exist, or one of the values may no longer be valid.
+              Couldn't create that SKU — it may already exist, or one of the
+              values may no longer be valid.
             </p>
           )}
           <Button
@@ -384,6 +494,7 @@ export function ShopProductsTab() {
   const { data: products, isLoading, isError } = useMyProducts();
   const createProduct = useCreateProduct();
   const deleteProduct = useDeleteProduct();
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -493,7 +604,10 @@ export function ShopProductsTab() {
         {isLoading && (
           <div className="grid md:grid-cols-2 gap-6">
             {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="h-40 rounded-xl bg-gray-100 animate-pulse" />
+              <div
+                key={i}
+                className="h-40 rounded-xl bg-gray-100 animate-pulse"
+              />
             ))}
           </div>
         )}
@@ -530,11 +644,29 @@ export function ShopProductsTab() {
                   )}
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <p className="text-2xl font-bold text-gray-900">
-                    ${Number(product.basePrice).toFixed(2)}
-                  </p>
+                  {editingId === product.id ? (
+                    <ProductEditForm
+                      product={product}
+                      onDone={() => setEditingId(null)}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-2xl font-bold text-gray-900">
+                        ${Number(product.basePrice).toFixed(2)}
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingId(product.id)}
+                      >
+                        Edit
+                      </Button>
+                    </div>
+                  )}
                   <div>
-                    <p className="text-xs font-medium text-gray-500 mb-2">Gallery</p>
+                    <p className="text-xs font-medium text-gray-500 mb-2">
+                      Gallery
+                    </p>
                     <ProductImagesManager product={product} />
                   </div>
                   <ProductVariantsManager product={product} />

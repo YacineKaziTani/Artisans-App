@@ -1,11 +1,22 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { Dispute, DisputeStatus, DisputeTargetType } from "./dispute.entities";
-import { Booking, PaymentStatus, BookingStatus } from "../booking/booking.entities";
-import { Order, OrderPaymentStatus, OrderStatus } from "../orders/order.entities";
-import { restoreVariantStock } from "../orders/order.controller";
+import {
+  Booking,
+  PaymentStatus,
+  BookingStatus,
+} from "../booking/booking.entities";
+import {
+  Order,
+  OrderPaymentStatus,
+  OrderStatus,
+} from "../orders/order.entities";
+import {
+  restoreVariantStock,
+  refundScopeFor,
+} from "../orders/order.controller";
 import { User } from "../users/entities/user.entities";
-import { stripe } from "../../config/stripe";
+import { stripe, connectRefundParams } from "../../config/stripe";
 
 const disputeRepo = AppDataSource.getRepository(Dispute);
 const bookingRepo = AppDataSource.getRepository(Booking);
@@ -36,7 +47,6 @@ async function findTargetForParticipant(
   return { target: order, allowed };
 }
 
-// Client or artisan opens a dispute on a booking or order they're part of.
 export const createDispute = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -82,7 +92,7 @@ export const createDispute = async (req: Request, res: Response) => {
 
     return res.status(201).json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Error opening dispute", error });
+    return res.status(500).json({ message: "Error opening dispute" });
   }
 };
 
@@ -95,7 +105,7 @@ export const getMyDisputes = async (req: Request, res: Response) => {
     });
     return res.json(disputes);
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching disputes", error });
+    return res.status(500).json({ message: "Error fetching disputes" });
   }
 };
 
@@ -110,13 +120,10 @@ export const getAllDisputesAdmin = async (req: Request, res: Response) => {
     });
     return res.json(disputes);
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching disputes", error });
+    return res.status(500).json({ message: "Error fetching disputes" });
   }
 };
 
-// Admin resolves a dispute. Resolving as "refunded" actually triggers the
-// Stripe refund and updates the underlying booking/order — a dispute
-// resolution isn't just a label, it has real financial effect.
 export const resolveDispute = async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
@@ -147,8 +154,10 @@ export const resolveDispute = async (req: Request, res: Response) => {
         const booking = await bookingRepo.findOne({
           where: { id: dispute.targetId },
         });
-        if (booking?.stripePaymentIntentId && booking.paymentStatus === PaymentStatus.AUTHORIZED) {
-          // Nothing was ever captured — release the hold instead of refunding.
+        if (
+          booking?.stripePaymentIntentId &&
+          booking.paymentStatus === PaymentStatus.AUTHORIZED
+        ) {
           await stripe.paymentIntents.cancel(booking.stripePaymentIntentId);
           booking.paymentStatus = PaymentStatus.UNPAID;
           booking.status = BookingStatus.CANCELLED;
@@ -159,11 +168,11 @@ export const resolveDispute = async (req: Request, res: Response) => {
           booking.stripePaymentIntentId
         ) {
           const isPartial =
-            refundAmount !== undefined && refundAmount < Number(booking.totalAmount);
+            refundAmount !== undefined &&
+            refundAmount < Number(booking.totalAmount);
           await stripe.refunds.create({
             payment_intent: booking.stripePaymentIntentId,
-            reverse_transfer: true,
-            refund_application_fee: !isPartial,
+            ...connectRefundParams(!isPartial),
             ...(isPartial ? { amount: Math.round(refundAmount! * 100) } : {}),
           });
           booking.paymentStatus = isPartial
@@ -177,11 +186,16 @@ export const resolveDispute = async (req: Request, res: Response) => {
           where: { id: dispute.targetId },
           relations: ["variant"],
         });
-        if (order?.stripePaymentIntentId && order.paymentStatus === OrderPaymentStatus.AUTHORIZED) {
-          await stripe.paymentIntents.cancel(order.stripePaymentIntentId);
+        if (
+          order?.stripePaymentIntentId &&
+          order.paymentStatus === OrderPaymentStatus.AUTHORIZED
+        ) {
+          if (!order.checkoutGroupId) {
+            await stripe.paymentIntents.cancel(order.stripePaymentIntentId);
+          }
           order.paymentStatus = OrderPaymentStatus.UNPAID;
           order.status = OrderStatus.CANCELLED;
-          await restoreVariantStock(order.variant?.id);
+          await restoreVariantStock(order.variant?.id, order.quantity);
           await orderRepo.save(order);
         } else if (
           order &&
@@ -189,11 +203,12 @@ export const resolveDispute = async (req: Request, res: Response) => {
           order.stripePaymentIntentId
         ) {
           const isPartial =
-            refundAmount !== undefined && refundAmount < Number(order.totalAmount);
+            refundAmount !== undefined &&
+            refundAmount < Number(order.totalAmount);
           await stripe.refunds.create({
             payment_intent: order.stripePaymentIntentId,
-            reverse_transfer: true,
-            refund_application_fee: !isPartial,
+            ...refundScopeFor(order),
+            ...connectRefundParams(!isPartial && !order.checkoutGroupId),
             ...(isPartial ? { amount: Math.round(refundAmount! * 100) } : {}),
           });
           order.paymentStatus = isPartial
@@ -201,7 +216,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
             : OrderPaymentStatus.REFUNDED;
           if (!isPartial) {
             order.status = OrderStatus.CANCELLED;
-            await restoreVariantStock(order.variant?.id);
+            await restoreVariantStock(order.variant?.id, order.quantity);
           }
           await orderRepo.save(order);
         }
@@ -214,6 +229,6 @@ export const resolveDispute = async (req: Request, res: Response) => {
 
     return res.json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Error resolving dispute", error });
+    return res.status(500).json({ message: "Error resolving dispute" });
   }
 };

@@ -3,14 +3,48 @@ import { AppDataSource } from "../../../data-source";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { User } from "../entities/user.entities";
+import { User, UserRole } from "../entities/user.entities";
 import { sendMail } from "../../../config/mail";
 
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MIN_PASSWORD_LENGTH = 8;
 
 function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
+
+const SELF_ASSIGNABLE_ROLES: UserRole[] = [UserRole.CLIENT, UserRole.ARTISAN];
+
+function isValidEmail(email: unknown): email is string {
+  return typeof email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function publicUser(user: User) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    phone: user.phone,
+    avatarUrl: user.avatarUrl,
+    createdAt: user.createdAt,
+  };
+}
+
+function issueToken(user: User) {
+  return jwt.sign(
+    { sub: user.id, name: user.name, email: user.email, role: user.role },
+    process.env.JWT_SECRET!,
+    { expiresIn: "7d" },
+  );
+}
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+} as const;
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -19,6 +53,17 @@ export const register = async (req: Request, res: Response) => {
 
     if (!email || !name || !password || !phone || !role) {
       return res.status(400).json({ message: "All fields are required" });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: "Enter a valid email address" });
+    }
+    if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      });
+    }
+    if (!SELF_ASSIGNABLE_ROLES.includes(role)) {
+      return res.status(400).json({ message: "Invalid role" });
     }
     if (acceptTerms !== true) {
       return res
@@ -47,31 +92,12 @@ export const register = async (req: Request, res: Response) => {
     });
 
     await userRepo.save(user);
-    const payload = {
-      sub: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    };
-    const token = jwt.sign(payload, process.env.JWT_SECRET!, {
-      expiresIn: "7d",
-    });
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("token", issueToken(user), COOKIE_OPTIONS);
 
     res.status(201).json({
       message: "User created and logged in",
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: publicUser(user),
     });
   } catch (err) {
     res.status(500).json({ error: "Server error during registration" });
@@ -87,16 +113,22 @@ export const login = async (req: Request, res: Response) => {
     const userRepo = AppDataSource.getRepository(User);
     const user = await userRepo
       .createQueryBuilder("user")
-      .addSelect(["user.password", "user.failedLoginAttempts", "user.lockedUntil"])
+      .addSelect([
+        "user.password",
+        "user.failedLoginAttempts",
+        "user.lockedUntil",
+      ])
       .where("user.email = :email", { email })
       .getOne();
 
     if (!user) {
-      return res.status(401).json({ message: "Invalid user" });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
-      const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      const minutesLeft = Math.ceil(
+        (user.lockedUntil.getTime() - Date.now()) / 60000,
+      );
       return res.status(429).json({
         message: `Too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`,
       });
@@ -119,7 +151,9 @@ export const login = async (req: Request, res: Response) => {
     }
 
     if (user.isActive === false) {
-      return res.status(403).json({ message: "This account has been suspended" });
+      return res
+        .status(403)
+        .json({ message: "This account has been suspended" });
     }
 
     if (user.failedLoginAttempts || user.lockedUntil) {
@@ -128,48 +162,42 @@ export const login = async (req: Request, res: Response) => {
       await userRepo.save(user);
     }
 
-    const payload = {
-      sub: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    };
-    const token = jwt.sign(payload, process.env.JWT_SECRET!, {
-      expiresIn: "7d",
-    });
-
-    //setting the cookie
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-    res.json({ message: "Logged in successfully" });
+    res.cookie("token", issueToken(user), COOKIE_OPTIONS);
+    res.json({ message: "Logged in successfully", user: publicUser(user) });
   } catch (error) {
-    res.status(500).json({ message: "server error", error });
+    res.status(500).json({ message: "Server error during login" });
   }
 };
 
 export const logout = (_req: Request, res: Response) => {
-  res.clearCookie("token");
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  });
   res.json({ message: "Logged out" });
 };
 
-export const me = (req: Request, res: Response) => {
+export const me = async (req: Request, res: Response) => {
   const token = req.cookies.token;
   if (!token) return res.status(401).json({ message: "Not authenticated" });
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET!);
-    res.json(payload);
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as {
+      sub: string;
+    };
+    const user = await AppDataSource.getRepository(User).findOne({
+      where: { id: payload.sub },
+    });
+    if (!user || !user.isActive) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    res.json(publicUser(user));
   } catch {
     res.status(401).json({ message: "Invalid token" });
   }
 };
 
-// Request a password reset email. Always responds the same way regardless
-// of whether the email exists, so this can't be used to enumerate accounts.
 export const forgotPassword = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
@@ -188,25 +216,31 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
       const resetUrl = `${process.env.FRONTEND_URL ?? "http://localhost:5173"}/reset-password?token=${rawToken}&email=${encodeURIComponent(email)}`;
 
-      await sendMail(
-        user.email,
-        "Reset your password",
-        `<p>Hi ${user.name},</p>
-         <p>Click the link below to reset your password. This link expires in 30 minutes.</p>
-         <p><a href="${resetUrl}">${resetUrl}</a></p>
-         <p>If you didn't request this, you can ignore this email.</p>`,
-      );
+      try {
+        await sendMail(
+          user.email,
+          "Reset your password",
+          `<p>Hi ${user.name},</p>
+           <p>Click the link below to reset your password. This link expires in 30 minutes.</p>
+           <p><a href="${resetUrl}">${resetUrl}</a></p>
+           <p>If you didn't request this, you can ignore this email.</p>`,
+        );
+      } catch (mailError) {
+        console.error(
+          "[forgot-password] Failed to send reset email:",
+          mailError,
+        );
+      }
     }
 
     return res.json({
       message: "If that email exists, a reset link has been sent",
     });
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// Complete a password reset using the token emailed by forgotPassword.
 export const resetPassword = async (req: Request, res: Response) => {
   try {
     const { email, token, newPassword } = req.body;
@@ -215,14 +249,16 @@ export const resetPassword = async (req: Request, res: Response) => {
         .status(400)
         .json({ message: "email, token, and newPassword are required" });
     }
-    if (newPassword.length < 8) {
-      return res
-        .status(400)
-        .json({ message: "Password must be at least 8 characters" });
+    if (
+      typeof newPassword !== "string" ||
+      newPassword.length < MIN_PASSWORD_LENGTH
+    ) {
+      return res.status(400).json({
+        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      });
     }
 
     const userRepo = AppDataSource.getRepository(User);
-    // resetPasswordTokenHash/Expiry are select:false by default — fetch explicitly.
     const user = await userRepo
       .createQueryBuilder("user")
       .addSelect(["user.resetPasswordTokenHash", "user.resetPasswordExpiresAt"])
@@ -236,18 +272,19 @@ export const resetPassword = async (req: Request, res: Response) => {
       user.resetPasswordExpiresAt.getTime() > Date.now();
 
     if (!user || !valid) {
-      return res
-        .status(400)
-        .json({ message: "Invalid or expired reset link" });
+      return res.status(400).json({ message: "Invalid or expired reset link" });
     }
 
     user.password = await bcrypt.hash(newPassword, 12);
     user.resetPasswordTokenHash = undefined;
     user.resetPasswordExpiresAt = undefined;
+    user.passwordChangedAt = new Date();
+    user.failedLoginAttempts = 0;
+    user.lockedUntil = undefined;
     await userRepo.save(user);
 
     return res.json({ message: "Password reset successfully" });
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
+    return res.status(500).json({ message: "Server error" });
   }
 };

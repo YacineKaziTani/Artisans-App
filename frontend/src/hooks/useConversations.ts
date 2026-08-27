@@ -25,8 +25,6 @@ export function useMyConversations(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: conversationKeys.mine(),
     queryFn: conversationApi.mine,
-    // Live updates arrive via socket ("conversation_updated"); this is just
-    // a safety net in case a socket drops without reconnecting.
     refetchInterval: 30000,
     enabled: options.enabled ?? true,
   });
@@ -40,8 +38,6 @@ export function useConversationMessages(id: string | undefined) {
   });
 }
 
-// Sends over the socket for real-time delivery, with a REST fallback if the
-// socket isn't connected (e.g. reconnecting after a network blip).
 export function useSendMessage(conversationId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -62,9 +58,9 @@ export function useSendMessage(conversationId: string) {
       });
     },
     onSuccess: () => {
-      // The socket path already pushes the new message into the cache via
-      // useSocketConnection; this covers the REST fallback path.
-      qc.invalidateQueries({ queryKey: conversationKeys.messages(conversationId) });
+      qc.invalidateQueries({
+        queryKey: conversationKeys.messages(conversationId),
+      });
       qc.invalidateQueries({ queryKey: conversationKeys.mine() });
     },
   });
@@ -73,7 +69,7 @@ export function useSendMessage(conversationId: string) {
 export function useAdminConversations() {
   return useQuery({
     queryKey: conversationKeys.admin(),
-    queryFn: conversationApi.listAllAdmin,
+    queryFn: () => conversationApi.listAllAdmin(),
     refetchInterval: 30000,
   });
 }

@@ -1,13 +1,24 @@
 import { Request, Response } from "express";
 import crypto from "crypto";
 import { AppDataSource } from "../../data-source";
-import { Order, OrderStatus, OrderPaymentStatus, DeliveryMethod } from "./order.entities";
-import { Shop } from "../shop/shop.entities";
+import {
+  Order,
+  OrderStatus,
+  OrderPaymentStatus,
+  DeliveryMethod,
+} from "./order.entities";
+import { Shop, ShopStatus } from "../shop/shop.entities";
 import { Product } from "../products/product.entities";
 import { ProductVariant } from "../products/variant.entities";
 import { User } from "../users/entities/user.entities";
 import { UserRole } from "../users/entities/user.entities";
-import { stripe, platformFeeAmountCents } from "../../config/stripe";
+import { parsePagination } from "../../middleware/validate.middleware";
+import {
+  stripe,
+  shopCanAcceptPayments,
+  connectChargeParams,
+  connectRefundParams,
+} from "../../config/stripe";
 
 const orderRepo = AppDataSource.getRepository(Order);
 const shopRepo = AppDataSource.getRepository(Shop);
@@ -23,28 +34,39 @@ function parseDelivery(body: {
       ? DeliveryMethod.DELIVERY
       : DeliveryMethod.PICKUP;
   const shippingAddress =
-    deliveryMethod === DeliveryMethod.DELIVERY ? body.shippingAddress : undefined;
+    deliveryMethod === DeliveryMethod.DELIVERY
+      ? body.shippingAddress
+      : undefined;
   return { deliveryMethod, shippingAddress };
 }
 
-// Resolves what a line item actually costs and, if a variant was chosen,
-// reserves its stock immediately (decremented at order time, restored on
-// cancellation) — this prevents overselling a specific size/color between
-// when a client starts checkout and when they finish paying.
-async function resolveLineItem(productId: string, variantId: string | undefined) {
+async function resolveLineItem(
+  productId: string,
+  variantId: string | undefined,
+  quantity: number,
+) {
   const product = await productRepo.findOne({
     where: { id: productId },
     relations: ["shop"],
   });
   if (!product) return { error: "Product not found" as const };
-  if (!product.shop.stripeOnboardingComplete || !product.shop.stripeAccountId) {
+  if (product.shop.status !== ShopStatus.ACTIVE) {
+    return { error: "This shop isn't currently accepting orders." as const };
+  }
+  if (!shopCanAcceptPayments(product.shop)) {
     return {
-      error: "This shop hasn't finished setting up payouts yet and can't accept orders." as const,
+      error:
+        "This shop hasn't finished setting up payouts yet and can't accept orders." as const,
     };
   }
 
   if (!variantId) {
-    return { product, variant: null, unitPrice: Number(product.basePrice), variantLabel: undefined };
+    return {
+      product,
+      variant: null,
+      unitPrice: Number(product.basePrice),
+      variantLabel: undefined,
+    };
   }
 
   const variant = await variantRepo.findOne({
@@ -54,8 +76,12 @@ async function resolveLineItem(productId: string, variantId: string | undefined)
   if (!variant || variant.product.id !== productId) {
     return { error: "Variant not found for this product" as const };
   }
-  if (variant.stockQuantity < 1) {
-    return { error: "That variant is out of stock" as const };
+  if (variant.stockQuantity < quantity) {
+    return {
+      error: (variant.stockQuantity < 1
+        ? "That variant is out of stock"
+        : `Only ${variant.stockQuantity} left of that variant`) as string,
+    };
   }
 
   const unitPrice =
@@ -68,44 +94,57 @@ async function resolveLineItem(productId: string, variantId: string | undefined)
     .map((v) => `${v.option.name}: ${v.value}`)
     .join(", ");
 
-  // Reserve stock now — decremented immediately rather than only on
-  // fulfillment, since payment authorization can happen well before the
-  // artisan actually fulfills.
-  variant.stockQuantity -= 1;
+  variant.stockQuantity -= quantity;
   await variantRepo.save(variant);
 
   return { product, variant, unitPrice, variantLabel };
 }
 
-export async function restoreVariantStock(variantId?: string) {
+export async function restoreVariantStock(variantId?: string, quantity = 1) {
   if (!variantId) return;
   const variant = await variantRepo.findOne({ where: { id: variantId } });
   if (variant) {
-    variant.stockQuantity += 1;
+    variant.stockQuantity += quantity;
     await variantRepo.save(variant);
   }
 }
 
-// Client orders a product and gets back a Stripe PaymentIntent client secret.
 export const createOrder = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { productId, variantId, quantity = 1, deliveryMethod, shippingAddress } = req.body;
+    const {
+      productId,
+      variantId,
+      quantity = 1,
+      deliveryMethod,
+      shippingAddress,
+    } = req.body;
 
-    if (!productId || quantity < 1) {
+    if (
+      !productId ||
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > 100
+    ) {
       return res
         .status(400)
-        .json({ message: "productId and a valid quantity are required" });
+        .json({
+          message:
+            "productId and a whole quantity between 1 and 100 are required",
+        });
     }
 
     const delivery = parseDelivery({ deliveryMethod, shippingAddress });
-    if (delivery.deliveryMethod === DeliveryMethod.DELIVERY && !delivery.shippingAddress?.trim()) {
+    if (
+      delivery.deliveryMethod === DeliveryMethod.DELIVERY &&
+      !delivery.shippingAddress?.trim()
+    ) {
       return res
         .status(400)
         .json({ message: "shippingAddress is required for delivery orders" });
     }
 
-    const resolved = await resolveLineItem(productId, variantId);
+    const resolved = await resolveLineItem(productId, variantId, quantity);
     if ("error" in resolved) {
       return res.status(404).json({ message: resolved.error });
     }
@@ -136,12 +175,10 @@ export const createOrder = async (req: Request, res: Response) => {
         capture_method: "manual",
         metadata: { type: "order", orderId: saved.id },
         automatic_payment_methods: { enabled: true },
-        application_fee_amount: platformFeeAmountCents(amountInCents),
-        transfer_data: { destination: product.shop.stripeAccountId! },
+        ...connectChargeParams(product.shop, amountInCents),
       });
     } catch (err) {
-      // Payment setup failed — release the stock we just reserved.
-      await restoreVariantStock(variant?.id);
+      await restoreVariantStock(variant?.id, quantity);
       throw err;
     }
 
@@ -153,18 +190,10 @@ export const createOrder = async (req: Request, res: Response) => {
       clientSecret: paymentIntent.client_secret,
     });
   } catch (error) {
-    return res.status(500).json({ message: "Error creating order", error });
+    return res.status(500).json({ message: "Error creating order" });
   }
 };
 
-// Client checks out a cart of multiple products — all from the SAME shop,
-// in a single payment. (A cart spanning multiple shops would need one
-// PaymentIntent per shop, since Stripe Connect transfers only support one
-// destination account per intent, and letting one shop's fulfillment
-// capture funds for another shop's not-yet-fulfilled item would be
-// incorrect. Multi-shop cart checkout isn't supported yet — see
-// CartPage/useCartCheckout on the frontend, which groups by shop before
-// calling this.)
 export const createCartCheckout = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -176,16 +205,32 @@ export const createCartCheckout = async (req: Request, res: Response) => {
     const { deliveryMethod, shippingAddress } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "items must be a non-empty array" });
-    }
-    if (items.some((i) => !i.productId || !i.quantity || i.quantity < 1)) {
       return res
         .status(400)
-        .json({ message: "Each item needs a productId and a valid quantity" });
+        .json({ message: "items must be a non-empty array" });
+    }
+    if (
+      items.some(
+        (i) =>
+          !i.productId ||
+          !Number.isInteger(i.quantity) ||
+          i.quantity < 1 ||
+          i.quantity > 100,
+      )
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Each item needs a productId and a whole quantity between 1 and 100",
+        });
     }
 
     const delivery = parseDelivery({ deliveryMethod, shippingAddress });
-    if (delivery.deliveryMethod === DeliveryMethod.DELIVERY && !delivery.shippingAddress?.trim()) {
+    if (
+      delivery.deliveryMethod === DeliveryMethod.DELIVERY &&
+      !delivery.shippingAddress?.trim()
+    ) {
       return res
         .status(400)
         .json({ message: "shippingAddress is required for delivery orders" });
@@ -198,7 +243,11 @@ export const createCartCheckout = async (req: Request, res: Response) => {
 
     try {
       for (const item of items) {
-        const resolved = await resolveLineItem(item.productId, item.variantId);
+        const resolved = await resolveLineItem(
+          item.productId,
+          item.variantId,
+          item.quantity,
+        );
         if ("error" in resolved) {
           throw new Error(resolved.error);
         }
@@ -231,9 +280,13 @@ export const createCartCheckout = async (req: Request, res: Response) => {
         createdOrders.push(await orderRepo.save(order));
       }
     } catch (err) {
-      // Roll back stock reservations for whatever we'd already committed.
-      await Promise.all(createdOrders.map((o) => restoreVariantStock(o.variant?.id)));
-      const message = err instanceof Error ? err.message : "Error checking out cart";
+      await Promise.all(
+        createdOrders.map((o) =>
+          restoreVariantStock(o.variant?.id, o.quantity),
+        ),
+      );
+      const message =
+        err instanceof Error ? err.message : "Error checking out cart";
       return res.status(404).json({ message });
     }
 
@@ -248,8 +301,7 @@ export const createCartCheckout = async (req: Request, res: Response) => {
         orderIds: createdOrders.map((o) => o.id).join(","),
       },
       automatic_payment_methods: { enabled: true },
-      application_fee_amount: platformFeeAmountCents(totalAmountCents),
-      transfer_data: { destination: shop!.stripeAccountId! },
+      ...connectChargeParams(shop!, totalAmountCents),
     });
 
     await Promise.all(
@@ -264,21 +316,69 @@ export const createCartCheckout = async (req: Request, res: Response) => {
       clientSecret: paymentIntent.client_secret,
     });
   } catch (error) {
-    return res.status(500).json({ message: "Error checking out cart", error });
+    return res.status(500).json({ message: "Error checking out cart" });
   }
 };
+
+async function settleCheckoutGroup(groupId: string) {
+  const siblings = await orderRepo.find({
+    where: { checkoutGroupId: groupId },
+  });
+  if (siblings.length === 0) return;
+  // Still waiting on another line, or the group already settled.
+  if (siblings.some((o) => o.status === OrderStatus.PENDING)) return;
+  if (!siblings.every((o) => o.paymentStatus === OrderPaymentStatus.AUTHORIZED))
+    return;
+
+  const intentId = siblings[0].stripePaymentIntentId;
+  if (!intentId) return;
+
+  const captureCents = siblings
+    .filter((o) => o.status === OrderStatus.FULFILLED)
+    .reduce((sum, o) => sum + Math.round(Number(o.totalAmount) * 100), 0);
+
+  if (captureCents > 0) {
+    await stripe.paymentIntents.capture(intentId, {
+      amount_to_capture: captureCents,
+    });
+  } else {
+    await stripe.paymentIntents.cancel(intentId);
+  }
+
+  await Promise.all(
+    siblings.map((o) => {
+      o.paymentStatus =
+        o.status === OrderStatus.FULFILLED
+          ? OrderPaymentStatus.PAID
+          : OrderPaymentStatus.UNPAID;
+      return orderRepo.save(o);
+    }),
+  );
+}
+
+export function refundScopeFor(order: Order) {
+  return order.checkoutGroupId
+    ? { amount: Math.round(Number(order.totalAmount) * 100) }
+    : {};
+}
 
 export const getMyOrders = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const orders = await orderRepo.find({
       where: { client: { id: userId } },
-      relations: ["shop", "product", "variant", "variant.values", "variant.values.option"],
+      relations: [
+        "shop",
+        "product",
+        "variant",
+        "variant.values",
+        "variant.values.option",
+      ],
       order: { createdAt: "DESC" },
     });
     return res.json(orders);
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching orders", error });
+    return res.status(500).json({ message: "Error fetching orders" });
   }
 };
 
@@ -290,31 +390,49 @@ export const getShopOrders = async (req: Request, res: Response) => {
 
     const orders = await orderRepo.find({
       where: { shop: { id: shop.id } },
-      relations: ["product", "client", "variant", "variant.values", "variant.values.option"],
+      relations: [
+        "product",
+        "client",
+        "variant",
+        "variant.values",
+        "variant.values.option",
+      ],
       order: { createdAt: "DESC" },
     });
     return res.json(orders);
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching orders", error });
+    return res.status(500).json({ message: "Error fetching orders" });
   }
 };
 
 export const getAllOrdersAdmin = async (req: Request, res: Response) => {
   try {
-    const orders = await orderRepo.find({
-      relations: ["shop", "product", "client", "variant", "variant.values", "variant.values.option"],
-      order: { createdAt: "DESC" },
+    const { page, take, skip } = parsePagination(req.query, {
+      defaultLimit: 50,
+      maxLimit: 200,
     });
-    return res.json(orders);
+    const [orders, total] = await orderRepo.findAndCount({
+      relations: [
+        "shop",
+        "product",
+        "client",
+        "variant",
+        "variant.values",
+        "variant.values.option",
+      ],
+      order: { createdAt: "DESC" },
+      skip,
+      take,
+    });
+    return res.json({
+      data: orders,
+      meta: { total, page, lastPage: Math.ceil(total / take) },
+    });
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching orders", error });
+    return res.status(500).json({ message: "Error fetching orders" });
   }
 };
 
-// Artisan fulfills or cancels an order on their own shop. Fulfilling an
-// authorized-but-uncaptured order captures the payment (first time the
-// client is actually charged). Cancelling an authorized order releases the
-// hold instead. Cancelling an already-captured (paid) order refunds it.
 export const updateOrderStatus = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -339,9 +457,40 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     ) {
       return res.status(403).json({ message: "Forbidden" });
     }
+    if (order.status === status) {
+      if (order.checkoutGroupId) {
+        try {
+          await settleCheckoutGroup(order.checkoutGroupId);
+        } catch (err) {
+          return res.status(409).json({
+            message:
+              "Couldn't settle the payment for this cart — the authorization hold may have expired (holds last about 7 days).",
+            error: err instanceof Error ? err.message : err,
+          });
+        }
+        return res.json(await orderRepo.findOne({ where: { id: order.id } }));
+      }
+      return res.json(order);
+    }
+    if (order.status === OrderStatus.CANCELLED) {
+      return res
+        .status(400)
+        .json({ message: "This order is already cancelled" });
+    }
+
+    const isGrouped = Boolean(order.checkoutGroupId);
 
     if (status === OrderStatus.FULFILLED) {
-      if (order.paymentStatus === OrderPaymentStatus.AUTHORIZED && order.stripePaymentIntentId) {
+      if (order.paymentStatus === OrderPaymentStatus.UNPAID) {
+        return res.status(400).json({
+          message: "The client hasn't authorized payment for this order yet",
+        });
+      }
+      if (
+        !isGrouped &&
+        order.paymentStatus === OrderPaymentStatus.AUTHORIZED &&
+        order.stripePaymentIntentId
+      ) {
         try {
           await stripe.paymentIntents.capture(order.stripePaymentIntentId);
         } catch (err) {
@@ -352,42 +501,54 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
           });
         }
         order.paymentStatus = OrderPaymentStatus.PAID;
-      } else if (order.paymentStatus === OrderPaymentStatus.UNPAID) {
-        return res.status(400).json({
-          message: "The client hasn't authorized payment for this order yet",
-        });
       }
     }
 
     if (status === OrderStatus.CANCELLED) {
-      if (order.paymentStatus === OrderPaymentStatus.AUTHORIZED && order.stripePaymentIntentId) {
-        await stripe.paymentIntents.cancel(order.stripePaymentIntentId);
-        order.paymentStatus = OrderPaymentStatus.UNPAID; // hold released, client was never charged
+      if (
+        order.paymentStatus === OrderPaymentStatus.AUTHORIZED &&
+        order.stripePaymentIntentId
+      ) {
+        if (!isGrouped) {
+          await stripe.paymentIntents.cancel(order.stripePaymentIntentId);
+          order.paymentStatus = OrderPaymentStatus.UNPAID; // hold released, client was never charged
+        }
       } else if (
         order.paymentStatus === OrderPaymentStatus.PAID &&
         order.stripePaymentIntentId
       ) {
         await stripe.refunds.create({
           payment_intent: order.stripePaymentIntentId,
-          reverse_transfer: true,
-          refund_application_fee: true,
+          ...refundScopeFor(order),
+          ...connectRefundParams(!order.checkoutGroupId),
         });
         order.paymentStatus = OrderPaymentStatus.REFUNDED;
       }
-      await restoreVariantStock(order.variant?.id);
+      await restoreVariantStock(order.variant?.id, order.quantity);
     }
 
     if (trackingInfo !== undefined) order.trackingInfo = trackingInfo;
     order.status = status;
     const saved = await orderRepo.save(order);
-    return res.json(saved);
+
+    if (isGrouped) {
+      try {
+        await settleCheckoutGroup(order.checkoutGroupId!);
+      } catch (err) {
+        return res.status(409).json({
+          message:
+            "Couldn't settle the payment for this cart — the authorization hold may have expired (holds last about 7 days).",
+          error: err instanceof Error ? err.message : err,
+        });
+      }
+    }
+
+    return res.json(await orderRepo.findOne({ where: { id: saved.id } }));
   } catch (error) {
-    return res.status(500).json({ message: "Error updating order", error });
+    return res.status(500).json({ message: "Error updating order" });
   }
 };
 
-// Client cancels their own order. If payment was only authorized (not yet
-// captured by the artisan), the hold is released and nothing is charged. If
 // it was already captured, this refunds it.
 export const cancelMyOrder = async (req: Request, res: Response) => {
   try {
@@ -411,36 +572,45 @@ export const cancelMyOrder = async (req: Request, res: Response) => {
         .json({ message: "Can't cancel a fulfilled order" });
     }
 
-    if (order.paymentStatus === OrderPaymentStatus.AUTHORIZED && order.stripePaymentIntentId) {
-      await stripe.paymentIntents.cancel(order.stripePaymentIntentId);
-      order.paymentStatus = OrderPaymentStatus.UNPAID;
+    const isGrouped = Boolean(order.checkoutGroupId);
+
+    if (
+      order.paymentStatus === OrderPaymentStatus.AUTHORIZED &&
+      order.stripePaymentIntentId
+    ) {
+      if (!isGrouped) {
+        await stripe.paymentIntents.cancel(order.stripePaymentIntentId);
+        order.paymentStatus = OrderPaymentStatus.UNPAID;
+      }
     } else if (
       order.paymentStatus === OrderPaymentStatus.PAID &&
       order.stripePaymentIntentId
     ) {
       await stripe.refunds.create({
         payment_intent: order.stripePaymentIntentId,
-        reverse_transfer: true,
-        refund_application_fee: true,
+        ...refundScopeFor(order),
+        ...connectRefundParams(!isGrouped),
       });
       order.paymentStatus = OrderPaymentStatus.REFUNDED;
     }
-    await restoreVariantStock(order.variant?.id);
+    await restoreVariantStock(order.variant?.id, order.quantity);
 
     order.status = OrderStatus.CANCELLED;
     const saved = await orderRepo.save(order);
-    return res.json(saved);
+
+    if (isGrouped) await settleCheckoutGroup(order.checkoutGroupId!);
+
+    return res.json(await orderRepo.findOne({ where: { id: saved.id } }));
   } catch (error) {
-    return res.status(500).json({ message: "Error cancelling order", error });
+    return res.status(500).json({ message: "Error cancelling order" });
   }
 };
 
-// Called from the webhook when an order/cart's PaymentIntent becomes
-// authorized (hold placed, not yet captured). Only moves orders forward
-// from UNPAID, so a later out-of-order event can't regress an
-// already-captured or already-cancelled order.
 export async function handleOrderAuthorizedEvent(orderIdsCsv: string) {
-  const ids = orderIdsCsv.split(",").map((id) => id.trim()).filter(Boolean);
+  const ids = orderIdsCsv
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
   await Promise.all(
     ids.map(async (id) => {
       const order = await orderRepo.findOne({ where: { id } });
@@ -451,16 +621,14 @@ export async function handleOrderAuthorizedEvent(orderIdsCsv: string) {
   );
 }
 
-// Called from the shared Stripe webhook (booking.controller.ts) when a
-// PaymentIntent tagged as an order or cart checkout is captured or fails.
-// orderIdsCsv is a single id (type: "order") or a comma-separated list
-// (type: "cart") — both share the same handling since a cart's PaymentIntent
-// pays for all its line items together.
 export async function handleOrderPaymentEvent(
   orderIdsCsv: string,
   succeeded: boolean,
 ) {
-  const ids = orderIdsCsv.split(",").map((id) => id.trim()).filter(Boolean);
+  const ids = orderIdsCsv
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
   const newStatus = succeeded
     ? OrderPaymentStatus.PAID
     : OrderPaymentStatus.FAILED;
@@ -469,6 +637,7 @@ export async function handleOrderPaymentEvent(
     ids.map(async (id) => {
       const order = await orderRepo.findOne({ where: { id } });
       if (!order) return;
+      if (succeeded && order.status === OrderStatus.CANCELLED) return;
       order.paymentStatus = newStatus;
       await orderRepo.save(order);
     }),

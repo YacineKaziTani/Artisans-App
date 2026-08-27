@@ -29,16 +29,16 @@ async function bootstrap() {
 
   const app = express();
 
+  if (process.env.TRUST_PROXY) {
+    app.set("trust proxy", Number(process.env.TRUST_PROXY) || 1);
+  }
+
   app.use(
     helmet({
-      // Cross-origin resource policy would block the frontend loading
-      // Cloudinary-hosted images/photos otherwise.
       crossOriginResourcePolicy: { policy: "cross-origin" },
     }),
   );
 
-  // Stripe webhook needs the raw request body to verify the signature, so
-  // it's mounted before express.json() parses everything else.
   app.post(
     "/api/bookings/webhook",
     express.raw({ type: "application/json" }),
@@ -77,10 +77,30 @@ async function bootstrap() {
   app.use("/api/disputes", disputeRoutes);
   app.use("/api/favorites", favoriteRoutes);
 
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ message: "Not found" });
+  });
+
+  app.use(
+    (
+      err: unknown,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction,
+    ) => {
+      console.error("Unhandled error:", err);
+      if (res.headersSent) return;
+      res.status(500).json({ message: "Internal server error" });
+    },
+  );
+
   const httpServer = createServer(app);
   initSocketServer(httpServer);
 
-  httpServer.listen(3000, () => console.log("Listening on http://localhost:3000"));
+  const port = Number(process.env.PORT ?? 3000);
+  httpServer.listen(port, () =>
+    console.log(`Listening on http://localhost:${port}`),
+  );
 }
 
 bootstrap().catch((err) => {

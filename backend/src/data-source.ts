@@ -6,7 +6,11 @@ import { Category } from "./modules/category/category.entities";
 import { Photo } from "./modules/photos/photo.entities";
 import { Product } from "./modules/products/product.entities";
 import { ProductImage } from "./modules/products/product-image.entities";
-import { VariantOption, VariantValue, ProductVariant } from "./modules/products/variant.entities";
+import {
+  VariantOption,
+  VariantValue,
+  ProductVariant,
+} from "./modules/products/variant.entities";
 import { Review } from "./modules/reviews/review.entities";
 import { Service } from "./modules/services/service.entities";
 import { Booking } from "./modules/booking/booking.entities";
@@ -26,9 +30,9 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  synchronize: true, //false,
+  synchronize: process.env.NODE_ENV !== "production",
 
-  logging: process.env.NODE_ENV === "development", // 'production'
+  logging: process.env.NODE_ENV === "development",
   entities: [
     User,
     Shop,

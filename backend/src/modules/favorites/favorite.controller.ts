@@ -9,15 +9,23 @@ const favoriteRepo = AppDataSource.getRepository(Favorite);
 const shopRepo = AppDataSource.getRepository(Shop);
 const productRepo = AppDataSource.getRepository(Product);
 
-// Toggle a favorite on/off — one endpoint for both add and remove, since the
-// client always just wants "the opposite of whatever it is now".
 export const toggleFavorite = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const { targetType, targetId } = req.body;
 
     if (!Object.values(FavoriteTargetType).includes(targetType) || !targetId) {
-      return res.status(400).json({ message: "Invalid targetType or targetId" });
+      return res
+        .status(400)
+        .json({ message: "Invalid targetType or targetId" });
+    }
+
+    const targetExists =
+      targetType === FavoriteTargetType.SHOP
+        ? await shopRepo.exists({ where: { id: String(targetId) } })
+        : await productRepo.exists({ where: { id: String(targetId) } });
+    if (!targetExists) {
+      return res.status(404).json({ message: "That item no longer exists" });
     }
 
     const existing = await favoriteRepo.findOne({
@@ -37,33 +45,35 @@ export const toggleFavorite = async (req: Request, res: Response) => {
     await favoriteRepo.save(favorite);
     return res.json({ favorited: true });
   } catch (error) {
-    return res.status(500).json({ message: "Error toggling favorite", error });
+    return res.status(500).json({ message: "Error toggling favorite" });
   }
 };
 
-// Just the target ids the user has favorited of a given type — cheap to
-// fetch alongside a list/grid of shops or products to render filled/empty
-// heart icons without hydrating full favorite records.
 export const getMyFavoriteIds = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const { targetType } = req.query;
 
-    if (!Object.values(FavoriteTargetType).includes(targetType as FavoriteTargetType)) {
+    if (
+      !Object.values(FavoriteTargetType).includes(
+        targetType as FavoriteTargetType,
+      )
+    ) {
       return res.status(400).json({ message: "Invalid targetType" });
     }
 
     const favorites = await favoriteRepo.find({
-      where: { user: { id: userId }, targetType: targetType as FavoriteTargetType },
+      where: {
+        user: { id: userId },
+        targetType: targetType as FavoriteTargetType,
+      },
     });
     return res.json(favorites.map((f) => f.targetId));
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching favorites", error });
+    return res.status(500).json({ message: "Error fetching favorites" });
   }
 };
 
-// Full favorites list, hydrated with the actual shop/product data — used by
-// the "My Favorites" page.
 export const getMyFavorites = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -81,15 +91,21 @@ export const getMyFavorites = async (req: Request, res: Response) => {
 
     const [shops, products] = await Promise.all([
       shopIds.length
-        ? shopRepo.find({ where: shopIds.map((id) => ({ id })), relations: ["category"] })
+        ? shopRepo.find({
+            where: shopIds.map((id) => ({ id })),
+            relations: ["category"],
+          })
         : [],
       productIds.length
-        ? productRepo.find({ where: productIds.map((id) => ({ id })), relations: ["shop", "images"] })
+        ? productRepo.find({
+            where: productIds.map((id) => ({ id })),
+            relations: ["shop", "images"],
+          })
         : [],
     ]);
 
     return res.json({ shops, products });
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching favorites", error });
+    return res.status(500).json({ message: "Error fetching favorites" });
   }
 };

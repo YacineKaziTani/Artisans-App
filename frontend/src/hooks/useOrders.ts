@@ -26,7 +26,7 @@ export function useCartCheckout() {
       items,
       delivery,
     }: {
-      items: { productId: string; quantity: number }[];
+      items: { productId: string; variantId?: string; quantity: number }[];
       delivery: DeliveryInfo;
     }) => orderApi.checkout(items, delivery),
     onSuccess: () => {
@@ -52,7 +52,7 @@ export function useShopOrders() {
 export function useAdminOrders() {
   return useQuery({
     queryKey: orderKeys.admin(),
-    queryFn: orderApi.listAllAdmin,
+    queryFn: () => orderApi.listAllAdmin(),
   });
 }
 
@@ -69,7 +69,9 @@ export function useUpdateOrderStatus() {
       trackingInfo?: string;
     }) => orderApi.updateStatus(id, status, trackingInfo),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: orderKeys.shop() });
+      // A cart order settles its siblings when the last line resolves, so
+      // refresh the whole list rather than patching the single row.
+      qc.invalidateQueries({ queryKey: orderKeys.all });
     },
   });
 }
@@ -79,7 +81,7 @@ export function useCancelMyOrder() {
   return useMutation({
     mutationFn: (id: string) => orderApi.cancelMine(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: orderKeys.mine() });
+      qc.invalidateQueries({ queryKey: orderKeys.all });
     },
   });
 }

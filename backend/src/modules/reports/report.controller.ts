@@ -30,7 +30,7 @@ export const createReport = async (req: Request, res: Response) => {
 
     return res.status(201).json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Error submitting report", error });
+    return res.status(500).json({ message: "Error submitting report" });
   }
 };
 
@@ -43,7 +43,7 @@ export const getMyReports = async (req: Request, res: Response) => {
     });
     return res.json(reports);
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching reports", error });
+    return res.status(500).json({ message: "Error fetching reports" });
   }
 };
 
@@ -58,7 +58,7 @@ export const getAllReportsAdmin = async (req: Request, res: Response) => {
     });
     return res.json(reports);
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching reports", error });
+    return res.status(500).json({ message: "Error fetching reports" });
   }
 };
 
@@ -80,6 +80,6 @@ export const resolveReport = async (req: Request, res: Response) => {
     const saved = await reportRepo.save(report);
     return res.json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Error resolving report", error });
+    return res.status(500).json({ message: "Error resolving report" });
   }
 };

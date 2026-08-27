@@ -1,8 +1,5 @@
 import { io, type Socket } from "socket.io-client";
 
-// Same-origin as the API in dev (Vite proxies /api, but sockets connect
-// directly to the backend host/port since Vite's proxy doesn't cover
-// websocket upgrade by default here).
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? "http://localhost:3000";
 
 let socket: Socket | null = null;

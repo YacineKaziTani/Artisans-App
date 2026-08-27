@@ -35,7 +35,7 @@ export function useShopBookings() {
 export function useAdminBookings() {
   return useQuery({
     queryKey: [...bookingKeys.all, "admin"] as const,
-    queryFn: bookingApi.listAllAdmin,
+    queryFn: () => bookingApi.listAllAdmin(),
   });
 }
 

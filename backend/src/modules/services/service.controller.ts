@@ -11,7 +11,6 @@ async function getOwnShop(userId: string) {
   return shopRepo.findOne({ where: { owner: { id: userId } } });
 }
 
-// Fetch all services (public)
 export const getAllServices = async (req: Request, res: Response) => {
   try {
     const services = await serviceRepo.find({
@@ -19,27 +18,22 @@ export const getAllServices = async (req: Request, res: Response) => {
     });
     res.json(services);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching services", error });
+    res.status(500).json({ message: "Error fetching services" });
   }
 };
 
-// Create a service under the logged-in artisan's own shop
 export const createService = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const { name, description, price, duration } = req.body;
 
     if (!name || price === undefined) {
-      return res
-        .status(400)
-        .json({ message: "name and price are required" });
+      return res.status(400).json({ message: "name and price are required" });
     }
 
     const shop = await getOwnShop(userId);
     if (!shop) {
-      return res
-        .status(404)
-        .json({ message: "You don't have a shop yet" });
+      return res.status(404).json({ message: "You don't have a shop yet" });
     }
 
     const service = serviceRepo.create({
@@ -53,11 +47,10 @@ export const createService = async (req: Request, res: Response) => {
 
     return res.status(201).json(saved);
   } catch (error) {
-    res.status(500).json({ message: "Error creating service", error });
+    res.status(500).json({ message: "Error creating service" });
   }
 };
 
-// Update a service owned by the logged-in artisan
 export const updateService = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -71,7 +64,10 @@ export const updateService = async (req: Request, res: Response) => {
     if (!service) {
       return res.status(404).json({ message: "Service not found" });
     }
-    if (service.shop.owner.id !== userId && req.user!.role !== UserRole.SUPER_ADMIN) {
+    if (
+      service.shop.owner.id !== userId &&
+      req.user!.role !== UserRole.SUPER_ADMIN
+    ) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
@@ -84,11 +80,10 @@ export const updateService = async (req: Request, res: Response) => {
     const saved = await serviceRepo.save(service);
     return res.json(saved);
   } catch (error) {
-    res.status(500).json({ message: "Error updating service", error });
+    res.status(500).json({ message: "Error updating service" });
   }
 };
 
-// Delete a service owned by the logged-in artisan
 export const deleteService = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -101,13 +96,16 @@ export const deleteService = async (req: Request, res: Response) => {
     if (!service) {
       return res.status(404).json({ message: "Service not found" });
     }
-    if (service.shop.owner.id !== userId && req.user!.role !== UserRole.SUPER_ADMIN) {
+    if (
+      service.shop.owner.id !== userId &&
+      req.user!.role !== UserRole.SUPER_ADMIN
+    ) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
     await serviceRepo.remove(service);
     return res.status(204).send();
   } catch (error) {
-    res.status(500).json({ message: "Error deleting service", error });
+    res.status(500).json({ message: "Error deleting service" });
   }
 };

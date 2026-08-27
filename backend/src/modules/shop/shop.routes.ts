@@ -19,11 +19,17 @@ import { authorize } from "../../middleware/authorize.middleware";
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { UserRole } from "../users/entities/user.entities";
 import { parser } from "../../config/cloudinary";
+import { uuidParam } from "../../middleware/validate.middleware";
 
 const router = Router();
+
+// Reject malformed ids with a 404 instead of a Postgres cast error.
+router.param("id", uuidParam);
+
 router.post(
   "/upload-photo",
   authMiddleware,
+  authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
   parser.single("image"),
   uploadShopPhoto,
 );
@@ -40,7 +46,7 @@ router.put(
 router.post(
   "/create",
   authMiddleware,
-  authorize(UserRole.ARTISAN),
+  authorize(UserRole.CLIENT, UserRole.ARTISAN),
   parser.single("image"),
   createShop,
 );

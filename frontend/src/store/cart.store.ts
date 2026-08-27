@@ -19,9 +19,17 @@ function lineKey(productId: string, variantId?: string) {
 
 interface CartState {
   items: CartItem[];
-  addItem: (product: Product, variant?: ProductVariant, quantity?: number) => void;
+  addItem: (
+    product: Product,
+    variant?: ProductVariant,
+    quantity?: number,
+  ) => boolean;
   removeItem: (productId: string, variantId?: string) => void;
-  setQuantity: (productId: string, variantId: string | undefined, quantity: number) => void;
+  setQuantity: (
+    productId: string,
+    variantId: string | undefined,
+    quantity: number,
+  ) => void;
   clear: () => void;
 }
 
@@ -31,8 +39,14 @@ export const useCartStore = create<CartState>()(
       items: [],
 
       addItem: (product, variant, quantity = 1) => {
+        const shopId = product.shop?.id ?? "";
+        const currentShopId = get().items[0]?.shopId;
+        if (currentShopId && currentShopId !== shopId) return false;
+
         const key = lineKey(product.id, variant?.id);
-        const existing = get().items.find((i) => lineKey(i.productId, i.variantId) === key);
+        const existing = get().items.find(
+          (i) => lineKey(i.productId, i.variantId) === key,
+        );
         if (existing) {
           set({
             items: get().items.map((i) =>
@@ -41,15 +55,17 @@ export const useCartStore = create<CartState>()(
                 : i,
             ),
           });
-          return;
+          return true;
         }
 
         const variantModifier = variant
           ? variant.values.reduce((sum, v) => sum + Number(v.priceModifier), 0)
           : 0;
-        const price = variant?.priceOverride
-          ? Number(variant.priceOverride)
-          : Number(product.basePrice) + variantModifier;
+        const price =
+          variant?.priceOverride !== undefined &&
+          variant?.priceOverride !== null
+            ? Number(variant.priceOverride)
+            : Number(product.basePrice) + variantModifier;
         const variantLabel = variant?.values
           .map((v) => `${v.option?.name}: ${v.value}`)
           .join(", ");
@@ -63,18 +79,21 @@ export const useCartStore = create<CartState>()(
               variantLabel,
               title: product.title,
               price,
-              shopId: product.shop?.id ?? "",
+              shopId,
               shopName: product.shop?.shopName ?? "",
               quantity,
             },
           ],
         });
+        return true;
       },
 
       removeItem: (productId, variantId) => {
         const key = lineKey(productId, variantId);
         set({
-          items: get().items.filter((i) => lineKey(i.productId, i.variantId) !== key),
+          items: get().items.filter(
+            (i) => lineKey(i.productId, i.variantId) !== key,
+          ),
         });
       },
 

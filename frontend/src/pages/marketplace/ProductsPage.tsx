@@ -8,6 +8,7 @@ import { useFavoriteIds } from "@/hooks/useFavorites";
 import { useAuthStore } from "@/store/auth.store";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { useCartStore } from "@/store/cart.store";
+import { shopCanAcceptPayments } from "@/lib/stripe";
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -25,6 +26,7 @@ export default function ProductsPage() {
   const { data: favoriteIds } = useFavoriteIds("product", { enabled: isAuthenticated });
   const addToCart = useCartStore((s) => s.addItem);
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [wrongShop, setWrongShop] = useState(false);
 
   const { data: products, isLoading, isError } = useProducts({
     search: search || undefined,
@@ -128,6 +130,14 @@ export default function ProductsPage() {
           </p>
         )}
 
+        {wrongShop && (
+          <p className="mb-4 p-3 bg-amber-100 border-2 border-amber-300 rounded-lg text-amber-900 text-sm">
+            Your cart already has items from another shop. Each order is paid
+            out to a single artisan, so check out first (or clear the cart)
+            before adding this.
+          </p>
+        )}
+
         {!isLoading && !isError && (products ?? []).length === 0 && (
           <p className="text-amber-900">No products match your filters.</p>
         )}
@@ -177,7 +187,13 @@ export default function ProductsPage() {
                     </span>
                   </div>
                   {isAuthenticated ? (
-                    product.variantOptions?.length ? (
+                    // Matches ArtisanShopPage: a shop that can't take payment
+                    // shouldn't offer a buy path that fails at checkout.
+                    !shopCanAcceptPayments(product.shop ?? {}) ? (
+                      <Button variant="outline" className="w-full" disabled>
+                        Not Available Yet
+                      </Button>
+                    ) : product.variantOptions?.length ? (
                       <Link to={`/artisan/${product.shop?.id}`} className="block">
                         <Button variant="outline" className="w-full">
                           Select Options
@@ -188,7 +204,11 @@ export default function ProductsPage() {
                         variant="outline"
                         className="w-full"
                         onClick={() => {
-                          addToCart(product);
+                          if (!addToCart(product)) {
+                            setWrongShop(true);
+                            return;
+                          }
+                          setWrongShop(false);
                           setJustAdded(product.id);
                           setTimeout(() => setJustAdded(null), 1500);
                         }}

@@ -5,17 +5,15 @@ import { Category } from "./category.entities";
 
 const categoryRepo = AppDataSource.getRepository(Category);
 
-// Fetch all active categories (public)
 export const getCategories = async (req: Request, res: Response) => {
   try {
     const category = await categoryRepo.find({ where: { isActive: true } });
     res.json({ msg: "request success", category });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching categories", error });
+    res.status(500).json({ message: "Error fetching categories" });
   }
 };
 
-// Create a new category (super_admin only)
 export const createCategory = async (req: Request, res: Response) => {
   try {
     const { name, description, iconUrl } = req.body;
@@ -29,11 +27,10 @@ export const createCategory = async (req: Request, res: Response) => {
       .status(201)
       .json({ message: "category created successfully", data: newCategory });
   } catch (error) {
-    res.status(500).json({ message: "Error creating category", error });
+    res.status(500).json({ message: "Error creating category" });
   }
 };
 
-// Update a category (super_admin only)
 export const updateCategory = async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
@@ -52,11 +49,10 @@ export const updateCategory = async (req: Request, res: Response) => {
     const saved = await categoryRepo.save(category);
     res.json({ message: "category updated", data: saved });
   } catch (error) {
-    res.status(500).json({ message: "Error updating category", error });
+    res.status(500).json({ message: "Error updating category" });
   }
 };
 
-// Delete a category (super_admin only)
 export const deleteCategory = async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
@@ -67,11 +63,10 @@ export const deleteCategory = async (req: Request, res: Response) => {
     await categoryRepo.remove(category);
     res.status(204).send();
   } catch (error) {
-    res.status(500).json({ message: "Error deleting category", error });
+    res.status(500).json({ message: "Error deleting category" });
   }
 };
 
-// All categories regardless of isActive (super_admin only, for the dashboard)
 export const getAllCategoriesAdmin = async (req: Request, res: Response) => {
   try {
     const categories = await categoryRepo.find({
@@ -79,6 +74,6 @@ export const getAllCategoriesAdmin = async (req: Request, res: Response) => {
     });
     res.json(categories);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching categories", error });
+    res.status(500).json({ message: "Error fetching categories" });
   }
 };

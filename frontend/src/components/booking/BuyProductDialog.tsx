@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { isAxiosError } from "axios";
 import { Elements } from "@stripe/react-stripe-js";
 import {
   Dialog,
@@ -26,14 +27,20 @@ export function BuyProductDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [quantity, setQuantity] = useState(1);
-  const [selectedValues, setSelectedValues] = useState<Record<string, string>>({});
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("pickup");
+  const [selectedValues, setSelectedValues] = useState<Record<string, string>>(
+    {},
+  );
+  const [deliveryMethod, setDeliveryMethod] =
+    useState<DeliveryMethod>("pickup");
   const [shippingAddress, setShippingAddress] = useState("");
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
 
   const createOrder = useCreateOrder();
-  const options = useMemo(() => product.variantOptions ?? [], [product.variantOptions]);
+  const options = useMemo(
+    () => product.variantOptions ?? [],
+    [product.variantOptions],
+  );
   const hasVariants = options.length > 0;
 
   const selectedVariant: ProductVariant | undefined = useMemo(() => {
@@ -42,19 +49,29 @@ export function BuyProductDialog({
     const wanted = new Set(Object.values(selectedValues));
     return (product.variants ?? []).find((v) => {
       const vIds = new Set(v.values.map((val) => val.id));
-      return vIds.size === wanted.size && [...wanted].every((id) => vIds.has(id));
+      return (
+        vIds.size === wanted.size && [...wanted].every((id) => vIds.has(id))
+      );
     });
   }, [hasVariants, options, selectedValues, product.variants]);
 
   const unitPrice = selectedVariant
-    ? selectedVariant.priceOverride !== undefined && selectedVariant.priceOverride !== null
+    ? selectedVariant.priceOverride !== undefined &&
+      selectedVariant.priceOverride !== null
       ? Number(selectedVariant.priceOverride)
       : Number(product.basePrice) +
-        selectedVariant.values.reduce((sum, v) => sum + Number(v.priceModifier), 0)
+        selectedVariant.values.reduce(
+          (sum, v) => sum + Number(v.priceModifier),
+          0,
+        )
     : Number(product.basePrice);
 
-  const outOfStock = hasVariants && selectedVariant && selectedVariant.stockQuantity < 1;
+  const outOfStock = Boolean(
+    hasVariants && selectedVariant && selectedVariant.stockQuantity < 1,
+  );
   const needsSelection = hasVariants && !selectedVariant;
+  const stockLimit = selectedVariant?.stockQuantity;
+  const exceedsStock = stockLimit !== undefined && quantity > stockLimit;
 
   const reset = () => {
     setQuantity(1);
@@ -74,7 +91,7 @@ export function BuyProductDialog({
   const handleRequestOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (quantity < 1) return;
-    if (needsSelection || outOfStock) return;
+    if (needsSelection || outOfStock || exceedsStock) return;
     if (deliveryMethod === "delivery" && !shippingAddress.trim()) return;
     createOrder.mutate(
       {
@@ -82,7 +99,8 @@ export function BuyProductDialog({
         variantId: selectedVariant?.id,
         quantity,
         deliveryMethod,
-        shippingAddress: deliveryMethod === "delivery" ? shippingAddress : undefined,
+        shippingAddress:
+          deliveryMethod === "delivery" ? shippingAddress : undefined,
       },
       { onSuccess: (result) => setClientSecret(result.clientSecret) },
     );
@@ -98,9 +116,9 @@ export function BuyProductDialog({
             <div className="text-5xl">✅</div>
             <DialogTitle>Payment Authorized</DialogTitle>
             <DialogDescription>
-              Your card has been authorized and the artisan has been
-              notified. You'll be charged once they fulfill the order — if
-              they can't, the hold is released and you're never charged.
+              Your card has been authorized and the artisan has been notified.
+              You'll be charged once they fulfill the order — if they can't, the
+              hold is released and you're never charged.
             </DialogDescription>
             <Button onClick={() => handleClose(false)} className="mt-2">
               Done
@@ -111,8 +129,8 @@ export function BuyProductDialog({
             <DialogHeader>
               <DialogTitle>Authorize Payment for {product.title}</DialogTitle>
               <DialogDescription>
-                {quantity} × ${unitPrice.toFixed(2)} = $
-                {total.toFixed(2)} — charged only once the artisan fulfills it.
+                {quantity} × ${unitPrice.toFixed(2)} = ${total.toFixed(2)} —
+                charged only once the artisan fulfills it.
               </DialogDescription>
             </DialogHeader>
             <Elements stripe={stripePromise} options={{ clientSecret }}>
@@ -133,7 +151,9 @@ export function BuyProductDialog({
             <form onSubmit={handleRequestOrder} className="space-y-4">
               {createOrder.isError && (
                 <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
-                  Couldn't start the order. Please try again.
+                  {(isAxiosError(createOrder.error) &&
+                    createOrder.error.response?.data?.message) ||
+                    "Couldn't start the order. Please try again."}
                 </div>
               )}
               {hasVariants && (
@@ -150,10 +170,14 @@ export function BuyProductDialog({
                           .map((v) => `${v.option?.name}: ${v.value}`)
                           .join(", ");
                         const price =
-                          variant.priceOverride !== undefined && variant.priceOverride !== null
+                          variant.priceOverride !== undefined &&
+                          variant.priceOverride !== null
                             ? Number(variant.priceOverride)
                             : Number(product.basePrice) +
-                              variant.values.reduce((sum, v) => sum + Number(v.priceModifier), 0);
+                              variant.values.reduce(
+                                (sum, v) => sum + Number(v.priceModifier),
+                                0,
+                              );
                         const isSelected = selectedVariant?.id === variant.id;
                         const isOut = variant.stockQuantity < 1;
 
@@ -168,6 +192,9 @@ export function BuyProductDialog({
                                 if (v.option) next[v.option.id] = v.id;
                               });
                               setSelectedValues(next);
+                              setQuantity((q) =>
+                                Math.min(Math.max(1, q), variant.stockQuantity),
+                              );
                             }}
                             className={`w-full flex items-center justify-between gap-2 text-sm rounded-md border px-3 py-2 text-left ${
                               isOut
@@ -181,7 +208,9 @@ export function BuyProductDialog({
                             <span className="flex items-center gap-2 flex-shrink-0">
                               <span>${price.toFixed(2)}</span>
                               <span className={isOut ? "" : "text-green-700"}>
-                                {isOut ? "Out of stock" : `${variant.stockQuantity} in stock`}
+                                {isOut
+                                  ? "Out of stock"
+                                  : `${variant.stockQuantity} in stock`}
                               </span>
                             </span>
                           </button>
@@ -190,7 +219,9 @@ export function BuyProductDialog({
                     </div>
                   )}
                   {needsSelection && (product.variants ?? []).length > 0 && (
-                    <p className="text-xs text-gray-500">Pick one of the options above.</p>
+                    <p className="text-xs text-gray-500">
+                      Pick one of the options above.
+                    </p>
                   )}
                 </div>
               )}
@@ -200,9 +231,25 @@ export function BuyProductDialog({
                   id="quantity"
                   type="number"
                   min={1}
+                  max={stockLimit}
                   value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+                  onChange={(e) => {
+                    const next = Math.max(1, Number(e.target.value));
+                    setQuantity(
+                      stockLimit === undefined
+                        ? next
+                        : Math.min(next, stockLimit),
+                    );
+                  }}
                 />
+                {stockLimit !== undefined && stockLimit > 0 && (
+                  <p className="text-xs text-gray-500">{stockLimit} in stock</p>
+                )}
+                {exceedsStock && (
+                  <p className="text-xs text-red-600">
+                    Only {stockLimit} left of this option.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Delivery</Label>
@@ -245,12 +292,18 @@ export function BuyProductDialog({
                 </div>
               )}
               <p className="text-sm text-gray-600">
-                Total: <span className="font-semibold">${total.toFixed(2)}</span>
+                Total:{" "}
+                <span className="font-semibold">${total.toFixed(2)}</span>
               </p>
               <Button
                 type="submit"
                 className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
-                disabled={createOrder.isPending || needsSelection || outOfStock}
+                disabled={
+                  createOrder.isPending ||
+                  needsSelection ||
+                  outOfStock ||
+                  exceedsStock
+                }
               >
                 {createOrder.isPending ? "Starting..." : "Continue to Payment"}
               </Button>

@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { Review } from "./review.entities";
 import { Shop } from "../shop/shop.entities";
-import { User } from "../users/entities/user.entities";
+import { User, UserRole } from "../users/entities/user.entities";
 
 const reviewRepo = AppDataSource.getRepository(Review);
 const shopRepo = AppDataSource.getRepository(Shop);
@@ -24,10 +24,10 @@ export const createReview = async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
-    if (!rating || rating < 1 || rating > 5)
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5)
       return res
         .status(400)
-        .json({ message: "Rating must be between 1 and 5" });
+        .json({ message: "Rating must be a whole number between 1 and 5" });
 
     const shop = await shopRepo.findOne({ where: { id: shopId } });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
@@ -53,12 +53,17 @@ export const createReview = async (req: Request, res: Response) => {
     const saved = await reviewRepo.findOne({
       where: { id: review.id },
       relations: ["author"],
+      select: {
+        id: true,
+        rating: true,
+        comment: true,
+        createdAt: true,
+        author: { id: true, name: true, avatarUrl: true },
+      },
     });
     return res.status(201).json(saved);
   } catch (err) {
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: err });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -69,14 +74,19 @@ export const getShopReviews = async (req: Request, res: Response) => {
     const reviews = await reviewRepo.find({
       where: { shop: { id: shopId } },
       relations: ["author"],
+      select: {
+        id: true,
+        rating: true,
+        comment: true,
+        createdAt: true,
+        author: { id: true, name: true, avatarUrl: true },
+      },
       order: { createdAt: "DESC" },
     });
 
     return res.status(200).json(reviews);
   } catch (err) {
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: err });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -91,7 +101,7 @@ export const deleteReview = async (req: Request, res: Response) => {
     });
 
     if (!review) return res.status(404).json({ message: "Review not found" });
-    if (review.author.id !== userId)
+    if (review.author.id !== userId && req.user?.role !== UserRole.SUPER_ADMIN)
       return res.status(403).json({ message: "Forbidden" });
 
     const shopId = review.shop.id;
@@ -100,9 +110,7 @@ export const deleteReview = async (req: Request, res: Response) => {
 
     return res.status(200).json({ message: "Review deleted" });
   } catch (err) {
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: err });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -122,10 +130,10 @@ export const updateReview = async (req: Request, res: Response) => {
       return res.status(403).json({ message: "Forbidden" });
 
     if (rating !== undefined) {
-      if (rating < 1 || rating > 5)
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5)
         return res
           .status(400)
-          .json({ message: "Rating must be between 1 and 5" });
+          .json({ message: "Rating must be a whole number between 1 and 5" });
       review.rating = rating;
     }
     if (comment !== undefined) review.comment = comment;
@@ -135,8 +143,6 @@ export const updateReview = async (req: Request, res: Response) => {
 
     return res.status(200).json(review);
   } catch (err) {
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: err });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };

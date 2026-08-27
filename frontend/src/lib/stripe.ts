@@ -10,6 +10,13 @@ if (!publishableKey) {
   );
 }
 
-export const stripePromise = publishableKey
-  ? loadStripe(publishableKey)
-  : null;
+export const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
+
+export const bypassConnect =
+  import.meta.env.VITE_STRIPE_BYPASS_CONNECT === "true";
+
+export function shopCanAcceptPayments(shop: {
+  stripeOnboardingComplete?: boolean;
+}) {
+  return bypassConnect || Boolean(shop.stripeOnboardingComplete);
+}

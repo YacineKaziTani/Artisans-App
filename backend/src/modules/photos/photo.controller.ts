@@ -7,13 +7,10 @@ import { Shop } from "../shop/shop.entities";
 const photoRepo = AppDataSource.getRepository(Photo);
 const shopRepo = AppDataSource.getRepository(Shop);
 
-// Multer's Cloudinary storage attaches a public_id to req.file at runtime
-// under the `filename` field — same shape as disk storage, just optional here.
 interface CloudinaryFile extends Omit<Express.Multer.File, "filename"> {
   filename?: string;
 }
 
-// Upload an image to Cloudinary and attach it to the logged-in artisan's shop.
 export const uploadPhoto = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -37,11 +34,10 @@ export const uploadPhoto = async (req: Request, res: Response) => {
 
     return res.status(201).json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Failed to upload photo", error });
+    return res.status(500).json({ message: "Failed to upload photo" });
   }
 };
 
-// Photos on the logged-in artisan's own shop
 export const getMyPhotos = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -54,11 +50,10 @@ export const getMyPhotos = async (req: Request, res: Response) => {
     });
     return res.json(photos);
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching photos", error });
+    return res.status(500).json({ message: "Error fetching photos" });
   }
 };
 
-// Delete a photo owned by the logged-in artisan (also removes it from Cloudinary)
 export const deletePhoto = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -76,14 +71,12 @@ export const deletePhoto = async (req: Request, res: Response) => {
     if (photo.publicId) {
       try {
         await cloudinary.uploader.destroy(photo.publicId);
-      } catch {
-        // Non-fatal — still remove the DB record even if Cloudinary cleanup fails
-      }
+      } catch {}
     }
 
     await photoRepo.remove(photo);
     return res.status(204).send();
   } catch (error) {
-    return res.status(500).json({ message: "Error deleting photo", error });
+    return res.status(500).json({ message: "Error deleting photo" });
   }
 };

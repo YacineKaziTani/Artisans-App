@@ -11,6 +11,7 @@ import { BookServiceDialog } from "@/components/booking/BookServiceDialog";
 import { BuyProductDialog } from "@/components/booking/BuyProductDialog";
 import { ReviewsSection } from "@/components/ReviewsSection";
 import { ReportDialog } from "@/components/ReportDialog";
+import { shopCanAcceptPayments } from "@/lib/stripe";
 import type { Product, Service } from "@/types";
 
 function digitsOnly(phone: string) {
@@ -30,6 +31,7 @@ export default function ArtisanShopPage() {
   const [bookingService, setBookingService] = useState<Service | null>(null);
   const [buyingProduct, setBuyingProduct] = useState<Product | null>(null);
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [wrongShop, setWrongShop] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
 
   if (isLoading) {
@@ -86,7 +88,7 @@ export default function ArtisanShopPage() {
             ← Back to {shop.category ? shop.category.name : "Categories"}
           </Link>
 
-          {!isOwnShop && !shop.stripeOnboardingComplete && (
+          {!isOwnShop && !shopCanAcceptPayments(shop) && (
             <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg text-sm text-amber-900">
               This shop is still setting up payouts — bookings and purchases
               aren't available yet. Check back soon.
@@ -255,10 +257,10 @@ export default function ArtisanShopPage() {
                   {isAuthenticated ? (
                     <Button
                       className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
-                      disabled={!shop.stripeOnboardingComplete}
+                      disabled={!shopCanAcceptPayments(shop)}
                       onClick={() => setBookingService(service)}
                     >
-                      {shop.stripeOnboardingComplete ? "Book Now" : "Not Available Yet"}
+                      {shopCanAcceptPayments(shop) ? "Book Now" : "Not Available Yet"}
                     </Button>
                   ) : (
                     <Link to="/login" className="block">
@@ -277,6 +279,13 @@ export default function ArtisanShopPage() {
         {(shop.products ?? []).length > 0 && (
           <div className="mt-12">
             <h2 className="text-3xl font-bold text-orange-900 mb-6">Products</h2>
+            {wrongShop && (
+              <p className="mb-4 p-3 bg-amber-100 border-2 border-amber-300 rounded-lg text-amber-900 text-sm">
+                Your cart already has items from another shop. Each order pays
+                out to a single artisan, so check out first (or clear the cart)
+                before adding this one.
+              </p>
+            )}
             <div className="grid md:grid-cols-2 gap-6">
               {shop.products!.map((product) => (
                 <div
@@ -310,9 +319,13 @@ export default function ArtisanShopPage() {
                           <Button
                             variant="outline"
                             className="flex-1"
-                            disabled={!shop.stripeOnboardingComplete}
+                            disabled={!shopCanAcceptPayments(shop)}
                             onClick={() => {
-                              addToCart(product);
+                              if (!addToCart(product)) {
+                                setWrongShop(true);
+                                return;
+                              }
+                              setWrongShop(false);
                               setJustAdded(product.id);
                               setTimeout(() => setJustAdded(null), 1500);
                             }}
@@ -322,10 +335,10 @@ export default function ArtisanShopPage() {
                         )}
                         <Button
                           className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
-                          disabled={!shop.stripeOnboardingComplete}
+                          disabled={!shopCanAcceptPayments(shop)}
                           onClick={() => setBuyingProduct(product)}
                         >
-                          {!shop.stripeOnboardingComplete
+                          {!shopCanAcceptPayments(shop)
                             ? "Not Available Yet"
                             : product.variantOptions?.length
                               ? "Select Options"

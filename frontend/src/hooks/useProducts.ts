@@ -28,6 +28,20 @@ export function useCreateProduct() {
   });
 }
 
+export function useUpdateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Partial<{ title: string; description: string; basePrice: number }>;
+    }) => productApi.update(id, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: productKeys.mine }),
+  });
+}
+
 export function useDeleteProduct() {
   const qc = useQueryClient();
   return useMutation({

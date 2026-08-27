@@ -10,8 +10,11 @@ import {
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { UserRole } from "../users/entities/user.entities";
+import { uuidParam } from "../../middleware/validate.middleware";
 
 const router = Router();
+
+router.param("id", uuidParam);
 
 router.post("/", authMiddleware, startConversation);
 router.get("/mine", authMiddleware, getMyConversations);

@@ -1,5 +1,5 @@
 import { api } from "@/lib/axios";
-import type { DeliveryMethod, Order, OrderStatus } from "@/types";
+import type { DeliveryMethod, Order, OrderStatus, PageMeta } from "@/types";
 
 export interface DeliveryInfo {
   deliveryMethod: DeliveryMethod;
@@ -36,7 +36,10 @@ export const orderApi = {
 
   shopOrders: () => api.get<Order[]>("/orders/shop").then((r) => r.data),
 
-  listAllAdmin: () => api.get<Order[]>("/orders/admin/all").then((r) => r.data),
+  listAllAdmin: (params: { page?: number; limit?: number } = {}) =>
+    api
+      .get<{ data: Order[]; meta: PageMeta }>("/orders/admin/all", { params })
+      .then((r) => r.data.data),
 
   updateStatus: (id: string, status: OrderStatus, trackingInfo?: string) =>
     api

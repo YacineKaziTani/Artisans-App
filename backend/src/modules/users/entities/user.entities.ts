@@ -53,6 +53,9 @@ export class User {
   @Column({ type: "timestamptz", nullable: true })
   acceptedTermsAt?: Date;
 
+  @Column({ type: "timestamptz", nullable: true })
+  passwordChangedAt?: Date;
+
   @Column({ type: "int", default: 0, select: false })
   failedLoginAttempts!: number;
 

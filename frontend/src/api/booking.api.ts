@@ -1,5 +1,5 @@
 import { api } from "@/lib/axios";
-import type { Booking, BookingStatus } from "@/types";
+import type { Booking, BookingStatus, PageMeta } from "@/types";
 
 export interface CreateBookingPayload {
   serviceId: string;
@@ -31,6 +31,8 @@ export const bookingApi = {
   cancelMine: (id: string) =>
     api.patch<Booking>(`/bookings/${id}/cancel`).then((r) => r.data),
 
-  listAllAdmin: () =>
-    api.get<Booking[]>("/bookings/admin/all").then((r) => r.data),
+  listAllAdmin: (params: { page?: number; limit?: number } = {}) =>
+    api
+      .get<{ data: Booking[]; meta: PageMeta }>("/bookings/admin/all", { params })
+      .then((r) => r.data.data),
 };

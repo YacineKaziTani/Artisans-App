@@ -1,5 +1,5 @@
 import { api } from "@/lib/axios";
-import type { ChatMessage, Conversation } from "@/types";
+import type { ChatMessage, Conversation, PageMeta } from "@/types";
 
 export const conversationApi = {
   start: (shopId: string) =>
@@ -20,8 +20,12 @@ export const conversationApi = {
       .post<ChatMessage>(`/conversations/${id}/messages`, { content })
       .then((r) => r.data),
 
-  listAllAdmin: () =>
-    api.get<Conversation[]>("/conversations/admin/all").then((r) => r.data),
+  listAllAdmin: (params: { page?: number; limit?: number } = {}) =>
+    api
+      .get<{ data: Conversation[]; meta: PageMeta }>("/conversations/admin/all", {
+        params,
+      })
+      .then((r) => r.data.data),
 
   messagesAdmin: (id: string) =>
     api

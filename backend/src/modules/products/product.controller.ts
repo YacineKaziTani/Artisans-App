@@ -14,8 +14,6 @@ interface CloudinaryFile extends Omit<Express.Multer.File, "filename"> {
   filename?: string;
 }
 
-// All products (public) — filterable by shop, category (via the shop), a
-// text search over title/description, and a price range.
 export const getAllProducts = async (req: Request, res: Response) => {
   try {
     const { shopId, category, search, minPrice, maxPrice } = req.query;
@@ -29,6 +27,7 @@ export const getAllProducts = async (req: Request, res: Response) => {
       .leftJoinAndSelect("variantOptions.values", "optionValues")
       .leftJoinAndSelect("product.variants", "variants")
       .leftJoinAndSelect("variants.values", "variantValues")
+      .leftJoinAndSelect("variantValues.option", "variantValueOption")
       .where("shop.status = :status", { status: "active" });
 
     if (shopId) {
@@ -53,11 +52,10 @@ export const getAllProducts = async (req: Request, res: Response) => {
     const products = await qb.orderBy("product.createdAt", "DESC").getMany();
     res.json(products);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching products", error });
+    res.status(500).json({ message: "Error fetching products" });
   }
 };
 
-// Products on the logged-in artisan's own shop
 export const getMyProducts = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -78,11 +76,10 @@ export const getMyProducts = async (req: Request, res: Response) => {
     });
     res.json(products);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching products", error });
+    res.status(500).json({ message: "Error fetching products" });
   }
 };
 
-// Create a product under the logged-in artisan's own shop
 export const createProduct = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -122,7 +119,7 @@ export const createProduct = async (req: Request, res: Response) => {
 
     return res.status(201).json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Error creating product", error });
+    return res.status(500).json({ message: "Error creating product" });
   }
 };
 
@@ -137,14 +134,17 @@ async function findOwnedProduct(id: string, userId: string, role?: UserRole) {
   return { product, allowed };
 }
 
-// Update a product owned by the logged-in artisan (or any product, for admins)
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const id = String(req.params.id);
     const { title, description, basePrice } = req.body;
 
-    const { product, allowed } = await findOwnedProduct(id, userId, req.user!.role);
+    const { product, allowed } = await findOwnedProduct(
+      id,
+      userId,
+      req.user!.role,
+    );
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
@@ -159,17 +159,20 @@ export const updateProduct = async (req: Request, res: Response) => {
     const saved = await productRepo.save(product);
     return res.json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Error updating product", error });
+    return res.status(500).json({ message: "Error updating product" });
   }
 };
 
-// Delete a product owned by the logged-in artisan (or any product, for admins)
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const id = String(req.params.id);
 
-    const { product, allowed } = await findOwnedProduct(id, userId, req.user!.role);
+    const { product, allowed } = await findOwnedProduct(
+      id,
+      userId,
+      req.user!.role,
+    );
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
@@ -180,13 +183,10 @@ export const deleteProduct = async (req: Request, res: Response) => {
     await productRepo.remove(product);
     return res.status(204).send();
   } catch (error) {
-    return res.status(500).json({ message: "Error deleting product", error });
+    return res.status(500).json({ message: "Error deleting product" });
   }
 };
 
-// Add an additional gallery image to a product. The first image ever
-// uploaded also becomes/stays the cover image (product.imageUrl) for
-// backward compatibility with existing product cards.
 export const addProductImage = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -197,7 +197,11 @@ export const addProductImage = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "No image file provided" });
     }
 
-    const { product, allowed } = await findOwnedProduct(id, userId, req.user!.role);
+    const { product, allowed } = await findOwnedProduct(
+      id,
+      userId,
+      req.user!.role,
+    );
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
@@ -206,7 +210,11 @@ export const addProductImage = async (req: Request, res: Response) => {
     }
 
     const image = await productImageRepo.save(
-      productImageRepo.create({ url: file.path, publicId: file.filename, product }),
+      productImageRepo.create({
+        url: file.path,
+        publicId: file.filename,
+        product,
+      }),
     );
 
     if (!product.imageUrl) {
@@ -216,12 +224,10 @@ export const addProductImage = async (req: Request, res: Response) => {
 
     return res.status(201).json(image);
   } catch (error) {
-    return res.status(500).json({ message: "Error adding product image", error });
+    return res.status(500).json({ message: "Error adding product image" });
   }
 };
 
-// Remove a gallery image. If it was the cover image, promotes the next
-// remaining image (if any) to be the new cover.
 export const removeProductImage = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -234,15 +240,14 @@ export const removeProductImage = async (req: Request, res: Response) => {
     if (!image) return res.status(404).json({ message: "Image not found" });
 
     const allowed =
-      image.product.shop.owner.id === userId || req.user!.role === UserRole.SUPER_ADMIN;
+      image.product.shop.owner.id === userId ||
+      req.user!.role === UserRole.SUPER_ADMIN;
     if (!allowed) return res.status(403).json({ message: "Forbidden" });
 
     if (image.publicId) {
       try {
         await cloudinary.uploader.destroy(image.publicId);
-      } catch {
-        // Non-fatal — still remove the DB record even if Cloudinary cleanup fails
-      }
+      } catch {}
     }
 
     const product = image.product;
@@ -260,6 +265,6 @@ export const removeProductImage = async (req: Request, res: Response) => {
 
     return res.status(204).send();
   } catch (error) {
-    return res.status(500).json({ message: "Error removing product image", error });
+    return res.status(500).json({ message: "Error removing product image" });
   }
 };

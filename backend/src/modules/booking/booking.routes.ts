@@ -11,12 +11,20 @@ import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { paymentLimiter } from "../../middleware/rate-limit.middleware";
 import { UserRole } from "../users/entities/user.entities";
+import { uuidParam } from "../../middleware/validate.middleware";
 
 const router = Router();
 
+router.param("id", uuidParam);
+
 router.post("/", authMiddleware, paymentLimiter, createBooking);
 router.get("/mine", authMiddleware, getMyBookings);
-router.get("/shop", authMiddleware, authorize(UserRole.ARTISAN), getShopBookings);
+router.get(
+  "/shop",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  getShopBookings,
+);
 router.get(
   "/admin/all",
   authMiddleware,

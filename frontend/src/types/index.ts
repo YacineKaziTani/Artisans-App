@@ -35,6 +35,12 @@ export interface PaginatedResponse<T> {
   limit: number;
 }
 
+export interface PageMeta {
+  total: number;
+  page: number;
+  lastPage: number;
+}
+
 export interface ApiError {
   message: string;
   statusCode: number;

@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useShopOrders, useUpdateOrderStatus } from "@/hooks/useOrders";
+import { isAxiosError } from "axios";
 import type { OrderStatus } from "@/types";
 
 const STATUS_STYLES: Record<OrderStatus, string> = {
@@ -97,6 +98,14 @@ export function ShopOrdersTab() {
 
                   {order.status === "pending" && (
                     <div className="space-y-2">
+                      {updateStatus.isError &&
+                        updateStatus.variables?.id === order.id && (
+                          <p className="p-2 bg-red-100 border border-red-300 rounded text-red-800 text-xs">
+                            {(isAxiosError(updateStatus.error) &&
+                              updateStatus.error.response?.data?.message) ||
+                              "Couldn't update this order. Please try again."}
+                          </p>
+                        )}
                       {order.paymentStatus === "authorized" && (
                         <p className="text-xs text-gray-500">
                           Marking fulfilled will charge the client's card. Cancelling releases the hold instead.

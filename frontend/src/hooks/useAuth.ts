@@ -18,13 +18,11 @@ export function useMe() {
     retry: false,
     staleTime: Infinity,
     enabled: isAuthenticated,
-    // Allow checking the session even if local storage is empty
-    // This allows auto-login via cookies.
   });
 
   useEffect(() => {
     if (query.data) setAuth(query.data);
-    if (query.isError) logout(); // If session check fails, clear local state
+    if (query.isError) logout();
   }, [query.data, query.isError, setAuth, logout]);
 
   return query;
@@ -54,7 +52,7 @@ export function useRegister() {
     mutationFn: (payload: RegisterPayload) => authApi.register(payload),
     onSuccess: ({ user }) => {
       setAuth(user);
-      qc.setQueryData(authKeys.me, user); // Prime the cache like login does
+      qc.setQueryData(authKeys.me, user);
       navigate("/dashboard");
     },
   });

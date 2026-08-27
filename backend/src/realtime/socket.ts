@@ -6,6 +6,7 @@ import {
   findConversationForParticipant,
   persistMessage,
   otherParticipantId,
+  MAX_MESSAGE_LENGTH,
 } from "../modules/messaging/conversation.controller";
 import { UserRole } from "../modules/users/entities/user.entities";
 
@@ -26,9 +27,6 @@ export function initSocketServer(httpServer: HttpServer) {
     },
   });
 
-  // Auth handshake: same JWT cookie the REST API uses, since the frontend
-  // already sends it automatically (withCredentials) — no separate token
-  // flow needed for sockets.
   io.use((socket: AuthedSocket, next) => {
     try {
       const rawCookie = socket.handshake.headers.cookie;
@@ -51,10 +49,10 @@ export function initSocketServer(httpServer: HttpServer) {
 
   io.on("connection", (socket: AuthedSocket) => {
     const userId = socket.userId!;
+    const sendWindow = { start: Date.now(), count: 0 };
+    const SEND_LIMIT = 30;
+    const SEND_WINDOW_MS = 10_000;
 
-    // Personal room — lets us push conversation-list updates to a user
-    // regardless of which (if any) conversation thread they currently have
-    // open, e.g. so their inbox re-sorts/badges live.
     socket.join(`user:${userId}`);
     if (socket.userRole === UserRole.SUPER_ADMIN) {
       socket.join("admins");
@@ -85,11 +83,27 @@ export function initSocketServer(httpServer: HttpServer) {
           if (!content?.trim()) {
             return ack?.({ ok: false, message: "content is required" });
           }
+          if (content.length > MAX_MESSAGE_LENGTH) {
+            return ack?.({
+              ok: false,
+              message: `Messages are limited to ${MAX_MESSAGE_LENGTH} characters`,
+            });
+          }
 
-          const { conversation, allowed } = await findConversationForParticipant(
-            conversationId,
-            userId,
-          );
+          const now = Date.now();
+          if (now - sendWindow.start > SEND_WINDOW_MS) {
+            sendWindow.start = now;
+            sendWindow.count = 0;
+          }
+          if (++sendWindow.count > SEND_LIMIT) {
+            return ack?.({
+              ok: false,
+              message: "You're sending messages too quickly",
+            });
+          }
+
+          const { conversation, allowed } =
+            await findConversationForParticipant(conversationId, userId);
           if (!conversation) {
             return ack?.({ ok: false, message: "Conversation not found" });
           }
@@ -104,8 +118,6 @@ export function initSocketServer(httpServer: HttpServer) {
             message: saved,
           });
 
-          // Notify the other participant's personal room too, in case they
-          // don't have this thread open (updates their inbox list/badge).
           const otherId = otherParticipantId(conversation, userId);
           io!.to(`user:${otherId}`).emit("conversation_updated", {
             conversationId,

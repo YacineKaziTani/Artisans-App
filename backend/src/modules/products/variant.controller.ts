@@ -1,7 +1,11 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { Product } from "./product.entities";
-import { VariantOption, VariantValue, ProductVariant } from "./variant.entities";
+import {
+  VariantOption,
+  VariantValue,
+  ProductVariant,
+} from "./variant.entities";
 import { UserRole } from "../users/entities/user.entities";
 
 const productRepo = AppDataSource.getRepository(Product);
@@ -9,17 +13,20 @@ const optionRepo = AppDataSource.getRepository(VariantOption);
 const valueRepo = AppDataSource.getRepository(VariantValue);
 const variantRepo = AppDataSource.getRepository(ProductVariant);
 
-async function findOwnedProduct(productId: string, userId: string, role?: UserRole) {
+async function findOwnedProduct(
+  productId: string,
+  userId: string,
+  role?: UserRole,
+) {
   const product = await productRepo.findOne({
     where: { id: productId },
     relations: ["shop", "shop.owner"],
   });
   if (!product) return { product: null, allowed: false };
-  const allowed = product.shop.owner.id === userId || role === UserRole.SUPER_ADMIN;
+  const allowed =
+    product.shop.owner.id === userId || role === UserRole.SUPER_ADMIN;
   return { product, allowed };
 }
-
-// ── Variant Options (e.g. "Size", "Color") ──────────────────────────────────
 
 export const createVariantOption = async (req: Request, res: Response) => {
   try {
@@ -31,7 +38,11 @@ export const createVariantOption = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "name is required" });
     }
 
-    const { product, allowed } = await findOwnedProduct(productId, userId, req.user!.role);
+    const { product, allowed } = await findOwnedProduct(
+      productId,
+      userId,
+      req.user!.role,
+    );
     if (!product) return res.status(404).json({ message: "Product not found" });
     if (!allowed) return res.status(403).json({ message: "Forbidden" });
 
@@ -40,7 +51,7 @@ export const createVariantOption = async (req: Request, res: Response) => {
     );
     return res.status(201).json(option);
   } catch (error) {
-    return res.status(500).json({ message: "Error creating variant option", error });
+    return res.status(500).json({ message: "Error creating variant option" });
   }
 };
 
@@ -64,7 +75,7 @@ export const deleteVariantOption = async (req: Request, res: Response) => {
     await optionRepo.remove(option);
     return res.status(204).send();
   } catch (error) {
-    return res.status(500).json({ message: "Error deleting variant option", error });
+    return res.status(500).json({ message: "Error deleting variant option" });
   }
 };
 
@@ -101,7 +112,7 @@ export const createVariantValue = async (req: Request, res: Response) => {
     );
     return res.status(201).json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Error creating variant value", error });
+    return res.status(500).json({ message: "Error creating variant value" });
   }
 };
 
@@ -112,7 +123,12 @@ export const deleteVariantValue = async (req: Request, res: Response) => {
 
     const value = await valueRepo.findOne({
       where: { id },
-      relations: ["option", "option.product", "option.product.shop", "option.product.shop.owner"],
+      relations: [
+        "option",
+        "option.product",
+        "option.product.shop",
+        "option.product.shop.owner",
+      ],
     });
     if (!value) return res.status(404).json({ message: "Value not found" });
     if (
@@ -125,7 +141,7 @@ export const deleteVariantValue = async (req: Request, res: Response) => {
     await valueRepo.remove(value);
     return res.status(204).send();
   } catch (error) {
-    return res.status(500).json({ message: "Error deleting variant value", error });
+    return res.status(500).json({ message: "Error deleting variant value" });
   }
 };
 
@@ -138,10 +154,16 @@ export const createProductVariant = async (req: Request, res: Response) => {
     const { valueIds, sku, stockQuantity, priceOverride } = req.body;
 
     if (!Array.isArray(valueIds) || valueIds.length === 0) {
-      return res.status(400).json({ message: "valueIds must be a non-empty array" });
+      return res
+        .status(400)
+        .json({ message: "valueIds must be a non-empty array" });
     }
 
-    const { product, allowed } = await findOwnedProduct(productId, userId, req.user!.role);
+    const { product, allowed } = await findOwnedProduct(
+      productId,
+      userId,
+      req.user!.role,
+    );
     if (!product) return res.status(404).json({ message: "Product not found" });
     if (!allowed) return res.status(403).json({ message: "Forbidden" });
 
@@ -150,7 +172,9 @@ export const createProductVariant = async (req: Request, res: Response) => {
       relations: ["option", "option.product"],
     });
     if (values.length !== new Set(valueIds).size) {
-      return res.status(404).json({ message: "One or more values were not found" });
+      return res
+        .status(404)
+        .json({ message: "One or more values were not found" });
     }
     if (values.some((v) => v.option.product.id !== productId)) {
       return res
@@ -176,7 +200,7 @@ export const createProductVariant = async (req: Request, res: Response) => {
     );
     return res.status(201).json(variant);
   } catch (error) {
-    return res.status(500).json({ message: "Error creating product variant", error });
+    return res.status(500).json({ message: "Error creating product variant" });
   }
 };
 
@@ -205,7 +229,7 @@ export const updateProductVariant = async (req: Request, res: Response) => {
     const saved = await variantRepo.save(variant);
     return res.json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Error updating product variant", error });
+    return res.status(500).json({ message: "Error updating product variant" });
   }
 };
 
@@ -229,6 +253,6 @@ export const deleteProductVariant = async (req: Request, res: Response) => {
     await variantRepo.remove(variant);
     return res.status(204).send();
   } catch (error) {
-    return res.status(500).json({ message: "Error deleting product variant", error });
+    return res.status(500).json({ message: "Error deleting product variant" });
   }
 };

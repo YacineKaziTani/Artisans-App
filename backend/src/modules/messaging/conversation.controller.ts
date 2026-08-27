@@ -3,27 +3,39 @@ import { AppDataSource } from "../../data-source";
 import { Conversation } from "./conversation.entities";
 import { Message } from "./message.entities";
 import { Shop } from "../shop/shop.entities";
+import { parsePagination } from "../../middleware/validate.middleware";
 import { User } from "../users/entities/user.entities";
+
+export const MAX_MESSAGE_LENGTH = 2000;
 
 const conversationRepo = AppDataSource.getRepository(Conversation);
 const messageRepo = AppDataSource.getRepository(Message);
 const shopRepo = AppDataSource.getRepository(Shop);
 
 async function isParticipant(conversation: Conversation, userId: string) {
-  return conversation.client.id === userId || conversation.shop.owner.id === userId;
+  return (
+    conversation.client.id === userId || conversation.shop.owner.id === userId
+  );
 }
 
-async function unreadCountFor(conversationId: string, viewerId: string) {
-  return messageRepo
+async function unreadCountsFor(conversationIds: string[], viewerId: string) {
+  if (conversationIds.length === 0) return new Map<string, number>();
+
+  const rows = await messageRepo
     .createQueryBuilder("message")
-    .where("message.conversationId = :conversationId", { conversationId })
+    .select("message.conversationId", "conversationId")
+    .addSelect("COUNT(*)", "count")
+    .where("message.conversationId IN (:...conversationIds)", {
+      conversationIds,
+    })
     .andWhere("message.senderId != :viewerId", { viewerId })
     .andWhere("message.readAt IS NULL")
-    .getCount();
+    .groupBy("message.conversationId")
+    .getRawMany<{ conversationId: string; count: string }>();
+
+  return new Map(rows.map((r) => [r.conversationId, Number(r.count)]));
 }
 
-// Shared by the REST endpoint and the Socket.io handler so both paths
-// enforce the same participant check and persist the same way.
 export async function findConversationForParticipant(
   conversationId: string,
   userId: string,
@@ -57,7 +69,10 @@ export async function persistMessage(
   });
 }
 
-export function otherParticipantId(conversation: Conversation, senderId: string) {
+export function otherParticipantId(
+  conversation: Conversation,
+  senderId: string,
+) {
   return conversation.client.id === senderId
     ? conversation.shop.owner.id
     : conversation.client.id;
@@ -100,12 +115,10 @@ export const startConversation = async (req: Request, res: Response) => {
 
     return res.status(201).json(conversation);
   } catch (error) {
-    return res.status(500).json({ message: "Error starting conversation", error });
+    return res.status(500).json({ message: "Error starting conversation" });
   }
 };
 
-// Conversations the logged-in user is part of — as the client, or as the
-// artisan whose shop is being messaged.
 export const getMyConversations = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -120,21 +133,19 @@ export const getMyConversations = async (req: Request, res: Response) => {
       .orderBy("conversation.updatedAt", "DESC")
       .getMany();
 
-    const withUnread = await Promise.all(
-      conversations.map(async (c) => ({
-        ...c,
-        unreadCount: await unreadCountFor(c.id, userId),
-      })),
+    const unread = await unreadCountsFor(
+      conversations.map((c) => c.id),
+      userId,
     );
 
-    return res.json(withUnread);
+    return res.json(
+      conversations.map((c) => ({ ...c, unreadCount: unread.get(c.id) ?? 0 })),
+    );
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching conversations", error });
+    return res.status(500).json({ message: "Error fetching conversations" });
   }
 };
 
-// Messages in a conversation — participant only. Marks the other party's
-// messages as read as a side effect of viewing.
 export const getConversationMessages = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -168,7 +179,7 @@ export const getConversationMessages = async (req: Request, res: Response) => {
 
     return res.json({ conversation, messages });
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching messages", error });
+    return res.status(500).json({ message: "Error fetching messages" });
   }
 };
 
@@ -179,8 +190,13 @@ export const sendMessage = async (req: Request, res: Response) => {
     const id = String(req.params.id);
     const { content } = req.body;
 
-    if (!content || !content.trim()) {
+    if (!content || typeof content !== "string" || !content.trim()) {
       return res.status(400).json({ message: "content is required" });
+    }
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      return res.status(400).json({
+        message: `Messages are limited to ${MAX_MESSAGE_LENGTH} characters`,
+      });
     }
 
     const { conversation, allowed } = await findConversationForParticipant(
@@ -197,26 +213,35 @@ export const sendMessage = async (req: Request, res: Response) => {
     const saved = await persistMessage(conversation, userId, content);
     return res.status(201).json(saved);
   } catch (error) {
-    return res.status(500).json({ message: "Error sending message", error });
+    return res.status(500).json({ message: "Error sending message" });
   }
 };
 
-// All conversations platform-wide — super_admin oversight, read-only.
 export const getAllConversationsAdmin = async (req: Request, res: Response) => {
   try {
-    const conversations = await conversationRepo.find({
+    const { page, take, skip } = parsePagination(req.query, {
+      defaultLimit: 50,
+      maxLimit: 200,
+    });
+    const [conversations, total] = await conversationRepo.findAndCount({
       relations: ["client", "shop", "shop.owner"],
       order: { updatedAt: "DESC" },
+      skip,
+      take,
     });
-    return res.json(conversations);
+    return res.json({
+      data: conversations,
+      meta: { total, page, lastPage: Math.ceil(total / take) },
+    });
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching conversations", error });
+    return res.status(500).json({ message: "Error fetching conversations" });
   }
 };
 
-// Messages in any conversation — super_admin oversight, read-only (does not
-// mark messages as read, since the admin isn't a participant).
-export const getConversationMessagesAdmin = async (req: Request, res: Response) => {
+export const getConversationMessagesAdmin = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const id = String(req.params.id);
 
@@ -236,6 +261,6 @@ export const getConversationMessagesAdmin = async (req: Request, res: Response) 
 
     return res.json({ conversation, messages });
   } catch (error) {
-    return res.status(500).json({ message: "Error fetching messages", error });
+    return res.status(500).json({ message: "Error fetching messages" });
   }
 };

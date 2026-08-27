@@ -21,8 +21,14 @@ import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { UserRole } from "../users/entities/user.entities";
 import { parser } from "../../config/cloudinary";
+import { uuidParam } from "../../middleware/validate.middleware";
 
 const router = Router();
+
+router.param("id", uuidParam);
+router.param("productId", uuidParam);
+router.param("optionId", uuidParam);
+router.param("imageId", uuidParam);
 
 router.get("/", getAllProducts);
 router.get("/mine", authMiddleware, authorize(UserRole.ARTISAN), getMyProducts);
@@ -62,14 +68,49 @@ router.delete(
 // ── Variant options/values/SKUs ─────────────────────────────────────────────
 const artisanOrAdmin = authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN);
 
-router.post("/:productId/variant-options", authMiddleware, artisanOrAdmin, createVariantOption);
-router.delete("/variant-options/:id", authMiddleware, artisanOrAdmin, deleteVariantOption);
+router.post(
+  "/:productId/variant-options",
+  authMiddleware,
+  artisanOrAdmin,
+  createVariantOption,
+);
+router.delete(
+  "/variant-options/:id",
+  authMiddleware,
+  artisanOrAdmin,
+  deleteVariantOption,
+);
 
-router.post("/variant-options/:optionId/values", authMiddleware, artisanOrAdmin, createVariantValue);
-router.delete("/variant-values/:id", authMiddleware, artisanOrAdmin, deleteVariantValue);
+router.post(
+  "/variant-options/:optionId/values",
+  authMiddleware,
+  artisanOrAdmin,
+  createVariantValue,
+);
+router.delete(
+  "/variant-values/:id",
+  authMiddleware,
+  artisanOrAdmin,
+  deleteVariantValue,
+);
 
-router.post("/:productId/variants", authMiddleware, artisanOrAdmin, createProductVariant);
-router.patch("/variants/:id", authMiddleware, artisanOrAdmin, updateProductVariant);
-router.delete("/variants/:id", authMiddleware, artisanOrAdmin, deleteProductVariant);
+router.post(
+  "/:productId/variants",
+  authMiddleware,
+  artisanOrAdmin,
+  createProductVariant,
+);
+router.patch(
+  "/variants/:id",
+  authMiddleware,
+  artisanOrAdmin,
+  updateProductVariant,
+);
+router.delete(
+  "/variants/:id",
+  authMiddleware,
+  artisanOrAdmin,
+  deleteProductVariant,
+);
 
 export default router;

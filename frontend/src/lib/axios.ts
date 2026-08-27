@@ -5,19 +5,19 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-// ── Request interceptor: attach JWT ──────────────────────────────────────────
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+const AUTH_ENDPOINTS = ["/auth/login", "/auth/register", "/auth/me"];
 
-// ── Response interceptor: handle 401 globally ────────────────────────────────
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("access_token");
+    const url = error.config?.url ?? "";
+    const isAuthCall = AUTH_ENDPOINTS.some((path) => url.startsWith(path));
+
+    if (
+      error.response?.status === 401 &&
+      !isAuthCall &&
+      window.location.pathname !== "/login"
+    ) {
       window.location.href = "/login";
     }
     return Promise.reject(error);
