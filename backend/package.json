@@ -36,7 +36,7 @@
     "typescript": "^6.0.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
