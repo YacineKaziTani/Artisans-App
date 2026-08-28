@@ -54,5 +54,7 @@ export const AppDataSource = new DataSource({
     Dispute,
     Favorite,
   ],
-  migrations: ["src/migrations/*.ts"],
+  // Anchored to this file's own directory, not the cwd: resolves to
+  // src/migrations/*.ts under ts-node and dist/migrations/*.js once compiled.
+  migrations: [__dirname + "/migrations/*.{ts,js}"],
 });
