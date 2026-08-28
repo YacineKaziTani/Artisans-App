@@ -25,13 +25,13 @@ import { User } from "./modules/users/entities/user.entities";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT),
-  username: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  synchronize: process.env.NODE_ENV !== "production",
-
+  url: process.env.DATABASE_URL,
+  // Render Postgres requires TLS but serves a cert node-pg will not verify.
+  ssl: { rejectUnauthorized: false },
+  // Temporary: lets the hosted DB build its schema from the entities. Turn
+  // this off (drop DB_SYNC) and switch to migrations before real traffic.
+  synchronize:
+    process.env.DB_SYNC === "true" || process.env.NODE_ENV !== "production",
   logging: process.env.NODE_ENV === "development",
   entities: [
     User,

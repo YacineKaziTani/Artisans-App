@@ -20,7 +20,7 @@ let io: Server | null = null;
 export function initSocketServer(httpServer: HttpServer) {
   io = new Server(httpServer, {
     cors: {
-      origin: (process.env.CORS_ORIGIN ?? "http://localhost:5173")
+      origin: (process.env.FRONTEND_URL ?? "http://localhost:5173")
         .split(",")
         .map((o) => o.trim()),
       credentials: true,

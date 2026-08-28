@@ -1,7 +1,8 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: "/api",
+  // Vercel has no dev proxy, so production needs the absolute Render URL.
+  baseURL: import.meta.env.VITE_API_URL ?? "/api",
   withCredentials: true,
 });
 

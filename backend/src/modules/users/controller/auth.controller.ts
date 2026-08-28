@@ -5,6 +5,10 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { User, UserRole } from "../entities/user.entities";
 import { sendMail } from "../../../config/mail";
+import {
+  COOKIE_OPTIONS,
+  CLEAR_COOKIE_OPTIONS,
+} from "../../../config/cookie";
 
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MIN_PASSWORD_LENGTH = 8;
@@ -38,13 +42,6 @@ function issueToken(user: User) {
     { expiresIn: "7d" },
   );
 }
-
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-} as const;
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -170,11 +167,7 @@ export const login = async (req: Request, res: Response) => {
 };
 
 export const logout = (_req: Request, res: Response) => {
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-  });
+  res.clearCookie("token", CLEAR_COOKIE_OPTIONS);
   res.json({ message: "Logged out" });
 };
 

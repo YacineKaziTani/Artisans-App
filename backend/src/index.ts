@@ -49,7 +49,7 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
-  const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
+  const allowedOrigins = (process.env.FRONTEND_URL ?? "http://localhost:5173")
     .split(",")
     .map((o) => o.trim());
 
@@ -59,6 +59,8 @@ async function bootstrap() {
       credentials: true,
     }),
   );
+
+  app.get("/healthz", (_req, res) => res.send("ok"));
 
   app.use("/api", generalLimiter);
 

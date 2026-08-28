@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { AppDataSource } from "../../../data-source";
 import bcrypt from "bcrypt";
 import { User, UserRole } from "../entities/user.entities";
+import { CLEAR_COOKIE_OPTIONS } from "../../../config/cookie";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -160,11 +161,7 @@ export const changeMyPassword = async (req: Request, res: Response) => {
     user.passwordChangedAt = new Date();
     await userRepo.save(user);
 
-    res.clearCookie("token", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-    });
+    res.clearCookie("token", CLEAR_COOKIE_OPTIONS);
     res.json({ message: "Password changed — please log in again" });
   } catch (error) {
     res.status(500).json({ error: "Server error changing password" });
