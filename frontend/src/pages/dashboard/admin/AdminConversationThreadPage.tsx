@@ -7,7 +7,7 @@ export default function AdminConversationThreadPage() {
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-500">
+      <div className="h-full flex items-center justify-center text-muted-foreground">
         Loading...
       </div>
     );
@@ -15,7 +15,7 @@ export default function AdminConversationThreadPage() {
 
   if (isError || !data) {
     return (
-      <div className="h-full flex items-center justify-center text-red-600 text-sm">
+      <div className="h-full flex items-center justify-center text-destructive text-sm">
         Couldn't load this conversation.
       </div>
     );
@@ -25,22 +25,22 @@ export default function AdminConversationThreadPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <div>
           <Link
             to="/dashboard/messages"
-            className="sm:hidden text-sm text-orange-700 mr-2"
+            className="sm:hidden text-sm text-primary mr-2"
           >
             ←
           </Link>
-          <span className="font-semibold text-gray-900">
+          <span className="font-semibold text-foreground">
             {conversation.client?.name} ↔ {conversation.shop?.shopName}
           </span>
         </div>
         {conversation.shop && (
           <Link
             to={`/artisan/${conversation.shop.id}`}
-            className="text-sm text-orange-700 hover:underline"
+            className="text-sm text-primary hover:underline"
           >
             View Shop
           </Link>
@@ -49,7 +49,7 @@ export default function AdminConversationThreadPage() {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && (
-          <p className="text-sm text-gray-500 text-center mt-8">No messages yet.</p>
+          <p className="text-sm text-muted-foreground text-center mt-8">No messages yet.</p>
         )}
         {messages.map((m) => {
           const isClient = m.sender?.id === conversation.client?.id;
@@ -58,8 +58,8 @@ export default function AdminConversationThreadPage() {
               <div
                 className={`max-w-[70%] rounded-2xl px-4 py-2 text-sm ${
                   isClient
-                    ? "bg-gray-100 text-gray-900 rounded-bl-sm"
-                    : "bg-orange-100 text-orange-900 rounded-br-sm"
+                    ? "bg-muted text-foreground rounded-bl-sm"
+                    : "bg-brand-100 text-foreground rounded-br-sm"
                 }`}
               >
                 <p className="text-[10px] font-semibold mb-0.5 opacity-70">

@@ -1,20 +1,20 @@
 export default function RefundPolicyPage() {
   return (
-    <main className="min-h-screen bg-gray-50 py-16 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto bg-white rounded-xl border border-gray-200 p-8 sm:p-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Refund Policy</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: [date]</p>
+    <main className="page-narrow py-16">
+      <div className="surface p-8 sm:p-12">
+        <h1 className="font-display text-4xl font-semibold">Refund Policy</h1>
+        <p className="mt-2 mb-10 text-sm text-muted-foreground">Last updated: [date]</p>
 
-        <div className="p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-900 mb-8">
+        <div className="alert-note mb-10">
           <strong>Template notice:</strong> this is placeholder content and
           not legal advice. Refund/consumer-protection rules vary by
           jurisdiction — have a qualified lawyer review this before going
           live with real payments.
         </div>
 
-        <div className="prose prose-gray max-w-none space-y-6 text-gray-700">
+        <div className="space-y-8 leading-relaxed text-muted-foreground">
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="mb-2 font-display text-xl font-semibold text-foreground">
               Cancelling a booking or order
             </h2>
             <p>
@@ -26,7 +26,7 @@ export default function RefundPolicyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="mb-2 font-display text-xl font-semibold text-foreground">
               Once a service is completed or a product is fulfilled
             </h2>
             <p>
@@ -38,7 +38,7 @@ export default function RefundPolicyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="mb-2 font-display text-xl font-semibold text-foreground">
               Disputes
             </h2>
             <p>
@@ -51,7 +51,7 @@ export default function RefundPolicyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="mb-2 font-display text-xl font-semibold text-foreground">
               Artisan-suspended or closed shops
             </h2>
             <p>

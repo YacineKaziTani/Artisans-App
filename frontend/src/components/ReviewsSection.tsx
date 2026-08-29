@@ -23,7 +23,7 @@ function StarPicker({
           key={n}
           type="button"
           onClick={() => onChange(n)}
-          className={`text-2xl leading-none ${n <= value ? "text-amber-500" : "text-gray-300"}`}
+          className={`text-2xl leading-none ${n <= value ? "text-amber-500" : "text-muted-foreground/50"}`}
           aria-label={`${n} star${n > 1 ? "s" : ""}`}
         >
           ★
@@ -37,7 +37,7 @@ function Stars({ rating }: { rating: number }) {
   return (
     <span className="text-amber-500 text-sm">
       {"★".repeat(Math.round(rating))}
-      <span className="text-gray-300">{"★".repeat(5 - Math.round(rating))}</span>
+      <span className="text-muted-foreground/50">{"★".repeat(5 - Math.round(rating))}</span>
     </span>
   );
 }
@@ -72,24 +72,24 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
 
   return (
     <div className="mt-12">
-      <h2 className="text-3xl font-bold text-orange-900 mb-6">Reviews</h2>
+      <h2 className="text-3xl font-bold text-foreground mb-6">Reviews</h2>
 
       {isLoading && (
         <div className="space-y-3">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="h-20 rounded-xl bg-white/60 animate-pulse" />
+            <div key={i} className="h-20 rounded-xl bg-card animate-pulse" />
           ))}
         </div>
       )}
 
       {isError && (
-        <p className="text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-4">
+        <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4">
           Couldn't load reviews right now.
         </p>
       )}
 
       {!isLoading && !isError && (reviews ?? []).length === 0 && (
-        <p className="text-amber-900 bg-white/70 border-2 border-orange-100 rounded-xl p-6 mb-6">
+        <p className="text-foreground/80 bg-white/70 border border-border rounded-xl p-6 mb-6">
           No reviews yet.
         </p>
       )}
@@ -99,11 +99,11 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
           {reviews!.map((review) => (
             <div
               key={review.id}
-              className="bg-white/90 border-2 border-orange-100 rounded-xl p-5"
+              className="bg-card border border-border rounded-xl p-5"
             >
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
-                  <p className="font-semibold text-orange-900">
+                  <p className="font-semibold text-foreground">
                     {review.author?.name ?? "Anonymous"}
                   </p>
                   <Stars rating={review.rating} />
@@ -121,7 +121,7 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
                   isAuthenticated && (
                     <button
                       type="button"
-                      className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+                      className="text-xs text-muted-foreground hover:text-foreground hover:underline"
                       onClick={() => setReportingReviewId(review.id)}
                     >
                       Report
@@ -130,7 +130,7 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
                 )}
               </div>
               {review.comment && (
-                <p className="text-amber-900 text-sm mt-2">{review.comment}</p>
+                <p className="text-foreground/80 text-sm mt-2">{review.comment}</p>
               )}
             </div>
           ))}
@@ -146,15 +146,15 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
           ) : (
             <form
               onSubmit={handleSubmit}
-              className="bg-white/90 border-2 border-orange-200 rounded-xl p-5 space-y-4"
+              className="bg-card border border-border rounded-xl p-5 space-y-4"
             >
               {createReview.isError && (
-                <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+                <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
                   Couldn't submit your review. Please try again.
                 </div>
               )}
               <div>
-                <p className="text-sm font-medium text-orange-900 mb-1">Rating</p>
+                <p className="text-sm font-medium text-foreground mb-1">Rating</p>
                 <StarPicker value={rating} onChange={setRating} />
               </div>
               <Textarea
@@ -181,7 +181,7 @@ export function ReviewsSection({ shopId }: { shopId: string }) {
       )}
 
       {!isAuthenticated && (
-        <p className="text-sm text-amber-800">
+        <p className="text-sm text-muted-foreground">
           Log in to leave a review.
         </p>
       )}

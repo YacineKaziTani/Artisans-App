@@ -10,16 +10,16 @@ import type { OrderStatus } from "@/types";
 
 const STATUS_STYLES: Record<OrderStatus, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  fulfilled: "bg-green-100 text-green-800 border-green-300",
-  cancelled: "bg-red-100 text-red-800 border-red-300",
+  fulfilled: "bg-jade-50 text-jade-600 border-jade-500/25",
+  cancelled: "bg-destructive/10 text-destructive border-destructive/25",
 };
 
 const PAYMENT_STYLES: Record<string, string> = {
-  unpaid: "bg-gray-100 text-gray-700 border-gray-300",
-  authorized: "bg-blue-100 text-blue-800 border-blue-300",
-  paid: "bg-green-100 text-green-800 border-green-300",
-  refunded: "bg-orange-100 text-orange-800 border-orange-300",
-  failed: "bg-red-100 text-red-800 border-red-300",
+  unpaid: "bg-muted text-foreground/80 border-border",
+  authorized: "bg-sky-100 text-sky-800 border-sky-200",
+  paid: "bg-jade-50 text-jade-600 border-jade-500/25",
+  refunded: "bg-brand-100 text-primary border-border",
+  failed: "bg-destructive/10 text-destructive border-destructive/25",
 };
 
 export default function AdminOrdersPage() {
@@ -28,8 +28,8 @@ export default function AdminOrdersPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
-        <p className="text-gray-600">All product orders across the platform</p>
+        <h1 className="text-3xl font-bold text-foreground">Orders</h1>
+        <p className="text-muted-foreground">All product orders across the platform</p>
       </div>
 
       <Card>
@@ -41,19 +41,19 @@ export default function AdminOrdersPage() {
           {isLoading && (
             <div className="space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
               ))}
             </div>
           )}
 
           {isError && (
-            <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
               Couldn't load orders.
             </p>
           )}
 
           {!isLoading && !isError && (orders ?? []).length === 0 && (
-            <p className="text-gray-600 text-sm">No orders yet.</p>
+            <p className="text-muted-foreground text-sm">No orders yet.</p>
           )}
 
           {!isLoading &&
@@ -61,16 +61,16 @@ export default function AdminOrdersPage() {
             (orders ?? []).map((order) => (
               <div
                 key={order.id}
-                className="border border-gray-200 rounded-lg p-3 flex items-center justify-between flex-wrap gap-2"
+                className="border border-border rounded-lg p-3 flex items-center justify-between flex-wrap gap-2"
               >
                 <div>
-                  <p className="font-medium text-gray-900">
+                  <p className="font-medium text-foreground">
                     {order.product?.title} × {order.quantity}
                   </p>
                   {order.variantLabel && (
-                    <p className="text-xs text-gray-500">{order.variantLabel}</p>
+                    <p className="text-xs text-muted-foreground">{order.variantLabel}</p>
                   )}
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     {order.shop?.shopName} · {order.client?.name} · $
                     {Number(order.totalAmount).toFixed(2)}
                   </p>

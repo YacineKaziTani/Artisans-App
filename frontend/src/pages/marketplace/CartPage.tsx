@@ -1,6 +1,17 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Elements } from "@stripe/react-stripe-js";
+import {
+  CheckCircle2,
+  Lock,
+  Minus,
+  Package,
+  Plus,
+  ShoppingBag,
+  Store,
+  Trash2,
+  Truck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useCartStore } from "@/store/cart.store";
@@ -37,31 +48,37 @@ export default function CartPage() {
         })),
         delivery: {
           deliveryMethod,
-          shippingAddress: deliveryMethod === "delivery" ? shippingAddress : undefined,
+          shippingAddress:
+            deliveryMethod === "delivery" ? shippingAddress : undefined,
         },
       },
       { onSuccess: (result) => setClientSecret(result.clientSecret) },
     );
   };
 
+  /* ── Post-payment confirmation ──────────────────────────────── */
   if (confirmed) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-lg mx-auto text-center bg-white/90 border-2 border-orange-200 rounded-xl p-10 space-y-4">
-          <div className="text-5xl">✅</div>
-          <h1 className="text-2xl font-bold text-orange-900">Payment Authorized</h1>
-          <p className="text-amber-900">
-            Your card has been authorized and the artisans have been
-            notified. You'll be charged once each order is fulfilled — if an
-            artisan can't fulfill theirs, that hold is released and you're
-            not charged for it.
+      <main className="page-narrow py-20">
+        <div className="surface mx-auto max-w-lg p-10 text-center">
+          <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-jade-50 text-jade-500">
+            <CheckCircle2 className="size-7" />
+          </span>
+          <h1 className="mt-6 font-display text-2xl font-semibold">
+            Payment authorized
+          </h1>
+          <p className="mt-3 leading-relaxed text-muted-foreground">
+            Your card has been authorized and the artisans have been notified.
+            You'll be charged once each order is fulfilled — if an artisan
+            can't fulfill theirs, that hold is released and you're not charged
+            for it.
           </p>
-          <div className="flex gap-2 justify-center">
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Button onClick={() => navigate("/profile-client")}>
-              View My Orders
+              View my orders
             </Button>
             <Button variant="outline" onClick={() => navigate("/categories")}>
-              Keep Browsing
+              Keep browsing
             </Button>
           </div>
         </div>
@@ -69,161 +86,46 @@ export default function CartPage() {
     );
   }
 
+  /* ── Empty cart ─────────────────────────────────────────────── */
   if (items.length === 0) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-lg mx-auto text-center">
-          <h1 className="text-3xl font-bold text-orange-900 mb-4">Your Cart</h1>
-          <p className="text-amber-900 mb-6">Your cart is empty.</p>
-          <Link to="/categories">
-            <Button>Browse Artisans</Button>
-          </Link>
+      <main className="page-narrow py-20">
+        <div className="surface mx-auto max-w-lg p-12 text-center">
+          <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+            <ShoppingBag className="size-7" />
+          </span>
+          <h1 className="mt-6 font-display text-2xl font-semibold">
+            Your cart is empty
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Browse the marketplace and add something you like.
+          </p>
+          <Button asChild variant="gradient" className="mt-7">
+            <Link to="/products">Browse products</Link>
+          </Button>
         </div>
       </main>
     );
   }
 
+  /* ── Cart ───────────────────────────────────────────────────── */
   return (
-    <main className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 py-16 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-4xl font-bold text-orange-900 mb-8">Your Cart</h1>
+    <main className="page-shell py-12">
+      <div className="mb-8">
+        <h1 className="font-display text-4xl font-semibold">Your cart</h1>
+        <p className="mt-2 text-muted-foreground">
+          {items.length} item{items.length === 1 ? "" : "s"} · paid to one
+          artisan per order
+        </p>
+      </div>
 
-        {!clientSecret && (
-          <>
-            <div className="space-y-4 mb-8">
-              {items.map((item) => (
-                <div
-                  key={`${item.productId}:${item.variantId ?? ""}`}
-                  className="bg-white/90 border-2 border-orange-100 rounded-xl p-5 flex items-center justify-between flex-wrap gap-4"
-                >
-                  <div>
-                    <p className="font-semibold text-orange-900">{item.title}</p>
-                    {item.variantLabel && (
-                      <p className="text-xs text-amber-700">{item.variantLabel}</p>
-                    )}
-                    <p className="text-sm text-amber-700">{item.shopName}</p>
-                    <p className="text-sm text-amber-800 mt-1">
-                      ${item.price.toFixed(2)} each
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="w-8 h-8 rounded border border-orange-300 text-orange-700"
-                        onClick={() =>
-                          setQuantity(item.productId, item.variantId, item.quantity - 1)
-                        }
-                      >
-                        −
-                      </button>
-                      <span className="w-6 text-center">{item.quantity}</span>
-                      <button
-                        type="button"
-                        className="w-8 h-8 rounded border border-orange-300 text-orange-700"
-                        onClick={() =>
-                          setQuantity(item.productId, item.variantId, item.quantity + 1)
-                        }
-                      >
-                        +
-                      </button>
-                    </div>
-                    <p className="font-semibold text-orange-900 w-20 text-right">
-                      ${(item.price * item.quantity).toFixed(2)}
-                    </p>
-                    <button
-                      type="button"
-                      className="text-red-600 text-sm hover:underline"
-                      onClick={() => removeItem(item.productId, item.variantId)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-white/90 border-2 border-orange-200 rounded-xl p-6 space-y-4">
-              <div>
-                <p className="text-sm font-medium text-orange-900 mb-2">Delivery</p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDeliveryMethod("pickup")}
-                    className={`flex-1 text-sm py-2 rounded-md border ${
-                      deliveryMethod === "pickup"
-                        ? "border-orange-600 bg-orange-50 text-orange-800"
-                        : "border-gray-300 text-gray-600"
-                    }`}
-                  >
-                    Pickup
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeliveryMethod("delivery")}
-                    className={`flex-1 text-sm py-2 rounded-md border ${
-                      deliveryMethod === "delivery"
-                        ? "border-orange-600 bg-orange-50 text-orange-800"
-                        : "border-gray-300 text-gray-600"
-                    }`}
-                  >
-                    Delivery
-                  </button>
-                </div>
-              </div>
-              {deliveryMethod === "delivery" && (
-                <Textarea
-                  value={shippingAddress}
-                  onChange={(e) => setShippingAddress(e.target.value)}
-                  placeholder="Shipping address"
-                  rows={2}
-                  required
-                />
-              )}
-
-              <div className="flex justify-between text-xl font-bold text-orange-900">
-                <span>Total</span>
-                <span>${total.toFixed(2)}</span>
-              </div>
-
-              {checkout.isError && (
-                <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
-                  Couldn't start checkout. Please try again.
-                </div>
-              )}
-
-              {isAuthenticated ? (
-                <Button
-                  className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
-                  size="lg"
-                  disabled={checkout.isPending}
-                  onClick={handleCheckout}
-                >
-                  {checkout.isPending ? "Starting..." : "Proceed to Payment"}
-                </Button>
-              ) : (
-                <Link to="/login" className="block">
-                  <Button className="w-full" size="lg" variant="outline">
-                    Login to Checkout
-                  </Button>
-                </Link>
-              )}
-              <button
-                type="button"
-                className="text-sm text-amber-700 hover:underline block mx-auto"
-                onClick={clear}
-              >
-                Clear cart
-              </button>
-            </div>
-          </>
-        )}
-
-        {clientSecret && (
-          <div className="bg-white/90 border-2 border-orange-200 rounded-xl p-6">
-            <h2 className="text-xl font-bold text-orange-900 mb-4">
-              Authorize ${total.toFixed(2)}
-            </h2>
+      {clientSecret ? (
+        <div className="surface mx-auto max-w-lg p-7">
+          <h2 className="flex items-center gap-2 font-display text-xl font-semibold">
+            <Lock className="size-4 text-muted-foreground" />
+            Authorize ${total.toFixed(2)}
+          </h2>
+          <div className="mt-5">
             <Elements stripe={stripePromise} options={{ clientSecret }}>
               <BookingPaymentForm
                 onSuccess={() => {
@@ -234,8 +136,183 @@ export default function CartPage() {
               />
             </Elements>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="grid gap-8 lg:grid-cols-[1fr_22rem] lg:items-start">
+          {/* ── Line items ──────────────────────────────────────── */}
+          <div className="space-y-4">
+            {items.map((item) => (
+              <div
+                key={`${item.productId}:${item.variantId ?? ""}`}
+                className="surface flex flex-wrap items-center justify-between gap-4 p-5"
+              >
+                <div className="flex min-w-0 items-center gap-4">
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-500">
+                    <Package className="size-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{item.title}</p>
+                    {item.variantLabel && (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {item.variantLabel}
+                      </p>
+                    )}
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Store className="size-3" />
+                      {item.shopName} · ${item.price.toFixed(2)} each
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1 rounded-xl border border-border p-1">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Decrease quantity"
+                      onClick={() =>
+                        setQuantity(
+                          item.productId,
+                          item.variantId,
+                          item.quantity - 1,
+                        )
+                      }
+                    >
+                      <Minus className="size-3.5" />
+                    </Button>
+                    <span className="w-7 text-center text-sm font-semibold tabular-nums">
+                      {item.quantity}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Increase quantity"
+                      onClick={() =>
+                        setQuantity(
+                          item.productId,
+                          item.variantId,
+                          item.quantity + 1,
+                        )
+                      }
+                    >
+                      <Plus className="size-3.5" />
+                    </Button>
+                  </div>
+
+                  <p className="w-20 text-right font-semibold tabular-nums">
+                    ${(item.price * item.quantity).toFixed(2)}
+                  </p>
+
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Remove ${item.title}`}
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => removeItem(item.productId, item.variantId)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              className="text-sm text-muted-foreground underline-offset-4 hover:text-destructive hover:underline"
+              onClick={clear}
+            >
+              Clear cart
+            </button>
+          </div>
+
+          {/* ── Summary ─────────────────────────────────────────── */}
+          <aside className="surface space-y-5 p-6 lg:sticky lg:top-24">
+            <div>
+              <p className="field-label">Delivery</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    { value: "pickup", label: "Pickup", icon: Store },
+                    { value: "delivery", label: "Delivery", icon: Truck },
+                  ] as const
+                ).map(({ value, label, icon: Icon }) => {
+                  const active = deliveryMethod === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setDeliveryMethod(value)}
+                      aria-pressed={active}
+                      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                        active
+                          ? "border-primary bg-brand-50 text-brand-700"
+                          : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                      }`}
+                    >
+                      <Icon className="size-4" />
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {deliveryMethod === "delivery" && (
+              <div>
+                <label htmlFor="shipping-address" className="field-label">
+                  Shipping address
+                </label>
+                <Textarea
+                  id="shipping-address"
+                  value={shippingAddress}
+                  onChange={(e) => setShippingAddress(e.target.value)}
+                  placeholder="Street, city, postcode"
+                  rows={3}
+                  required
+                />
+              </div>
+            )}
+
+            <div className="space-y-2 border-t border-border/70 pt-5">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Subtotal</span>
+                <span className="tabular-nums">${total.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-display text-xl font-semibold">
+                <span>Total</span>
+                <span className="tabular-nums">${total.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {checkout.isError && (
+              <p className="alert-error">
+                Couldn't start checkout. Please try again.
+              </p>
+            )}
+
+            {isAuthenticated ? (
+              <Button
+                variant="gradient"
+                size="lg"
+                className="w-full"
+                disabled={checkout.isPending}
+                onClick={handleCheckout}
+              >
+                {checkout.isPending ? "Starting…" : "Proceed to payment"}
+              </Button>
+            ) : (
+              <Button asChild variant="outline" size="lg" className="w-full">
+                <Link to="/login">Log in to check out</Link>
+              </Button>
+            )}
+
+            <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+              <Lock className="size-3" />
+              Charged only once your order is fulfilled
+            </p>
+          </aside>
+        </div>
+      )}
     </main>
   );
 }

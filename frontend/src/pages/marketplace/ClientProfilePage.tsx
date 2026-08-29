@@ -16,15 +16,15 @@ import type { User, BookingStatus, OrderStatus } from "@/types";
 
 const ORDER_STATUS_STYLES: Record<OrderStatus, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  fulfilled: "bg-green-100 text-green-800 border-green-300",
-  cancelled: "bg-red-100 text-red-800 border-red-300",
+  fulfilled: "bg-jade-50 text-jade-600 border-jade-500/25",
+  cancelled: "bg-destructive/10 text-destructive border-destructive/25",
 };
 
 const STATUS_STYLES: Record<BookingStatus, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  confirmed: "bg-green-100 text-green-800 border-green-300",
-  cancelled: "bg-red-100 text-red-800 border-red-300",
-  completed: "bg-blue-100 text-blue-800 border-blue-300",
+  confirmed: "bg-jade-50 text-jade-600 border-jade-500/25",
+  cancelled: "bg-destructive/10 text-destructive border-destructive/25",
+  completed: "bg-sky-100 text-sky-800 border-sky-200",
 };
 
 function ProfileEditForm({
@@ -47,13 +47,13 @@ function ProfileEditForm({
     <CardContent className="space-y-4">
       <form onSubmit={handleSaveProfile} className="space-y-4">
         {updateProfile.isError && (
-          <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+          <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
             Couldn't save your changes. Please try again.
           </div>
         )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-foreground/80 mb-1">
             Full Name
           </label>
           <Input
@@ -64,7 +64,7 @@ function ProfileEditForm({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-foreground/80 mb-1">
             Phone
           </label>
           <Input
@@ -93,7 +93,7 @@ export default function ClientProfilePage() {
   const [editMode, setEditMode] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="page-shell py-12">
       <div className="max-w-4xl mx-auto space-y-6">
         <Card>
           <CardHeader className="flex justify-between items-start">
@@ -110,7 +110,7 @@ export default function ClientProfilePage() {
 
           {isLoading && (
             <CardContent>
-              <div className="h-24 rounded-lg bg-gray-100 animate-pulse" />
+              <div className="h-24 rounded-lg bg-muted animate-pulse" />
             </CardContent>
           )}
 
@@ -126,15 +126,15 @@ export default function ClientProfilePage() {
             <CardContent>
               <div className="space-y-4 text-sm">
                 <div>
-                  <p className="text-gray-600">Full Name</p>
+                  <p className="text-muted-foreground">Full Name</p>
                   <p className="font-medium">{profile.name}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Email</p>
+                  <p className="text-muted-foreground">Email</p>
                   <p className="font-medium">{profile.email}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Phone</p>
+                  <p className="text-muted-foreground">Phone</p>
                   <p className="font-medium">{profile.phone || "—"}</p>
                 </div>
               </div>
@@ -164,19 +164,19 @@ function MyBookingsCard() {
         {isLoading && (
           <div className="space-y-3">
             {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="h-20 rounded-lg bg-gray-100 animate-pulse" />
+              <div key={i} className="h-20 rounded-lg bg-muted animate-pulse" />
             ))}
           </div>
         )}
 
         {isError && (
-          <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
             Couldn't load your bookings right now.
           </p>
         )}
 
         {!isLoading && !isError && (bookings ?? []).length === 0 && (
-          <p className="text-gray-600 text-sm">
+          <p className="text-muted-foreground text-sm">
             You haven't booked any services yet.
           </p>
         )}
@@ -192,13 +192,13 @@ function MyBookingsCard() {
               return (
                 <div
                   key={booking.id}
-                  className="border border-gray-200 rounded-lg p-4 flex justify-between items-start flex-wrap gap-2"
+                  className="border border-border rounded-lg p-4 flex justify-between items-start flex-wrap gap-2"
                 >
                   <div>
-                    <p className="font-semibold text-gray-900">
+                    <p className="font-semibold text-foreground">
                       {booking.service?.name}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       {booking.shop?.shopName} ·{" "}
                       {new Date(booking.scheduledAt).toLocaleString()}
                     </p>
@@ -222,7 +222,7 @@ function MyBookingsCard() {
                     {booking.paymentStatus === "paid" && (
                       <button
                         type="button"
-                        className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+                        className="text-xs text-muted-foreground hover:text-foreground hover:underline"
                         onClick={() => setDisputingBookingId(booking.id)}
                       >
                         Dispute
@@ -265,19 +265,19 @@ function MyOrdersCard() {
         {isLoading && (
           <div className="space-y-3">
             {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="h-20 rounded-lg bg-gray-100 animate-pulse" />
+              <div key={i} className="h-20 rounded-lg bg-muted animate-pulse" />
             ))}
           </div>
         )}
 
         {isError && (
-          <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
             Couldn't load your orders right now.
           </p>
         )}
 
         {!isLoading && !isError && (orders ?? []).length === 0 && (
-          <p className="text-gray-600 text-sm">
+          <p className="text-muted-foreground text-sm">
             You haven't ordered any products yet.
           </p>
         )}
@@ -292,24 +292,24 @@ function MyOrdersCard() {
               return (
                 <div
                   key={order.id}
-                  className="border border-gray-200 rounded-lg p-4 flex justify-between items-start flex-wrap gap-2"
+                  className="border border-border rounded-lg p-4 flex justify-between items-start flex-wrap gap-2"
                 >
                   <div>
-                    <p className="font-semibold text-gray-900">
+                    <p className="font-semibold text-foreground">
                       {order.product?.title} × {order.quantity}
                     </p>
                     {order.variantLabel && (
-                      <p className="text-xs text-gray-500">{order.variantLabel}</p>
+                      <p className="text-xs text-muted-foreground">{order.variantLabel}</p>
                     )}
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       {order.shop?.shopName} · $
                       {Number(order.totalAmount).toFixed(2)}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {order.deliveryMethod === "delivery" ? "🚚 Delivery" : "🏬 Pickup"}
                     </p>
                     {order.trackingInfo && (
-                      <p className="text-xs text-gray-500">Tracking: {order.trackingInfo}</p>
+                      <p className="text-xs text-muted-foreground">Tracking: {order.trackingInfo}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -331,7 +331,7 @@ function MyOrdersCard() {
                     {order.paymentStatus === "paid" && (
                       <button
                         type="button"
-                        className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+                        className="text-xs text-muted-foreground hover:text-foreground hover:underline"
                         onClick={() => setDisputingOrderId(order.id)}
                       >
                         Dispute

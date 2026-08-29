@@ -1,130 +1,254 @@
-import { FeaturedProductsSection } from "@/components/FeaturedProductsSection";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
+import {
+  ArrowRight,
+  Compass,
+  HandHeart,
+  Hammer,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Store,
+} from "lucide-react";
+import { FeaturedProductsSection } from "@/components/FeaturedProductsSection";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useCategories } from "@/hooks/useCategories";
+import { themeForCategory } from "@/lib/categoryTheme";
 
-export default function HomePage() {
-  const [searchQuery, setSearchQuery] = useState("");
+const STEPS = [
+  {
+    icon: Compass,
+    title: "Find",
+    body: "Browse by craft or search for the exact skill your project needs.",
+  },
+  {
+    icon: HandHeart,
+    title: "Connect",
+    body: "Message the maker directly, agree the details, and book with confidence.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Complete",
+    body: "Your card is only charged once the artisan fulfils the work.",
+  },
+];
+
+const TRUST = [
+  { label: "Independent makers", value: "Verified shops" },
+  { label: "Payments", value: "Held until delivery" },
+  { label: "Support", value: "Disputes reviewed" },
+];
+
+function HeroSearch() {
+  const [query, setQuery] = useState("");
   const navigate = useNavigate();
 
-  const handleSearch = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const q = searchQuery.trim();
+    const q = query.trim();
     navigate(q ? `/categories?search=${encodeURIComponent(q)}` : "/categories");
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100">
-      {/* Hero Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center space-y-8">
-            <div className="space-y-4">
-              <h1 className="text-5xl sm:text-6xl font-bold bg-gradient-to-r from-orange-700 via-amber-600 to-orange-600 bg-clip-text text-transparent">
-                Connect with Skilled Artisans
-              </h1>
-              <p className="text-xl text-amber-900 max-w-2xl mx-auto leading-relaxed">
-                Discover exceptional craftsmanship. Find the perfect artisan
-                for your project, browse curated services, and connect
-                directly.
-              </p>
-            </div>
+    <form onSubmit={submit} className="mx-auto mt-10 w-full max-w-xl">
+      <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-card p-2 shadow-[var(--shadow-md)] transition-shadow focus-within:shadow-[var(--shadow-lg)]">
+        <Search className="ml-2 size-[18px] shrink-0 text-muted-foreground" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search makers, crafts or services…"
+          aria-label="Search artisans and services"
+          className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground/70"
+        />
+        <Button type="submit" variant="gradient" className="shrink-0">
+          Search
+        </Button>
+      </div>
+    </form>
+  );
+}
 
-            {/* Search Bar */}
-            <form
-              onSubmit={handleSearch}
-              className="max-w-2xl mx-auto mt-10"
-            >
-              <div className="flex gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-lg border-2 border-orange-200 shadow-lg hover:shadow-xl transition-shadow">
-                <Input
-                  type="text"
-                  placeholder="Search artisans or services..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 border-0 focus-visible:ring-0 placeholder-amber-700"
-                />
-                <Button
-                  type="submit"
-                  className="bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700"
-                >
-                  Search
-                </Button>
-              </div>
-            </form>
+function CategoryStrip() {
+  const { data: categories, isLoading } = useCategories();
+  const shown = (categories ?? []).slice(0, 8);
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/register?type=client">
-                <Button
-                  size="lg"
-                  className="bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white px-8"
+  if (!isLoading && shown.length === 0) return null;
+
+  return (
+    <section className="page-shell pb-4">
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <span className="eyebrow">Crafts</span>
+          <h2 className="section-title mt-3">Browse by trade</h2>
+        </div>
+        <Link
+          to="/categories"
+          className="hidden items-center gap-1.5 text-sm font-medium text-primary hover:underline sm:inline-flex"
+        >
+          All categories <ArrowRight className="size-4" />
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {isLoading
+          ? Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="skeleton h-24" />
+            ))
+          : shown.map((category) => {
+              const theme = themeForCategory(category.id);
+              return (
+                <Link
+                  key={category.id}
+                  to={`/category/${category.id}`}
+                  className="surface-lift group flex items-center gap-3 p-4"
                 >
-                  Find an Artisan
-                </Button>
-              </Link>
-              <Link to="/register?type=artisan">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="border-2 border-orange-600 text-orange-700 hover:bg-orange-50 px-8"
-                >
-                  Start Your Shop
-                </Button>
-              </Link>
-              <Link to="/categories">
-                <Button
-                  size="lg"
-                  className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white px-8"
-                >
-                  Browse Categories
-                </Button>
-              </Link>
+                  <span
+                    className={`flex size-11 shrink-0 items-center justify-center rounded-xl text-xl ${theme.chip}`}
+                  >
+                    {category.iconUrl?.startsWith("http") ? (
+                      <img
+                        src={category.iconUrl}
+                        alt=""
+                        className="size-6 object-contain"
+                      />
+                    ) : (
+                      (category.iconUrl ?? theme.fallbackIcon)
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold">
+                      {category.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      View artisans
+                    </span>
+                  </span>
+                  <ArrowRight className="ml-auto size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                </Link>
+              );
+            })}
+      </div>
+    </section>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <main>
+      {/* ══ Hero ══════════════════════════════════════════════════ */}
+      <section className="relative isolate overflow-hidden">
+        <div className="aurora" aria-hidden="true" />
+        <div className="grid-lines" aria-hidden="true" />
+
+        <div className="page-shell relative py-20 sm:py-28">
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="eyebrow animate-fade-in">
+              <Sparkles className="size-3.5 text-primary" />
+              Handmade, not mass produced
+            </span>
+
+            <h1 className="mt-6 animate-fade-up font-display text-5xl leading-[1.05] font-semibold text-balance sm:text-6xl lg:text-7xl">
+              Connect with{" "}
+              <span className="text-gradient">skilled artisans</span> near you
+            </h1>
+
+            <p className="mx-auto mt-6 max-w-xl animate-fade-up text-lg leading-relaxed text-pretty text-muted-foreground">
+              Discover exceptional craftsmanship. Find the right maker for your
+              project, browse curated goods, and book directly — no middlemen.
+            </p>
+
+            <HeroSearch />
+
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <Button asChild size="lg" variant="gradient">
+                <Link to="/categories">
+                  Find an artisan <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link to="/register?type=artisan">
+                  <Store className="size-4" /> Start your shop
+                </Link>
+              </Button>
             </div>
           </div>
+
+          {/* Trust strip */}
+          <dl className="mx-auto mt-16 grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-3">
+            {TRUST.map((item) => (
+              <div
+                key={item.label}
+                className="surface px-5 py-4 text-center sm:text-left"
+              >
+                <dt className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                  {item.label}
+                </dt>
+                <dd className="mt-1 font-display text-lg font-semibold">
+                  {item.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </section>
 
+      <CategoryStrip />
+
       <FeaturedProductsSection />
 
-      {/* How It Works Section */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">
-            How It Works
+      {/* ══ How it works ══════════════════════════════════════════ */}
+      <section className="page-shell py-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="eyebrow">How it works</span>
+          <h2 className="section-title mt-4">
+            From first look to finished work
           </h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
-                🔍
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                Find
-              </h3>
-              <p className="text-gray-600">
-                Browse artisans by category or search for specific skills
+          <p className="mt-3 text-muted-foreground">
+            Three steps, and the money stays protected the whole way through.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {STEPS.map(({ icon: Icon, title, body }, index) => (
+            <div key={title} className="surface-lift relative p-7">
+              <span className="absolute top-6 right-6 font-display text-5xl leading-none font-semibold text-foreground/[0.06]">
+                {index + 1}
+              </span>
+              <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-100 text-brand-700">
+                <Icon className="size-5" />
+              </span>
+              <h3 className="mt-5 text-xl font-semibold">{title}</h3>
+              <p className="mt-2 leading-relaxed text-muted-foreground">
+                {body}
               </p>
             </div>
-            <div className="text-center">
-              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
-                💬
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                Connect
-              </h3>
-              <p className="text-gray-600">
-                Contact artisans directly via WhatsApp or phone
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
-                ✓
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                Complete
-              </h3>
-              <p className="text-gray-600">
-                Work directly with artisans to get your project done
-              </p>
+          ))}
+        </div>
+      </section>
+
+      {/* ══ Seller CTA ════════════════════════════════════════════ */}
+      <section className="page-shell pb-8">
+        <div className="relative isolate overflow-hidden rounded-3xl border border-border/70 bg-card px-6 py-14 text-center shadow-[var(--shadow-md)] sm:px-14">
+          <div className="aurora opacity-70" aria-hidden="true" />
+          <div className="relative mx-auto max-w-2xl">
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-100 text-brand-700 mx-auto">
+              <Hammer className="size-5" />
+            </span>
+            <h2 className="section-title mt-6">Do you make things?</h2>
+            <p className="mt-3 text-lg text-pretty text-muted-foreground">
+              Open a shop, list your services and products, and get paid
+              securely when each job is done.
+            </p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <Button asChild size="lg" variant="gradient">
+                <Link to="/register?type=artisan">
+                  Open your shop <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link to="/products">Browse the market</Link>
+              </Button>
             </div>
           </div>
         </div>

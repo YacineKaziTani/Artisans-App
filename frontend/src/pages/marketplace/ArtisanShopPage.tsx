@@ -36,12 +36,12 @@ export default function ArtisanShopPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 py-12 px-4 sm:px-6 lg:px-8">
+      <main className="page-shell py-12">
         <div className="max-w-4xl mx-auto">
-          <div className="h-64 rounded-xl bg-white/60 animate-pulse mb-8" />
+          <div className="h-64 rounded-xl bg-card animate-pulse mb-8" />
           <div className="grid md:grid-cols-2 gap-6">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-32 rounded-xl bg-white/60 animate-pulse" />
+              <div key={i} className="h-32 rounded-xl bg-card animate-pulse" />
             ))}
           </div>
         </div>
@@ -51,15 +51,15 @@ export default function ArtisanShopPage() {
 
   if (isError || !shop) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 py-12 px-4 sm:px-6 lg:px-8">
+      <main className="page-shell py-12">
         <div className="max-w-4xl mx-auto">
           <Link
             to="/categories"
-            className="text-orange-700 hover:text-orange-800 mb-4 inline-block font-semibold"
+            className="text-muted-foreground hover:text-foreground mb-4 inline-block font-semibold"
           >
             ← Back to Categories
           </Link>
-          <p className="text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-4">
+          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4">
             This shop couldn't be found — it may no longer be active.
           </p>
         </div>
@@ -77,38 +77,38 @@ export default function ArtisanShopPage() {
   const services = (shop.services ?? []).filter((s) => s.isAvailable);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 py-12 px-4 sm:px-6 lg:px-8">
+    <main className="page-shell py-12">
       <div className="max-w-4xl mx-auto">
         {/* Shop Header */}
         <div className="mb-8">
           <Link
             to={shop.category ? `/category/${shop.category.id}` : "/categories"}
-            className="text-orange-700 hover:text-orange-800 mb-4 inline-block font-semibold"
+            className="text-muted-foreground hover:text-foreground mb-4 inline-block font-semibold"
           >
             ← Back to {shop.category ? shop.category.name : "Categories"}
           </Link>
 
           {!isOwnShop && !shopCanAcceptPayments(shop) && (
-            <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg text-sm text-amber-900">
+            <div className="mb-4 p-4 bg-warning/10 border border-warning/25 rounded-lg text-sm text-foreground/80">
               This shop is still setting up payouts — bookings and purchases
               aren't available yet. Check back soon.
             </div>
           )}
 
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-2 border-orange-300 p-8 space-y-6 shadow-lg">
+          <div className="bg-muted/40 rounded-xl border border-border p-8 space-y-6 shadow-[var(--shadow-lg)]">
             <div>
               <div className="flex items-center gap-3 flex-wrap mb-2">
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-700 to-amber-600 bg-clip-text text-transparent">
+                <h1 className="text-4xl font-bold text-gradient">
                   {shop.shopName}
                 </h1>
                 {shop.averageRating > 0 && (
-                  <span className="text-sm font-semibold text-amber-800 bg-amber-100 px-3 py-1 rounded-full border border-amber-300">
+                  <span className="text-sm font-semibold text-muted-foreground bg-warning/10 px-3 py-1 rounded-full border border-warning/25">
                     ⭐ {shop.averageRating.toFixed(1)}
                   </span>
                 )}
                 {shop.verificationStatus === "verified" && (
                   <span
-                    className="text-sm font-semibold text-blue-800 bg-blue-100 px-3 py-1 rounded-full border border-blue-300"
+                    className="text-sm font-semibold text-sky-800 bg-sky-100 px-3 py-1 rounded-full border border-sky-200"
                     title="This shop has been verified by our team"
                   >
                     ✓ Verified
@@ -124,7 +124,7 @@ export default function ArtisanShopPage() {
                 {isAuthenticated && !isOwnShop && (
                   <button
                     type="button"
-                    className="text-xs text-gray-500 hover:text-gray-700 hover:underline ml-auto"
+                    className="text-xs text-muted-foreground hover:text-foreground hover:underline ml-auto"
                     onClick={() => setReportOpen(true)}
                   >
                     Report
@@ -132,15 +132,15 @@ export default function ArtisanShopPage() {
                 )}
               </div>
               {shop.description && (
-                <p className="text-amber-900 text-lg max-w-2xl leading-relaxed">
+                <p className="text-foreground/80 text-lg max-w-2xl leading-relaxed">
                   {shop.description}
                 </p>
               )}
             </div>
 
             {/* Contact Information */}
-            <div className="space-y-4 pt-6 border-t-2 border-orange-200">
-              <h2 className="text-xl font-semibold text-orange-900">
+            <div className="space-y-4 pt-6 border-t-2 border-border">
+              <h2 className="text-xl font-semibold text-foreground">
                 Contact Information
               </h2>
 
@@ -148,8 +148,8 @@ export default function ArtisanShopPage() {
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">📍</span>
                   <div>
-                    <p className="font-medium text-orange-900">Address</p>
-                    <p className="text-amber-800">
+                    <p className="font-medium text-foreground">Address</p>
+                    <p className="text-muted-foreground">
                       {shop.city ? `${shop.address}, ${shop.city}` : shop.address}
                     </p>
                   </div>
@@ -160,14 +160,14 @@ export default function ArtisanShopPage() {
                 <div className="flex gap-3 pt-4 flex-wrap">
                   {whatsappLink && (
                     <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                      <Button className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white">
+                      <Button className="bg-jade-500 text-white hover:bg-jade-600">
                         💬 Contact on WhatsApp
                       </Button>
                     </a>
                   )}
                   {phoneLink && (
                     <a href={phoneLink}>
-                      <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white">
+                      <Button className="bg-jade-500 text-white hover:bg-jade-600">
                         📞 Call
                       </Button>
                     </a>
@@ -203,14 +203,14 @@ export default function ArtisanShopPage() {
         {/* Photo Gallery */}
         {(shop.photos ?? []).length > 0 && (
           <div className="mb-12">
-            <h2 className="text-3xl font-bold text-orange-900 mb-6">Gallery</h2>
+            <h2 className="text-3xl font-bold text-foreground mb-6">Gallery</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {shop.photos!.map((photo) => (
                 <img
                   key={photo.id}
                   src={photo.url}
                   alt={photo.caption ?? shop.shopName}
-                  className="w-full aspect-square object-cover rounded-xl border-2 border-orange-100"
+                  className="w-full aspect-square object-cover rounded-xl border border-border"
                 />
               ))}
             </div>
@@ -219,12 +219,12 @@ export default function ArtisanShopPage() {
 
         {/* Services Section */}
         <div>
-          <h2 className="text-3xl font-bold text-orange-900 mb-6">
+          <h2 className="text-3xl font-bold text-foreground mb-6">
             Available Services
           </h2>
 
           {services.length === 0 && (
-            <p className="text-amber-900 bg-white/70 border-2 border-orange-100 rounded-xl p-6">
+            <p className="text-foreground/80 bg-white/70 border border-border rounded-xl p-6">
               This shop hasn't listed any services yet.
             </p>
           )}
@@ -234,29 +234,29 @@ export default function ArtisanShopPage() {
               {services.map((service) => (
                 <div
                   key={service.id}
-                  className="bg-white/90 backdrop-blur-sm border-2 border-orange-200 rounded-xl p-6 shadow-md hover:shadow-lg transition-shadow"
+                  className="bg-card border border-border rounded-xl p-6 shadow-[var(--shadow-md)] hover:shadow-lg transition-shadow"
                 >
-                  <h3 className="text-xl font-bold text-orange-800 mb-2">
+                  <h3 className="text-xl font-bold text-primary mb-2">
                     {service.name}
                   </h3>
                   {service.description && (
-                    <p className="text-amber-900 text-sm mb-4">
+                    <p className="text-foreground/80 text-sm mb-4">
                       {service.description}
                     </p>
                   )}
                   <div className="flex justify-between items-center mb-4">
-                    <span className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                    <span className="text-3xl font-bold text-gradient">
                       ${Number(service.price).toFixed(2)}
                     </span>
                     {service.duration && (
-                      <span className="text-sm font-semibold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-300">
+                      <span className="text-sm font-semibold text-muted-foreground bg-warning/10 px-3 py-1 rounded-full border border-warning/25">
                         {service.duration}
                       </span>
                     )}
                   </div>
                   {isAuthenticated ? (
                     <Button
-                      className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
+                      className="w-full btn-gradient text-white"
                       disabled={!shopCanAcceptPayments(shop)}
                       onClick={() => setBookingService(service)}
                     >
@@ -278,9 +278,9 @@ export default function ArtisanShopPage() {
         {/* Products Section */}
         {(shop.products ?? []).length > 0 && (
           <div className="mt-12">
-            <h2 className="text-3xl font-bold text-orange-900 mb-6">Products</h2>
+            <h2 className="text-3xl font-bold text-foreground mb-6">Products</h2>
             {wrongShop && (
-              <p className="mb-4 p-3 bg-amber-100 border-2 border-amber-300 rounded-lg text-amber-900 text-sm">
+              <p className="mb-4 p-3 bg-warning/10 border border-warning/25 rounded-lg text-foreground/80 text-sm">
                 Your cart already has items from another shop. Each order pays
                 out to a single artisan, so check out first (or clear the cart)
                 before adding this one.
@@ -290,7 +290,7 @@ export default function ArtisanShopPage() {
               {shop.products!.map((product) => (
                 <div
                   key={product.id}
-                  className="bg-white/90 backdrop-blur-sm border-2 border-orange-200 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow"
+                  className="bg-card border border-border rounded-xl overflow-hidden shadow-[var(--shadow-md)] hover:shadow-lg transition-shadow"
                 >
                   {product.imageUrl && (
                     <img
@@ -300,16 +300,16 @@ export default function ArtisanShopPage() {
                     />
                   )}
                   <div className="p-6">
-                    <h3 className="text-xl font-bold text-orange-800 mb-2">
+                    <h3 className="text-xl font-bold text-primary mb-2">
                       {product.title}
                     </h3>
                     {product.description && (
-                      <p className="text-amber-900 text-sm mb-4">
+                      <p className="text-foreground/80 text-sm mb-4">
                         {product.description}
                       </p>
                     )}
                     <div className="flex justify-between items-center mb-4">
-                      <span className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                      <span className="text-3xl font-bold text-gradient">
                         ${Number(product.basePrice).toFixed(2)}
                       </span>
                     </div>
@@ -334,7 +334,7 @@ export default function ArtisanShopPage() {
                           </Button>
                         )}
                         <Button
-                          className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
+                          className="flex-1 btn-gradient text-white"
                           disabled={!shopCanAcceptPayments(shop)}
                           onClick={() => setBuyingProduct(product)}
                         >
@@ -363,17 +363,17 @@ export default function ArtisanShopPage() {
 
         {/* CTA */}
         {whatsappLink && (
-          <div className="mt-12 bg-gradient-to-r from-orange-100 to-amber-100 rounded-xl p-8 text-center border-2 border-orange-300 shadow-lg">
-            <h3 className="text-2xl font-bold text-orange-900 mb-4">
+          <div className="surface mt-12 rounded-2xl p-8 text-center">
+            <h3 className="text-2xl font-bold text-foreground mb-4">
               Ready to work with {shop.shopName}?
             </h3>
-            <p className="text-amber-900 mb-6 text-lg">
+            <p className="text-foreground/80 mb-6 text-lg">
               Get in touch directly to discuss your project requirements.
             </p>
             <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
               <Button
                 size="lg"
-                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-8"
+                className="bg-jade-500 text-white hover:bg-jade-600 px-8"
               >
                 Send Message on WhatsApp
               </Button>

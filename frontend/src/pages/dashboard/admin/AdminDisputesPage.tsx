@@ -13,9 +13,9 @@ import type { DisputeStatus } from "@/types";
 
 const STATUS_STYLES: Record<DisputeStatus, string> = {
   open: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  resolved_refunded: "bg-green-100 text-green-800 border-green-300",
-  resolved_denied: "bg-red-100 text-red-800 border-red-300",
-  resolved_other: "bg-gray-100 text-gray-700 border-gray-300",
+  resolved_refunded: "bg-jade-50 text-jade-600 border-jade-500/25",
+  resolved_denied: "bg-destructive/10 text-destructive border-destructive/25",
+  resolved_other: "bg-muted text-foreground/80 border-border",
 };
 
 export default function AdminDisputesPage() {
@@ -28,8 +28,8 @@ export default function AdminDisputesPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Disputes</h1>
-        <p className="text-gray-600">
+        <h1 className="text-3xl font-bold text-foreground">Disputes</h1>
+        <p className="text-muted-foreground">
           Booking and order disputes raised by clients or artisans
         </p>
       </div>
@@ -43,8 +43,8 @@ export default function AdminDisputesPage() {
             onClick={() => setFilter(s)}
             className={`px-3 py-1.5 rounded-full text-sm font-medium border ${
               filter === s
-                ? "bg-orange-600 text-white border-orange-600"
-                : "bg-white text-gray-700 border-gray-300"
+                ? "bg-primary text-white border-primary"
+                : "bg-card text-foreground/80 border-border"
             }`}
           >
             {s ?? "All"}
@@ -61,19 +61,19 @@ export default function AdminDisputesPage() {
           {isLoading && (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-24 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
               ))}
             </div>
           )}
 
           {isError && (
-            <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
               Couldn't load disputes.
             </p>
           )}
 
           {!isLoading && !isError && (disputes ?? []).length === 0 && (
-            <p className="text-gray-600 text-sm">No disputes here.</p>
+            <p className="text-muted-foreground text-sm">No disputes here.</p>
           )}
 
           {!isLoading &&
@@ -84,13 +84,13 @@ export default function AdminDisputesPage() {
                 resolveDispute.variables?.id === dispute.id;
 
               return (
-                <div key={dispute.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
+                <div key={dispute.id} className="border border-border rounded-lg p-4 space-y-3">
                   <div className="flex justify-between items-start flex-wrap gap-2">
                     <div>
-                      <p className="font-semibold text-gray-900">
+                      <p className="font-semibold text-foreground">
                         {dispute.targetType} #{dispute.targetId.slice(0, 8)}
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         Raised by {dispute.raisedBy?.name} ·{" "}
                         {new Date(dispute.createdAt).toLocaleString()}
                       </p>
@@ -101,9 +101,9 @@ export default function AdminDisputesPage() {
                       {dispute.status.replace("resolved_", "")}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-800">"{dispute.reason}"</p>
+                  <p className="text-sm text-foreground">"{dispute.reason}"</p>
                   {dispute.resolutionNote && (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       Resolution: {dispute.resolutionNote}
                     </p>
                   )}
@@ -120,10 +120,10 @@ export default function AdminDisputesPage() {
                         }
                         placeholder="Resolution note (optional)"
                         rows={2}
-                        className="w-full text-sm border border-gray-300 rounded-md p-2"
+                        className="w-full text-sm border border-border rounded-md p-2"
                       />
                       <div>
-                        <label className="text-xs text-gray-600 block mb-1">
+                        <label className="text-xs text-muted-foreground block mb-1">
                           Refund amount (leave blank for full refund)
                         </label>
                         <Input

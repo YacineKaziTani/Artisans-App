@@ -11,10 +11,10 @@ import { useResolveVerification } from "@/hooks/useShops";
 import type { Shop } from "@/types";
 
 const STATUS_STYLES: Record<Shop["status"], string> = {
-  active: "bg-green-100 text-green-800 border-green-300",
-  suspended: "bg-red-100 text-red-800 border-red-300",
+  active: "bg-jade-50 text-jade-600 border-jade-500/25",
+  suspended: "bg-destructive/10 text-destructive border-destructive/25",
   pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  closed: "bg-gray-100 text-gray-700 border-gray-300",
+  closed: "bg-muted text-foreground/80 border-border",
 };
 
 export default function AdminShopsPage() {
@@ -26,8 +26,8 @@ export default function AdminShopsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Shops</h1>
-        <p className="text-gray-600">Approve new shops and moderate existing ones</p>
+        <h1 className="text-3xl font-bold text-foreground">Shops</h1>
+        <p className="text-muted-foreground">Approve new shops and moderate existing ones</p>
       </div>
 
       <Card>
@@ -39,19 +39,19 @@ export default function AdminShopsPage() {
           {isLoading && (
             <div className="space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
               ))}
             </div>
           )}
 
           {isError && (
-            <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
               Couldn't load shops.
             </p>
           )}
 
           {!isLoading && !isError && shops.length === 0 && (
-            <p className="text-gray-600 text-sm">No shops yet.</p>
+            <p className="text-muted-foreground text-sm">No shops yet.</p>
           )}
 
           {!isLoading &&
@@ -66,11 +66,11 @@ export default function AdminShopsPage() {
               return (
                 <div
                   key={shop.id}
-                  className="flex items-center justify-between border border-gray-200 rounded-lg p-3 flex-wrap gap-2"
+                  className="flex items-center justify-between border border-border rounded-lg p-3 flex-wrap gap-2"
                 >
                   <div>
-                    <p className="font-medium text-gray-900">{shop.shopName}</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="font-medium text-foreground">{shop.shopName}</p>
+                    <p className="text-sm text-muted-foreground">
                       {shop.category?.name} · {shop.city ?? "—"}
                     </p>
                   </div>
@@ -81,13 +81,13 @@ export default function AdminShopsPage() {
                       {shop.status}
                     </span>
                     {shop.verificationStatus === "verified" && (
-                      <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-blue-100 text-blue-800 border-blue-300">
+                      <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-sky-100 text-sky-800 border-sky-200">
                         ✓ verified
                       </span>
                     )}
                     {shop.verificationStatus === "pending" && (
                       <>
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-gray-100 text-gray-700 border-gray-300">
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-muted text-foreground/80 border-border">
                           verification pending
                         </span>
                         <Button

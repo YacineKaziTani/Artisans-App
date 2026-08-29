@@ -3,13 +3,13 @@
 // person, so the same contact is always the same colour in the list and in
 // the thread header.
 const PALETTE = [
-  "bg-orange-500",
-  "bg-amber-500",
-  "bg-rose-500",
-  "bg-teal-600",
-  "bg-indigo-500",
+  "bg-brand-500",
+  "bg-amber-600",
+  "bg-rose-600",
+  "bg-jade-500",
+  "bg-indigo-600",
   "bg-emerald-600",
-  "bg-fuchsia-500",
+  "bg-fuchsia-600",
   "bg-sky-600",
 ];
 

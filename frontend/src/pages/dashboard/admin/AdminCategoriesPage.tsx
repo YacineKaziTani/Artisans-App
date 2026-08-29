@@ -37,8 +37,8 @@ export default function AdminCategoriesPage() {
   return (
     <div className="space-y-8 max-w-3xl">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Categories</h1>
-        <p className="text-gray-600">Manage marketplace categories</p>
+        <h1 className="text-3xl font-bold text-foreground">Categories</h1>
+        <p className="text-muted-foreground">Manage marketplace categories</p>
       </div>
 
       <Card>
@@ -48,7 +48,7 @@ export default function AdminCategoriesPage() {
         <CardContent>
           <form onSubmit={handleCreate} className="space-y-4">
             {createCategory.isError && (
-              <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+              <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
                 Couldn't create the category. Please try again.
               </div>
             )}
@@ -86,17 +86,17 @@ export default function AdminCategoriesPage() {
           {isLoading && (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-14 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />
               ))}
             </div>
           )}
           {isError && (
-            <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
               Couldn't load categories.
             </p>
           )}
           {!isLoading && !isError && (categories ?? []).length === 0 && (
-            <p className="text-gray-600 text-sm">No categories yet.</p>
+            <p className="text-muted-foreground text-sm">No categories yet.</p>
           )}
           {!isLoading &&
             !isError &&
@@ -129,14 +129,14 @@ function CategoryRow({
   const updateCategory = useUpdateCategory();
 
   return (
-    <div className="flex items-center justify-between border border-gray-200 rounded-lg p-3">
+    <div className="flex items-center justify-between border border-border rounded-lg p-3">
       <div>
-        <p className="font-medium text-gray-900">{category.name}</p>
+        <p className="font-medium text-foreground">{category.name}</p>
         {category.description && (
-          <p className="text-sm text-gray-500">{category.description}</p>
+          <p className="text-sm text-muted-foreground">{category.description}</p>
         )}
         {!category.isActive && (
-          <span className="text-xs text-gray-500">Inactive</span>
+          <span className="text-xs text-muted-foreground">Inactive</span>
         )}
       </div>
       <div className="flex gap-2">

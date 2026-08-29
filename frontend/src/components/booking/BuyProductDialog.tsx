@@ -150,7 +150,7 @@ export function BuyProductDialog({
             </DialogHeader>
             <form onSubmit={handleRequestOrder} className="space-y-4">
               {createOrder.isError && (
-                <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+                <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
                   {(isAxiosError(createOrder.error) &&
                     createOrder.error.response?.data?.message) ||
                     "Couldn't start the order. Please try again."}
@@ -160,7 +160,7 @@ export function BuyProductDialog({
                 <div className="space-y-2">
                   <Label>Choose an option</Label>
                   {(product.variants ?? []).length === 0 ? (
-                    <p className="text-sm text-red-600">
+                    <p className="text-sm text-destructive">
                       This seller hasn't added any purchasable combinations yet.
                     </p>
                   ) : (
@@ -198,16 +198,16 @@ export function BuyProductDialog({
                             }}
                             className={`w-full flex items-center justify-between gap-2 text-sm rounded-md border px-3 py-2 text-left ${
                               isOut
-                                ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                                ? "border-border bg-muted text-muted-foreground/70 cursor-not-allowed"
                                 : isSelected
-                                  ? "border-orange-600 bg-orange-50 text-orange-900"
-                                  : "border-gray-300 hover:border-orange-400"
+                                  ? "border-primary bg-brand-50 text-foreground"
+                                  : "border-border hover:border-primary/40"
                             }`}
                           >
                             <span>{label}</span>
                             <span className="flex items-center gap-2 flex-shrink-0">
                               <span>${price.toFixed(2)}</span>
-                              <span className={isOut ? "" : "text-green-700"}>
+                              <span className={isOut ? "" : "text-jade-600"}>
                                 {isOut
                                   ? "Out of stock"
                                   : `${variant.stockQuantity} in stock`}
@@ -219,7 +219,7 @@ export function BuyProductDialog({
                     </div>
                   )}
                   {needsSelection && (product.variants ?? []).length > 0 && (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       Pick one of the options above.
                     </p>
                   )}
@@ -243,10 +243,10 @@ export function BuyProductDialog({
                   }}
                 />
                 {stockLimit !== undefined && stockLimit > 0 && (
-                  <p className="text-xs text-gray-500">{stockLimit} in stock</p>
+                  <p className="text-xs text-muted-foreground">{stockLimit} in stock</p>
                 )}
                 {exceedsStock && (
-                  <p className="text-xs text-red-600">
+                  <p className="text-xs text-destructive">
                     Only {stockLimit} left of this option.
                   </p>
                 )}
@@ -259,8 +259,8 @@ export function BuyProductDialog({
                     onClick={() => setDeliveryMethod("pickup")}
                     className={`flex-1 text-sm py-2 rounded-md border ${
                       deliveryMethod === "pickup"
-                        ? "border-orange-600 bg-orange-50 text-orange-800"
-                        : "border-gray-300 text-gray-600"
+                        ? "border-primary bg-brand-50 text-primary"
+                        : "border-border text-muted-foreground"
                     }`}
                   >
                     Pickup
@@ -270,8 +270,8 @@ export function BuyProductDialog({
                     onClick={() => setDeliveryMethod("delivery")}
                     className={`flex-1 text-sm py-2 rounded-md border ${
                       deliveryMethod === "delivery"
-                        ? "border-orange-600 bg-orange-50 text-orange-800"
-                        : "border-gray-300 text-gray-600"
+                        ? "border-primary bg-brand-50 text-primary"
+                        : "border-border text-muted-foreground"
                     }`}
                   >
                     Delivery
@@ -291,13 +291,13 @@ export function BuyProductDialog({
                   />
                 </div>
               )}
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Total:{" "}
                 <span className="font-semibold">${total.toFixed(2)}</span>
               </p>
               <Button
                 type="submit"
-                className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
+                className="w-full btn-gradient text-white"
                 disabled={
                   createOrder.isPending ||
                   needsSelection ||

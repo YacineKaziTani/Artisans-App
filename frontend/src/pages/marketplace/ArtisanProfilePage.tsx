@@ -63,13 +63,13 @@ function CreateShopForm() {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           {createShop.isError && (
-            <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+            <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
               Couldn't create your shop. Please try again.
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground/80 mb-2">
               Shop Name
             </label>
             <Input
@@ -81,14 +81,14 @@ function CreateShopForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground/80 mb-2">
               Category
             </label>
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
               disabled={categoriesLoading}
-              className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none"
+              className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-[var(--shadow-xs)] outline-none"
             >
               <option value="">Select a category</option>
               {(categories ?? []).map((c) => (
@@ -100,7 +100,7 @@ function CreateShopForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground/80 mb-2">
               Description
             </label>
             <Textarea
@@ -113,7 +113,7 @@ function CreateShopForm() {
 
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground/80 mb-2">
                 Phone
               </label>
               <Input
@@ -124,7 +124,7 @@ function CreateShopForm() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground/80 mb-2">
                 City
               </label>
               <Input
@@ -137,7 +137,7 @@ function CreateShopForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground/80 mb-2">
               Address
             </label>
             <Input
@@ -180,12 +180,12 @@ function StripeConnectBanner({ shop }: { shop: Shop }) {
   };
 
   if (isLoading) {
-    return <div className="p-4 h-16 rounded-lg bg-gray-100 animate-pulse" />;
+    return <div className="p-4 h-16 rounded-lg bg-muted animate-pulse" />;
   }
 
   if (status?.onboardingComplete || shop.stripeOnboardingComplete) {
     return (
-      <div className="p-4 bg-green-50 border border-green-300 rounded-lg text-sm text-green-800 flex items-center gap-2">
+      <div className="p-4 bg-jade-50 border border-jade-500/25 rounded-lg text-sm text-jade-600 flex items-center gap-2">
         <span>✓</span>
         <span>Payouts are set up — bookings and orders will pay out to your account.</span>
       </div>
@@ -193,11 +193,11 @@ function StripeConnectBanner({ shop }: { shop: Shop }) {
   }
 
   return (
-    <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-lg space-y-2">
-      <p className="text-sm font-semibold text-amber-900">
+    <div className="p-4 bg-warning/10 border border-warning/25 rounded-lg space-y-2">
+      <p className="text-sm font-semibold text-foreground/80">
         Set up payouts to start accepting bookings and orders
       </p>
-      <p className="text-sm text-amber-800">
+      <p className="text-sm text-muted-foreground">
         Clients can't book services or buy products from your shop until you
         connect a payout account with Stripe — it only takes a few minutes.
         {justReturned && status && !status.onboardingComplete && (
@@ -222,7 +222,7 @@ function StripeConnectBanner({ shop }: { shop: Shop }) {
         {connectStripe.isPending ? "Redirecting..." : "Connect with Stripe"}
       </Button>
       {connectStripe.isError && (
-        <p className="text-xs text-red-700">
+        <p className="text-xs text-destructive">
           {isAxiosError(connectStripe.error) && connectStripe.error.response?.data?.message
             ? connectStripe.error.response.data.message
             : "Couldn't start Stripe onboarding. Please try again."}
@@ -237,7 +237,7 @@ function VerificationBanner({ shop }: { shop: Shop }) {
 
   if (shop.verificationStatus === "verified") {
     return (
-      <div className="p-4 bg-blue-50 border border-blue-300 rounded-lg text-sm text-blue-800 flex items-center gap-2">
+      <div className="p-4 bg-sky-50 border border-sky-200 rounded-lg text-sm text-sky-800 flex items-center gap-2">
         <span>✓</span>
         <span>Your shop is verified — the badge is visible to clients.</span>
       </div>
@@ -246,20 +246,20 @@ function VerificationBanner({ shop }: { shop: Shop }) {
 
   if (shop.verificationStatus === "pending") {
     return (
-      <div className="p-4 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-700">
+      <div className="p-4 bg-muted border border-border rounded-lg text-sm text-foreground/80">
         Verification request submitted — an admin will review it soon.
       </div>
     );
   }
 
   return (
-    <div className="p-4 bg-white border border-gray-200 rounded-lg flex items-center justify-between flex-wrap gap-2">
+    <div className="p-4 bg-card border border-border rounded-lg flex items-center justify-between flex-wrap gap-2">
       <div>
-        <p className="text-sm font-medium text-gray-900">Get verified</p>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm font-medium text-foreground">Get verified</p>
+        <p className="text-sm text-muted-foreground">
           Verified shops get a badge that builds trust with clients.
           {shop.verificationStatus === "rejected" && shop.verificationNote && (
-            <span className="block text-red-700 mt-1">
+            <span className="block text-destructive mt-1">
               Previous request rejected: {shop.verificationNote}
             </span>
           )}
@@ -295,8 +295,8 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
   return (
     <div className="space-y-6">
       {shop.status === "closed" && (
-        <div className="p-4 bg-gray-100 border border-gray-300 rounded-lg flex items-center justify-between flex-wrap gap-2">
-          <p className="text-sm text-gray-700">
+        <div className="p-4 bg-muted border border-border rounded-lg flex items-center justify-between flex-wrap gap-2">
+          <p className="text-sm text-foreground/80">
             Your shop is closed and hidden from public listings.
           </p>
           <Button
@@ -309,7 +309,7 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
         </div>
       )}
       {shop.status === "suspended" && (
-        <div className="p-4 bg-red-100 border border-red-300 rounded-lg text-sm text-red-800">
+        <div className="p-4 bg-destructive/10 border border-destructive/25 rounded-lg text-sm text-destructive">
           Your shop was suspended by an admin and is hidden from public
           listings. Contact support if you believe this is a mistake.
         </div>
@@ -333,18 +333,18 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
       <CardContent>
         <form onSubmit={handleSaveProfile} className="space-y-6">
           {updateShop.isError && (
-            <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+            <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
               Couldn't save your changes. Please try again.
             </div>
           )}
           {updateShop.isSuccess && (
-            <div className="p-3 bg-green-100 border border-green-300 rounded-lg text-green-800 text-sm">
+            <div className="p-3 bg-jade-50 border border-jade-500/25 rounded-lg text-jade-600 text-sm">
               Shop updated.
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground/80 mb-2">
               Shop Name
             </label>
             <Input
@@ -356,19 +356,19 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground/80 mb-2">
               Category
             </label>
             <Input
               type="text"
               value={shop.category?.name ?? ""}
               disabled
-              className="bg-gray-100"
+              className="bg-muted"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground/80 mb-2">
               Description
             </label>
             <Textarea
@@ -381,7 +381,7 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
 
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground/80 mb-2">
                 Phone
               </label>
               <Input
@@ -392,7 +392,7 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground/80 mb-2">
                 City
               </label>
               <Input
@@ -405,7 +405,7 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground/80 mb-2">
               Address
             </label>
             <Input
@@ -427,8 +427,8 @@ function ShopProfileForm({ shop }: { shop: Shop }) {
         <Card>
           <CardContent className="pt-6 flex items-center justify-between flex-wrap gap-2">
             <div>
-              <p className="font-medium text-gray-900">Close Shop</p>
-              <p className="text-sm text-gray-600">
+              <p className="font-medium text-foreground">Close Shop</p>
+              <p className="text-sm text-muted-foreground">
                 Temporarily hide your shop from public listings. You can reopen it any time.
               </p>
             </div>
@@ -481,9 +481,9 @@ export default function ArtisanProfilePage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <main className="page-shell py-12">
         <div className="max-w-4xl mx-auto">
-          <div className="h-64 rounded-xl bg-white animate-pulse" />
+          <div className="h-64 rounded-xl bg-card animate-pulse" />
         </div>
       </main>
     );
@@ -491,11 +491,11 @@ export default function ArtisanProfilePage() {
 
   if (isError || !shop) {
     return (
-      <main className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <main className="page-shell py-12">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Create Your Shop</h1>
-            <p className="text-gray-600">
+            <h1 className="text-4xl font-bold text-foreground mb-2">Create Your Shop</h1>
+            <p className="text-muted-foreground">
               Set up your shop to start listing services and products.
             </p>
           </div>
@@ -506,21 +506,21 @@ export default function ArtisanProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <main className="page-shell py-12">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">My Shop</h1>
-          <p className="text-gray-600">Manage your shop profile and services</p>
+          <h1 className="text-4xl font-bold text-foreground mb-2">My Shop</h1>
+          <p className="text-muted-foreground">Manage your shop profile and services</p>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex gap-4 mb-8 border-b border-gray-200">
+        <div className="flex gap-4 mb-8 border-b border-border">
           <button
             onClick={() => setActiveTab("profile")}
             className={`px-4 py-2 font-medium ${
               activeTab === "profile"
-                ? "text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:text-gray-900"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Profile
@@ -529,8 +529,8 @@ export default function ArtisanProfilePage() {
             onClick={() => setActiveTab("services")}
             className={`px-4 py-2 font-medium ${
               activeTab === "services"
-                ? "text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:text-gray-900"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Services
@@ -539,8 +539,8 @@ export default function ArtisanProfilePage() {
             onClick={() => setActiveTab("products")}
             className={`px-4 py-2 font-medium ${
               activeTab === "products"
-                ? "text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:text-gray-900"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Products
@@ -549,8 +549,8 @@ export default function ArtisanProfilePage() {
             onClick={() => setActiveTab("photos")}
             className={`px-4 py-2 font-medium ${
               activeTab === "photos"
-                ? "text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:text-gray-900"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Photos
@@ -559,8 +559,8 @@ export default function ArtisanProfilePage() {
             onClick={() => setActiveTab("bookings")}
             className={`px-4 py-2 font-medium ${
               activeTab === "bookings"
-                ? "text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:text-gray-900"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Bookings
@@ -569,8 +569,8 @@ export default function ArtisanProfilePage() {
             onClick={() => setActiveTab("orders")}
             className={`px-4 py-2 font-medium ${
               activeTab === "orders"
-                ? "text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:text-gray-900"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Orders
@@ -603,13 +603,13 @@ export default function ArtisanProfilePage() {
               <CardContent>
                 <form onSubmit={handleAddService} className="space-y-4">
                   {createService.isError && (
-                    <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+                    <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
                       Couldn't add the service. Please try again.
                     </div>
                   )}
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-foreground/80 mb-2">
                       Service Name
                     </label>
                     <Input
@@ -623,7 +623,7 @@ export default function ArtisanProfilePage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-foreground/80 mb-2">
                       Description
                     </label>
                     <Textarea
@@ -641,7 +641,7 @@ export default function ArtisanProfilePage() {
 
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-foreground/80 mb-2">
                         Price ($)
                       </label>
                       <Input
@@ -656,7 +656,7 @@ export default function ArtisanProfilePage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-foreground/80 mb-2">
                         Duration
                       </label>
                       <Input
@@ -685,13 +685,13 @@ export default function ArtisanProfilePage() {
             </Card>
 
             <div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-6">
+              <h3 className="text-2xl font-bold text-foreground mb-6">
                 Your Services
               </h3>
               {(shop.services ?? []).length === 0 ? (
                 <Card>
                   <CardContent className="pt-6">
-                    <p className="text-center text-gray-600">
+                    <p className="text-center text-muted-foreground">
                       No services added yet
                     </p>
                   </CardContent>
@@ -709,15 +709,15 @@ export default function ArtisanProfilePage() {
                       <CardContent className="space-y-4">
                         <div className="flex justify-between items-center">
                           <div>
-                            <p className="text-sm text-gray-500">Price</p>
-                            <p className="text-2xl font-bold text-gray-900">
+                            <p className="text-sm text-muted-foreground">Price</p>
+                            <p className="text-2xl font-bold text-foreground">
                               ${Number(service.price).toFixed(2)}
                             </p>
                           </div>
                           {service.duration && (
                             <div>
-                              <p className="text-sm text-gray-500">Duration</p>
-                              <p className="font-semibold text-gray-900">
+                              <p className="text-sm text-muted-foreground">Duration</p>
+                              <p className="font-semibold text-foreground">
                                 {service.duration}
                               </p>
                             </div>

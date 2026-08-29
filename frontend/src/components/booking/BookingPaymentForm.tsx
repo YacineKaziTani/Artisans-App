@@ -55,18 +55,18 @@ export function BookingPaymentForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <PaymentElement />
       {error && (
-        <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+        <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
           {error}
         </div>
       )}
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-muted-foreground">
         Your card will be authorized now but not charged until the artisan
         confirms. If they can't fulfill it, you won't be charged at all.
       </p>
       <div className="flex gap-2">
         <Button
           type="submit"
-          className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
+          className="flex-1 btn-gradient text-white"
           disabled={!stripe || submitting}
         >
           {submitting ? "Processing..." : "Authorize Payment"}

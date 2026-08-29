@@ -8,30 +8,30 @@ export default function AdminConversationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Conversations</h1>
-        <p className="text-gray-600">All client ↔ artisan messages (read-only)</p>
+        <h1 className="text-3xl font-bold text-foreground">Conversations</h1>
+        <p className="text-muted-foreground">All client ↔ artisan messages (read-only)</p>
       </div>
 
-      <div className="flex gap-6 bg-white rounded-xl border border-gray-200 overflow-hidden min-h-[65vh]">
+      <div className="flex gap-6 bg-card rounded-xl border border-border overflow-hidden min-h-[65vh]">
         <div
-          className={`w-full sm:w-80 border-r border-gray-200 flex-shrink-0 ${activeId ? "hidden sm:block" : "block"}`}
+          className={`w-full sm:w-80 border-r border-border flex-shrink-0 ${activeId ? "hidden sm:block" : "block"}`}
         >
           {isLoading && (
             <div className="p-4 space-y-3">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
               ))}
             </div>
           )}
 
           {isError && (
-            <p className="p-4 text-sm text-red-700">
+            <p className="p-4 text-sm text-destructive">
               Couldn't load conversations.
             </p>
           )}
 
           {!isLoading && !isError && (conversations ?? []).length === 0 && (
-            <p className="p-4 text-sm text-gray-600">No conversations yet.</p>
+            <p className="p-4 text-sm text-muted-foreground">No conversations yet.</p>
           )}
 
           {!isLoading &&
@@ -40,14 +40,14 @@ export default function AdminConversationsPage() {
               <Link
                 key={c.id}
                 to={`/dashboard/messages/${c.id}`}
-                className={`block px-4 py-3 border-b border-gray-100 hover:bg-gray-50 ${
-                  activeId === c.id ? "bg-orange-50" : ""
+                className={`block px-4 py-3 border-b border-border hover:bg-accent ${
+                  activeId === c.id ? "bg-brand-50" : ""
                 }`}
               >
-                <p className="font-medium text-gray-900 truncate">
+                <p className="font-medium text-foreground truncate">
                   {c.client?.name} ↔ {c.shop?.shopName}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   {new Date(c.updatedAt).toLocaleString()}
                 </p>
               </Link>

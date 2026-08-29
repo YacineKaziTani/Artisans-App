@@ -49,7 +49,7 @@ export default function MessagesLayout() {
           )}
         </div>
 
-        <div className="flex bg-card rounded-xl border border-border overflow-hidden shadow-sm h-[calc(100vh-13rem)] min-h-[28rem]">
+        <div className="flex bg-card rounded-xl border border-border overflow-hidden shadow-[var(--shadow-sm)] h-[calc(100vh-13rem)] min-h-[28rem]">
           <aside
             className={`w-full sm:w-80 border-r border-border flex-shrink-0 flex flex-col ${
               activeId ? "hidden sm:flex" : "flex"

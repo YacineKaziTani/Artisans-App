@@ -1,20 +1,20 @@
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen bg-gray-50 py-16 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto bg-white rounded-xl border border-gray-200 p-8 sm:p-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: [date]</p>
+    <main className="page-narrow py-16">
+      <div className="surface p-8 sm:p-12">
+        <h1 className="font-display text-4xl font-semibold">Privacy Policy</h1>
+        <p className="mt-2 mb-10 text-sm text-muted-foreground">Last updated: [date]</p>
 
-        <div className="p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-900 mb-8">
+        <div className="alert-note mb-10">
           <strong>Template notice:</strong> this is placeholder content and
           not legal advice. Depending on where your users are located, you
           may have specific legal obligations (e.g. GDPR in the EU, CCPA in
           California). Have a qualified lawyer review this before going live.
         </div>
 
-        <div className="prose prose-gray max-w-none space-y-6 text-gray-700">
+        <div className="space-y-8 leading-relaxed text-muted-foreground">
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="mb-2 font-display text-xl font-semibold text-foreground">
               1. Information we collect
             </h2>
             <p>
@@ -27,7 +27,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="mb-2 font-display text-xl font-semibold text-foreground">
               2. How we use it
             </h2>
             <p>
@@ -40,7 +40,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="mb-2 font-display text-xl font-semibold text-foreground">
               3. Who we share it with
             </h2>
             <p>
@@ -53,7 +53,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="mb-2 font-display text-xl font-semibold text-foreground">
               4. Your choices
             </h2>
             <p>
@@ -66,7 +66,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="mb-2 font-display text-xl font-semibold text-foreground">
               5. Security
             </h2>
             <p>

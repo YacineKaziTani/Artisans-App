@@ -1,62 +1,124 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
 
+/* ══════════════════════════════════════════════════════════════════
+   Design tokens
+   A warm "workshop paper" palette: terracotta as the brand voice,
+   jade as the quiet counterweight, and a neutral ramp that stays
+   warm instead of drifting grey.
+   ══════════════════════════════════════════════════════════════════ */
+
 @layer base {
   :root {
-    /* Legacy dashboard tokens (used by the existing Button/Input/dashboard UI) */
-    --color-bg: #f8f9fc;
-    --color-surface: #ffffff;
-    --color-border: #e5e7eb;
-    --color-text: #111827;
-    --color-muted: #6b7280;
-    --color-primary: #4f46e5;
-    --color-primary-hover: #4338ca;
-    --color-danger: #ef4444;
+    /* Surfaces & ink */
+    --background: #fbf9f6;
+    --foreground: #1c1917;
+    --card: #ffffff;
+    --card-foreground: #1c1917;
+    --popover: #ffffff;
+    --popover-foreground: #1c1917;
 
-    /* Marketplace design tokens (shadcn-style, used by components/ui/*.tsx lowercase) */
-    --background: #faf8f3;
-    --foreground: #2b1f18;
-    --card: #fff9f0;
-    --card-foreground: #2b1f18;
-    --popover: #fff9f0;
-    --popover-foreground: #2b1f18;
-    --primary: #c85a17;
+    /* Brand */
+    --primary: #c2532c;
     --primary-foreground: #ffffff;
-    --secondary: #d4a574;
-    --secondary-foreground: #2b1f18;
-    --muted: #f0e6d8;
-    --muted-foreground: #7a6555;
-    --accent: #e8932f;
-    --accent-foreground: #ffffff;
+    --secondary: #f4eee7;
+    --secondary-foreground: #3b322b;
+
+    /* Neutrals — `accent` is the hover wash for ghost/outline controls,
+       so it must stay a quiet tint, not a saturated colour. */
+    --muted: #f4f0eb;
+    --muted-foreground: #78706a;
+    --accent: #f1ebe4;
+    --accent-foreground: #2a241f;
+
     --destructive: #dc2626;
     --destructive-foreground: #ffffff;
-    --border: #e8dcc8;
-    --input: #fff9f0;
-    --ring: #c85a17;
-    --radius: 0.625rem;
+    --success: #15803d;
+    --warning: #b45309;
+
+    --border: #e9e2d9;
+    --input: #e9e2d9;
+    --ring: #c2532c;
+
+    /* Extended brand ramp for marketing surfaces */
+    --brand-50: #fdf4ef;
+    --brand-100: #fbe7db;
+    --brand-200: #f5cbb2;
+    --brand-500: #c2532c;
+    --brand-600: #a94722;
+    --brand-700: #8a381a;
+    --jade-50: #eaf4f0;
+    --jade-500: #1f6e5a;
+    --jade-600: #185845;
+    --sand: #e2c9a5;
+
+    --radius: 0.875rem;
+
+    /* Elevation — warm-tinted so shadows read as light, not soot */
+    --shadow-xs: 0 1px 2px 0 rgb(60 40 25 / 0.05);
+    --shadow-sm: 0 1px 3px 0 rgb(60 40 25 / 0.07),
+      0 1px 2px -1px rgb(60 40 25 / 0.05);
+    --shadow-md: 0 6px 16px -6px rgb(60 40 25 / 0.12),
+      0 2px 6px -2px rgb(60 40 25 / 0.06);
+    --shadow-lg: 0 18px 40px -14px rgb(60 40 25 / 0.18),
+      0 6px 14px -8px rgb(60 40 25 / 0.08);
+    --shadow-glow: 0 12px 32px -12px rgb(194 83 44 / 0.45);
+
+    /* Legacy dashboard aliases — older screens still read these. */
+    --color-bg: var(--background);
+    --color-surface: var(--card);
+    --color-border: var(--border);
+    --color-text: var(--foreground);
+    --color-muted: var(--muted-foreground);
+    --color-primary: var(--primary);
+    --color-primary-hover: var(--brand-600);
+    --color-danger: var(--destructive);
   }
 
   .dark {
-    --background: #1a1410;
-    --foreground: #faf8f3;
-    --card: #2b2015;
-    --card-foreground: #faf8f3;
-    --popover: #2b2015;
-    --popover-foreground: #faf8f3;
-    --primary: #e8932f;
-    --primary-foreground: #1a1410;
-    --secondary: #d4a574;
-    --secondary-foreground: #1a1410;
-    --muted: #3d3028;
-    --muted-foreground: #a89d91;
-    --accent: #f5a623;
-    --accent-foreground: #1a1410;
-    --destructive: #ff4757;
-    --destructive-foreground: #1a1410;
-    --border: #3d3028;
-    --input: #2b2015;
-    --ring: #e8932f;
+    --background: #14110f;
+    --foreground: #f5f1ec;
+    --card: #1d1917;
+    --card-foreground: #f5f1ec;
+    --popover: #1d1917;
+    --popover-foreground: #f5f1ec;
+
+    --primary: #e0764a;
+    --primary-foreground: #1a1210;
+    --secondary: #2a2422;
+    --secondary-foreground: #f0eae4;
+
+    --muted: #241f1d;
+    --muted-foreground: #a69c93;
+    --accent: #2a2422;
+    --accent-foreground: #f5f1ec;
+
+    --destructive: #f16358;
+    --destructive-foreground: #1a1210;
+    --success: #4ade80;
+    --warning: #fbbf24;
+
+    --border: #302a27;
+    --input: #302a27;
+    --ring: #e0764a;
+
+    --brand-50: #2a1a12;
+    --brand-100: #3a2317;
+    --brand-200: #5c3520;
+    --brand-500: #e0764a;
+    --brand-600: #c2532c;
+    --brand-700: #f0a583;
+    --jade-50: #16241f;
+    --jade-500: #4bab8f;
+    --jade-600: #6ec5aa;
+    --sand: #7a6244;
+
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4);
+    --shadow-md: 0 6px 16px -6px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 18px 40px -14px rgb(0 0 0 / 0.6);
+    --shadow-glow: 0 12px 32px -12px rgb(224 118 74 / 0.4);
   }
 }
 
@@ -77,22 +139,328 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-jade-50: var(--jade-50);
+  --color-jade-500: var(--jade-500);
+  --color-jade-600: var(--jade-600);
+  --color-sand: var(--sand);
+
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 10px);
+  --radius-3xl: calc(var(--radius) + 18px);
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+
+  --shadow-soft: var(--shadow-sm);
+  --shadow-card: var(--shadow-md);
+  --shadow-lift: var(--shadow-lg);
+
+  --animate-fade-up: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.5s ease-out both;
+  --animate-float: float 7s ease-in-out infinite;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   Base
+   ══════════════════════════════════════════════════════════════════ */
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-[-0.015em];
+    font-optical-sizing: auto;
+  }
+
+  ::selection {
+    background: var(--brand-200);
+    color: var(--brand-700);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Scrollbars that match the paper, not the OS */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent)
+      transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--foreground) 15%, transparent);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--foreground) 28%, transparent);
+    background-clip: content-box;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Composite utilities
+   ══════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* Standard page gutter — every page shell uses this so the whole app
+     shares one measure. */
+  .page-shell {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .page-narrow {
+    @apply mx-auto w-full max-w-4xl px-4 sm:px-6 lg:px-8;
+  }
+
+  /* The default raised surface: hairline border + warm shadow, nothing
+     heavy enough to fight the content. */
+  .surface {
+    @apply rounded-2xl border border-border/70 bg-card shadow-[var(--shadow-sm)];
+  }
+
+  .surface-lift {
+    @apply rounded-2xl border border-border/70 bg-card shadow-[var(--shadow-sm)] transition-all duration-300;
+  }
+  .surface-lift:hover {
+    @apply -translate-y-1 border-border shadow-[var(--shadow-lg)];
+  }
+
+  .glass {
+    background: color-mix(in oklab, var(--card) 72%, transparent);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+  }
+
+  .text-gradient {
+    background-image: linear-gradient(
+      100deg,
+      var(--brand-700),
+      var(--brand-500) 45%,
+      var(--brand-600)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .btn-gradient {
+    background-image: linear-gradient(
+      120deg,
+      var(--brand-500),
+      var(--brand-600)
+    );
+  }
+
+  /* Eyebrow pill used above section headings */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground;
+  }
+
+  .section-title {
+    @apply font-display text-3xl font-semibold text-balance sm:text-4xl;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-xl bg-muted;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklab, var(--card) 70%, transparent),
+      transparent
+    );
+    animation: shimmer 1.6s infinite;
+  }
+
+  /* Field label shared by every hand-rolled form on the site */
+  .field-label {
+    @apply mb-1.5 block text-sm font-medium text-foreground/80;
+  }
+
+  .alert-error {
+    @apply rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive;
+  }
+  .alert-note {
+    @apply rounded-xl border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Decorative backdrops
+   ══════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* Soft colour wash behind hero sections */
+  .aurora {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .aurora::before,
+  .aurora::after {
+    content: '';
+    position: absolute;
+    width: 46rem;
+    height: 46rem;
+    border-radius: 999px;
+    filter: blur(90px);
+    opacity: 0.5;
+  }
+  .aurora::before {
+    top: -18rem;
+    right: -12rem;
+    background: radial-gradient(
+      circle,
+      color-mix(in oklab, var(--brand-500) 45%, transparent),
+      transparent 68%
+    );
+  }
+  .aurora::after {
+    bottom: -24rem;
+    left: -14rem;
+    background: radial-gradient(
+      circle,
+      color-mix(in oklab, var(--jade-500) 32%, transparent),
+      transparent 68%
+    );
+  }
+
+  /* Faint blueprint grid, fading out toward the bottom */
+  .grid-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(
+        to right,
+        color-mix(in oklab, var(--foreground) 6%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklab, var(--foreground) 6%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 64px 64px;
+    -webkit-mask-image: radial-gradient(
+      ellipse 100% 70% at 50% 0%,
+      #000 40%,
+      transparent 100%
+    );
+    mask-image: radial-gradient(
+      ellipse 100% 70% at 50% 0%,
+      #000 40%,
+      transparent 100%
+    );
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Motion
+   ══════════════════════════════════════════════════════════════════ */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Radix overlays: the project has no animate plugin, so drive the
+   open/close transitions straight off the rendered content elements. */
+[data-slot='dropdown-menu-content'],
+[data-slot='select-content'],
+[data-slot='dialog-content'] {
+  animation: pop-in 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-slot='dialog-overlay'] {
+  animation: fade-in 0.2s ease-out;
 }
 
 /* Featured products marquee (home page) — an infinite horizontal scroll.
@@ -116,7 +484,7 @@
   display: flex;
   gap: 1.5rem;
   width: max-content;
-  animation: product-marquee 45s linear infinite;
+  animation: product-marquee 55s linear infinite;
 }
 
 .product-marquee-track:hover {
@@ -126,5 +494,11 @@
 @media (prefers-reduced-motion: reduce) {
   .product-marquee-track {
     animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

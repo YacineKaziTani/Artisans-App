@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
+import { ArrowLeft, ArrowRight, MapPin, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCategories } from "@/hooks/useCategories";
 import { useShops } from "@/hooks/useShops";
@@ -26,108 +27,135 @@ export default function CategoryDetailPage() {
   const notFound = !categoriesLoading && !category;
 
   return (
-    <main
-      className={`min-h-screen bg-gradient-to-br ${theme.bg} via-orange-50 to-orange-100 py-12 px-4 sm:px-6 lg:px-8`}
-    >
-      <div className="max-w-6xl mx-auto">
-        <Link
-          to="/categories"
-          className="text-orange-700 hover:text-orange-800 mb-6 inline-block font-semibold"
-        >
-          ← Back to Categories
-        </Link>
-
-        {categoriesLoading && (
-          <div className="mb-12 h-40 rounded-xl bg-white/50 animate-pulse" />
-        )}
-
-        {notFound && (
-          <p className="text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-12">
-            This category doesn't exist.
-          </p>
-        )}
-
-        {category && (
-          <div
-            className={`mb-12 bg-gradient-to-r ${theme.gradient} border-2 ${theme.border} rounded-xl p-8`}
+    <main>
+      {/* ── Category hero ────────────────────────────────────────── */}
+      <section
+        className={`border-b bg-gradient-to-br ${theme.wash} ${theme.ring}`}
+      >
+        <div className="page-shell py-10 sm:py-14">
+          <Link
+            to="/categories"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            <div className="flex items-center gap-4 mb-4">
-              {category.iconUrl?.startsWith("http") ? (
-                <img src={category.iconUrl} alt="" className="w-16 h-16 object-contain" />
-              ) : (
-                <span className="text-6xl">
-                  {category.iconUrl ?? theme.fallbackIcon}
-                </span>
-              )}
-              <div>
-                <h1 className={`text-4xl font-bold ${theme.text}`}>
+            <ArrowLeft className="size-4" /> All categories
+          </Link>
+
+          {categoriesLoading && <div className="skeleton mt-6 h-24 max-w-lg" />}
+
+          {notFound && (
+            <p className="alert-error mt-6 max-w-lg">
+              This category doesn't exist.
+            </p>
+          )}
+
+          {category && (
+            <div className="mt-6 flex flex-wrap items-center gap-5">
+              <span
+                className={`flex size-16 items-center justify-center rounded-2xl text-3xl shadow-[var(--shadow-sm)] ${theme.chip}`}
+              >
+                {category.iconUrl?.startsWith("http") ? (
+                  <img
+                    src={category.iconUrl}
+                    alt=""
+                    className="size-9 object-contain"
+                  />
+                ) : (
+                  (category.iconUrl ?? theme.fallbackIcon)
+                )}
+              </span>
+              <div className="min-w-0">
+                <h1
+                  className={`font-display text-4xl font-semibold sm:text-5xl ${theme.text}`}
+                >
                   {category.name}
                 </h1>
                 {category.description && (
-                  <p className={`text-lg ${theme.text} opacity-80`}>
+                  <p className="mt-2 max-w-xl text-lg text-muted-foreground">
                     {category.description}
                   </p>
                 )}
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      </section>
 
-        <h2 className="text-3xl font-bold text-amber-950 mb-8">
-          Available Artisans
-        </h2>
+      {/* ── Shops in this category ───────────────────────────────── */}
+      <div className="page-shell py-12">
+        <div className="mb-8 flex items-end justify-between gap-4">
+          <h2 className="section-title">Available artisans</h2>
+          {shopsPage && shopsPage.meta.total > 0 && (
+            <p className="text-sm text-muted-foreground">
+              {shopsPage.meta.total} shop
+              {shopsPage.meta.total === 1 ? "" : "s"}
+            </p>
+          )}
+        </div>
 
         {shopsLoading && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-48 rounded-xl bg-white/60 border-2 border-amber-100 animate-pulse"
-              />
+              <div key={i} className="skeleton h-52" />
             ))}
           </div>
         )}
 
         {shopsError && (
-          <p className="text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-4">
+          <p className="alert-error">
             Couldn't load artisans right now. Please try again shortly.
           </p>
         )}
 
         {!shopsLoading && !shopsError && shopsPage?.data.length === 0 && (
-          <p className="text-amber-900">
-            No artisans in this category yet — check back soon.
-          </p>
+          <div className="surface p-12 text-center">
+            <p className="font-display text-lg font-semibold">
+              No artisans here yet
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Nobody has listed in this category — check back soon.
+            </p>
+          </div>
         )}
 
         {!shopsLoading && !shopsError && shopsPage && shopsPage.data.length > 0 && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {shopsPage.data.map((shop) => (
-              <Link key={shop.id} to={`/artisan/${shop.id}`}>
-                <div className="bg-white/90 backdrop-blur-sm border-2 border-amber-200 rounded-xl p-6 h-full hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer">
-                  <h3 className="text-xl font-bold text-amber-900 mb-2">
+              <Link
+                key={shop.id}
+                to={`/artisan/${shop.id}`}
+                className="surface-lift group flex flex-col p-6"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="font-display text-lg font-semibold">
                     {shop.shopName}
                   </h3>
-                  {shop.description && (
-                    <p className="text-amber-800 text-sm mb-4">
-                      {shop.description}
-                    </p>
+                  {shop.averageRating > 0 && (
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold">
+                      <Star className="size-3 fill-current text-amber-500" />
+                      {shop.averageRating.toFixed(1)}
+                    </span>
                   )}
-                  {shop.address && (
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="text-lg">📍</span>
-                      <p className="text-sm text-amber-700">
-                        {shop.city ? `${shop.address}, ${shop.city}` : shop.address}
-                      </p>
-                    </div>
-                  )}
-                  <Button
-                    size="sm"
-                    className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
-                  >
-                    View Shop
-                  </Button>
                 </div>
+
+                {shop.description && (
+                  <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+                    {shop.description}
+                  </p>
+                )}
+
+                {shop.address && (
+                  <p className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <MapPin className="size-3.5 shrink-0" />
+                    <span className="truncate">
+                      {shop.city ? `${shop.address}, ${shop.city}` : shop.address}
+                    </span>
+                  </p>
+                )}
+
+                <span className="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-medium text-primary">
+                  View shop
+                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                </span>
               </Link>
             ))}
           </div>
@@ -137,15 +165,15 @@ export default function CategoryDetailPage() {
           !shopsError &&
           shopsPage &&
           shopsPage.meta.lastPage > 1 && (
-            <div className="flex items-center justify-center gap-4 mt-8">
+            <div className="mt-10 flex items-center justify-center gap-4">
               <Button
                 variant="outline"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
-                ← Previous
+                Previous
               </Button>
-              <span className="text-sm text-amber-900">
+              <span className="text-sm text-muted-foreground">
                 Page {shopsPage.meta.page} of {shopsPage.meta.lastPage}
               </span>
               <Button
@@ -153,7 +181,7 @@ export default function CategoryDetailPage() {
                 disabled={page >= shopsPage.meta.lastPage}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next →
+                Next
               </Button>
             </div>
           )}

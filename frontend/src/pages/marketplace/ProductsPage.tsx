@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { Check, Package, ShoppingBag, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useProducts } from "@/hooks/useProducts";
@@ -23,12 +24,18 @@ export default function ProductsPage() {
 
   const { data: categories } = useCategories();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { data: favoriteIds } = useFavoriteIds("product", { enabled: isAuthenticated });
+  const { data: favoriteIds } = useFavoriteIds("product", {
+    enabled: isAuthenticated,
+  });
   const addToCart = useCartStore((s) => s.addItem);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [wrongShop, setWrongShop] = useState(false);
 
-  const { data: products, isLoading, isError } = useProducts({
+  const {
+    data: products,
+    isLoading,
+    isError,
+  } = useProducts({
     search: search || undefined,
     category: category || undefined,
     minPrice: minPrice ? Number(minPrice) : undefined,
@@ -54,103 +61,150 @@ export default function ProductsPage() {
     setSearchParams(next);
   };
 
+  const hasFilters = Boolean(search || category || minPrice || maxPrice);
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 py-16 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-10">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-orange-700 to-amber-600 bg-clip-text text-transparent mb-4">
-            Browse Products
+    <main>
+      {/* ── Page header ──────────────────────────────────────────── */}
+      <section className="relative isolate overflow-hidden border-b border-border/70">
+        <div className="aurora opacity-60" aria-hidden="true" />
+        <div className="page-shell relative py-14 sm:py-16">
+          <span className="eyebrow">Marketplace</span>
+          <h1 className="mt-4 font-display text-4xl font-semibold text-balance sm:text-5xl">
+            Browse <span className="text-gradient">products</span>
           </h1>
-          <p className="text-xl text-amber-900 mb-8">
+          <p className="mt-3 max-w-xl text-lg text-muted-foreground">
             Handmade goods from artisans across the marketplace.
           </p>
-
-          <form
-            onSubmit={applyFilters}
-            className="bg-white/80 backdrop-blur-sm p-4 rounded-lg border-2 border-orange-200 shadow-md flex flex-wrap gap-3 items-end"
-          >
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs font-medium text-amber-900 mb-1">Search</label>
-              <Input
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search products..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-amber-900 mb-1">Category</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="border-input flex h-9 rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none"
-              >
-                <option value="">All</option>
-                {(categories ?? []).map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-amber-900 mb-1">Min $</label>
-              <Input
-                type="number"
-                min="0"
-                value={minInput}
-                onChange={(e) => setMinInput(e.target.value)}
-                className="w-24"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-amber-900 mb-1">Max $</label>
-              <Input
-                type="number"
-                min="0"
-                value={maxInput}
-                onChange={(e) => setMaxInput(e.target.value)}
-                className="w-24"
-              />
-            </div>
-            <Button type="submit">Apply Filters</Button>
-          </form>
         </div>
+      </section>
 
-        {isLoading && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-64 rounded-xl bg-white/60 animate-pulse" />
-            ))}
+      <div className="page-shell py-12">
+        {/* ── Filters ───────────────────────────────────────────── */}
+        <form
+          onSubmit={applyFilters}
+          className="surface mb-10 flex flex-wrap items-end gap-4 p-5"
+        >
+          <div className="min-w-[200px] flex-1">
+            <label htmlFor="product-search" className="field-label">
+              Search
+            </label>
+            <Input
+              id="product-search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search products…"
+            />
           </div>
-        )}
 
-        {isError && (
-          <p className="text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-4">
-            Couldn't load products right now.
-          </p>
-        )}
+          <div>
+            <label htmlFor="product-category" className="field-label">
+              Category
+            </label>
+            <select
+              id="product-category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="h-11 rounded-xl border border-input bg-card px-3.5 text-sm shadow-[var(--shadow-xs)] outline-none transition-colors hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25"
+            >
+              <option value="">All categories</option>
+              {(categories ?? []).map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="product-min" className="field-label">
+              Min $
+            </label>
+            <Input
+              id="product-min"
+              type="number"
+              min="0"
+              value={minInput}
+              onChange={(e) => setMinInput(e.target.value)}
+              className="w-28"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="product-max" className="field-label">
+              Max $
+            </label>
+            <Input
+              id="product-max"
+              type="number"
+              min="0"
+              value={maxInput}
+              onChange={(e) => setMaxInput(e.target.value)}
+              className="w-28"
+            />
+          </div>
+
+          <Button type="submit">
+            <SlidersHorizontal className="size-4" /> Apply
+          </Button>
+
+          {hasFilters && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setSearchInput("");
+                setMinInput("");
+                setMaxInput("");
+                setSearchParams({});
+              }}
+            >
+              Reset
+            </Button>
+          )}
+        </form>
 
         {wrongShop && (
-          <p className="mb-4 p-3 bg-amber-100 border-2 border-amber-300 rounded-lg text-amber-900 text-sm">
+          <p className="alert-note mb-6">
             Your cart already has items from another shop. Each order is paid
             out to a single artisan, so check out first (or clear the cart)
             before adding this.
           </p>
         )}
 
+        {isLoading && (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="skeleton h-80" />
+            ))}
+          </div>
+        )}
+
+        {isError && (
+          <p className="alert-error">Couldn't load products right now.</p>
+        )}
+
         {!isLoading && !isError && (products ?? []).length === 0 && (
-          <p className="text-amber-900">No products match your filters.</p>
+          <div className="surface p-12 text-center">
+            <Package className="mx-auto size-8 text-muted-foreground" />
+            <p className="mt-4 font-display text-lg font-semibold">
+              No products match your filters
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Try widening the price range or clearing the category.
+            </p>
+          </div>
         )}
 
         {!isLoading && !isError && (products ?? []).length > 0 && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {products!.map((product) => (
               <div
                 key={product.id}
-                className="bg-white/90 backdrop-blur-sm border-2 border-orange-200 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow relative"
+                className="surface-lift group relative flex flex-col overflow-hidden"
               >
                 {isAuthenticated && (
-                  <div className="absolute top-3 right-3 z-10 bg-white/90 rounded-full w-9 h-9 flex items-center justify-center">
+                  <div className="absolute top-3 right-3 z-10 flex size-9 items-center justify-center rounded-full bg-card/90 shadow-[var(--shadow-sm)] backdrop-blur">
                     <FavoriteButton
                       targetType="product"
                       targetId={product.id}
@@ -158,71 +212,92 @@ export default function ProductsPage() {
                     />
                   </div>
                 )}
-                <Link to={`/artisan/${product.shop?.id}`}>
-                  {product.imageUrl && (
+
+                <Link
+                  to={`/artisan/${product.shop?.id}`}
+                  className="block overflow-hidden"
+                >
+                  {product.imageUrl ? (
                     <img
                       src={product.imageUrl}
                       alt={product.title}
-                      className="w-full h-40 object-cover"
+                      loading="lazy"
+                      className="h-48 w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
+                  ) : (
+                    <div className="flex h-48 w-full items-center justify-center bg-brand-50 text-brand-500">
+                      <Package className="size-9" />
+                    </div>
                   )}
                 </Link>
-                <div className="p-6">
+
+                <div className="flex flex-1 flex-col p-5">
                   <Link to={`/artisan/${product.shop?.id}`}>
-                    <h3 className="text-xl font-bold text-orange-800 mb-1 hover:underline">
+                    <h3 className="font-display text-lg font-semibold hover:text-primary">
                       {product.title}
                     </h3>
                   </Link>
-                  <p className="text-xs font-semibold text-amber-700 mb-2">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {product.shop?.shopName}
                   </p>
+
                   {product.description && (
-                    <p className="text-amber-900 text-sm mb-4 line-clamp-2">
+                    <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
                       {product.description}
                     </p>
                   )}
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
-                      ${Number(product.basePrice).toFixed(2)}
-                    </span>
-                  </div>
-                  {isAuthenticated ? (
-                    // Matches ArtisanShopPage: a shop that can't take payment
-                    // shouldn't offer a buy path that fails at checkout.
-                    !shopCanAcceptPayments(product.shop ?? {}) ? (
-                      <Button variant="outline" className="w-full" disabled>
-                        Not Available Yet
-                      </Button>
-                    ) : product.variantOptions?.length ? (
-                      <Link to={`/artisan/${product.shop?.id}`} className="block">
-                        <Button variant="outline" className="w-full">
-                          Select Options
+
+                  <p className="mt-4 font-display text-2xl font-semibold text-primary">
+                    ${Number(product.basePrice).toFixed(2)}
+                  </p>
+
+                  <div className="mt-4 pt-1">
+                    {isAuthenticated ? (
+                      // Matches ArtisanShopPage: a shop that can't take payment
+                      // shouldn't offer a buy path that fails at checkout.
+                      !shopCanAcceptPayments(product.shop ?? {}) ? (
+                        <Button variant="outline" className="w-full" disabled>
+                          Not available yet
                         </Button>
-                      </Link>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => {
-                          if (!addToCart(product)) {
-                            setWrongShop(true);
-                            return;
+                      ) : product.variantOptions?.length ? (
+                        <Button asChild variant="outline" className="w-full">
+                          <Link to={`/artisan/${product.shop?.id}`}>
+                            Select options
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant={
+                            justAdded === product.id ? "jade" : "default"
                           }
-                          setWrongShop(false);
-                          setJustAdded(product.id);
-                          setTimeout(() => setJustAdded(null), 1500);
-                        }}
-                      >
-                        {justAdded === product.id ? "Added ✓" : "Add to Cart"}
+                          className="w-full"
+                          onClick={() => {
+                            if (!addToCart(product)) {
+                              setWrongShop(true);
+                              return;
+                            }
+                            setWrongShop(false);
+                            setJustAdded(product.id);
+                            setTimeout(() => setJustAdded(null), 1500);
+                          }}
+                        >
+                          {justAdded === product.id ? (
+                            <>
+                              <Check className="size-4" /> Added
+                            </>
+                          ) : (
+                            <>
+                              <ShoppingBag className="size-4" /> Add to cart
+                            </>
+                          )}
+                        </Button>
+                      )
+                    ) : (
+                      <Button asChild variant="outline" className="w-full">
+                        <Link to="/login">Log in to buy</Link>
                       </Button>
-                    )
-                  ) : (
-                    <Link to="/login" className="block">
-                      <Button variant="outline" className="w-full">
-                        Login to Buy
-                      </Button>
-                    </Link>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

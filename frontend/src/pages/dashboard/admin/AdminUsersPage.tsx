@@ -15,8 +15,8 @@ import { useAuthStore } from "@/store/auth.store";
 import type { User } from "@/types";
 
 const ROLE_STYLES: Record<User["role"], string> = {
-  client: "bg-gray-100 text-gray-700 border-gray-300",
-  artisan: "bg-orange-100 text-orange-800 border-orange-300",
+  client: "bg-muted text-foreground/80 border-border",
+  artisan: "bg-brand-100 text-primary border-border",
   super_admin: "bg-purple-100 text-purple-800 border-purple-300",
 };
 
@@ -29,8 +29,8 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Users</h1>
-        <p className="text-gray-600">Manage accounts and permissions</p>
+        <h1 className="text-3xl font-bold text-foreground">Users</h1>
+        <p className="text-muted-foreground">Manage accounts and permissions</p>
       </div>
 
       <Card>
@@ -42,13 +42,13 @@ export default function AdminUsersPage() {
           {isLoading && (
             <div className="space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
               ))}
             </div>
           )}
 
           {isError && (
-            <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
               Couldn't load users.
             </p>
           )}
@@ -65,14 +65,14 @@ export default function AdminUsersPage() {
               return (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between border border-gray-200 rounded-lg p-3 flex-wrap gap-2"
+                  className="flex items-center justify-between border border-border rounded-lg p-3 flex-wrap gap-2"
                 >
                   <div>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-foreground">
                       {user.name}{" "}
-                      {isSelf && <span className="text-xs text-gray-400">(you)</span>}
+                      {isSelf && <span className="text-xs text-muted-foreground/70">(you)</span>}
                     </p>
-                    <p className="text-sm text-gray-500">{user.email}</p>
+                    <p className="text-sm text-muted-foreground">{user.email}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span
@@ -81,7 +81,7 @@ export default function AdminUsersPage() {
                       {user.role}
                     </span>
                     {user.isActive === false && (
-                      <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-red-100 text-red-800 border-red-300">
+                      <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-destructive/10 text-destructive border-destructive/25">
                         suspended
                       </span>
                     )}

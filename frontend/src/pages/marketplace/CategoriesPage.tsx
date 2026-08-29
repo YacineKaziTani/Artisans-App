@@ -1,95 +1,145 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { ArrowRight, MapPin, Search, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useCategories } from "@/hooks/useCategories";
 import { useShops } from "@/hooks/useShops";
 import { themeForCategory } from "@/lib/categoryTheme";
 
 const PAGE_SIZE = 12;
 
+function ShopCard({
+  id,
+  shopName,
+  categoryName,
+  description,
+  address,
+  city,
+  rating,
+}: {
+  id: string;
+  shopName: string;
+  categoryName?: string;
+  description?: string;
+  address?: string;
+  city?: string;
+  rating?: number;
+}) {
+  return (
+    <Link to={`/artisan/${id}`} className="surface-lift group flex flex-col p-6">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-display text-lg font-semibold">{shopName}</h3>
+        {rating && rating > 0 ? (
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold">
+            <Star className="size-3 fill-current text-amber-500" />
+            {rating.toFixed(1)}
+          </span>
+        ) : null}
+      </div>
+
+      {categoryName && (
+        <span className="mt-2 w-fit rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-brand-700 uppercase">
+          {categoryName}
+        </span>
+      )}
+
+      {description && (
+        <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      )}
+
+      {address && (
+        <p className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <MapPin className="size-3.5 shrink-0" />
+          <span className="truncate">{city ? `${address}, ${city}` : address}</span>
+        </p>
+      )}
+
+      <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+        View shop
+        <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+      </span>
+    </Link>
+  );
+}
+
 function SearchResults({ query }: { query: string }) {
   const [page, setPage] = useState(1);
-  const { data: shopsPage, isLoading, isError } = useShops({
-    search: query,
-    limit: PAGE_SIZE,
-    page,
-  });
+  const {
+    data: shopsPage,
+    isLoading,
+    isError,
+  } = useShops({ search: query, limit: PAGE_SIZE, page });
 
   return (
     <div>
-      <div className="mb-8 flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-2xl font-bold text-amber-950">
-          Search results for "{query}"
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-2xl font-semibold">
+          Results for “{query}”
+          {shopsPage && (
+            <span className="ml-2 text-base font-normal text-muted-foreground">
+              {shopsPage.meta.total} found
+            </span>
+          )}
         </h2>
-        <Link to="/categories" className="text-sm text-orange-700 hover:underline">
-          Clear search
-        </Link>
+        <Button asChild variant="ghost" size="sm">
+          <Link to="/categories">
+            <X className="size-4" /> Clear search
+          </Link>
+        </Button>
       </div>
 
       {isLoading && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-48 rounded-xl bg-white/60 border-2 border-amber-100 animate-pulse"
-            />
+            <div key={i} className="skeleton h-52" />
           ))}
         </div>
       )}
 
       {isError && (
-        <p className="text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-4">
+        <p className="alert-error">
           Couldn't search right now. Please try again shortly.
         </p>
       )}
 
       {!isLoading && !isError && shopsPage?.data.length === 0 && (
-        <p className="text-amber-900">
-          No artisans matched "{query}" — try a different search.
-        </p>
+        <div className="surface p-12 text-center">
+          <p className="font-display text-lg font-semibold">No matches</p>
+          <p className="mt-1 text-muted-foreground">
+            Nothing matched “{query}” — try a different search.
+          </p>
+        </div>
       )}
 
       {!isLoading && !isError && shopsPage && shopsPage.data.length > 0 && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {shopsPage.data.map((shop) => (
-            <Link key={shop.id} to={`/artisan/${shop.id}`}>
-              <div className="bg-white/90 backdrop-blur-sm border-2 border-amber-200 rounded-xl p-6 h-full hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer">
-                <h3 className="text-xl font-bold text-amber-900 mb-1">
-                  {shop.shopName}
-                </h3>
-                {shop.category && (
-                  <p className="text-xs font-semibold text-orange-700 mb-2">
-                    {shop.category.name}
-                  </p>
-                )}
-                {shop.description && (
-                  <p className="text-amber-800 text-sm mb-4">{shop.description}</p>
-                )}
-                {shop.address && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">📍</span>
-                    <p className="text-sm text-amber-700">
-                      {shop.city ? `${shop.address}, ${shop.city}` : shop.address}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </Link>
+            <ShopCard
+              key={shop.id}
+              id={shop.id}
+              shopName={shop.shopName}
+              categoryName={shop.category?.name}
+              description={shop.description}
+              address={shop.address}
+              city={shop.city}
+              rating={shop.averageRating}
+            />
           ))}
         </div>
       )}
 
       {!isLoading && !isError && shopsPage && shopsPage.meta.lastPage > 1 && (
-        <div className="flex items-center justify-center gap-4 mt-8">
+        <div className="mt-10 flex items-center justify-center gap-4">
           <Button
             variant="outline"
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
           >
-            ← Previous
+            Previous
           </Button>
-          <span className="text-sm text-amber-900">
+          <span className="text-sm text-muted-foreground">
             Page {shopsPage.meta.page} of {shopsPage.meta.lastPage}
           </span>
           <Button
@@ -97,7 +147,7 @@ function SearchResults({ query }: { query: string }) {
             disabled={page >= shopsPage.meta.lastPage}
             onClick={() => setPage((p) => p + 1)}
           >
-            Next →
+            Next
           </Button>
         </div>
       )}
@@ -119,90 +169,104 @@ export default function CategoriesPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 py-16 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-10">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-orange-700 to-amber-600 bg-clip-text text-transparent mb-4">
-            Browse Categories
+    <main>
+      {/* ── Page header ──────────────────────────────────────────── */}
+      <section className="relative isolate overflow-hidden border-b border-border/70">
+        <div className="aurora opacity-60" aria-hidden="true" />
+        <div className="page-shell relative py-14 sm:py-16">
+          <span className="eyebrow">Directory</span>
+          <h1 className="mt-4 font-display text-4xl font-semibold text-balance sm:text-5xl">
+            Browse <span className="text-gradient">categories</span>
           </h1>
-          <p className="text-xl text-amber-900 mb-8">
-            Explore different artisan categories and find the perfect
-            services for your needs.
+          <p className="mt-3 max-w-xl text-lg text-muted-foreground">
+            Explore artisan trades and find the right maker for your project.
           </p>
 
-          <form onSubmit={handleSearch} className="max-w-xl">
-            <div className="flex gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-lg border-2 border-orange-200 shadow-md">
-              <Input
+          <form onSubmit={handleSearch} className="mt-8 max-w-lg">
+            <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-card p-2 shadow-[var(--shadow-sm)] focus-within:shadow-[var(--shadow-md)]">
+              <Search className="ml-2 size-[18px] shrink-0 text-muted-foreground" />
+              <input
                 type="text"
-                placeholder="Search artisans or services..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="flex-1 border-0 focus-visible:ring-0"
+                placeholder="Search artisans or services…"
+                aria-label="Search artisans or services"
+                className="min-w-0 flex-1 bg-transparent py-1.5 text-[15px] outline-none placeholder:text-muted-foreground/70"
               />
-              <Button type="submit">Search</Button>
+              <Button type="submit" className="shrink-0">
+                Search
+              </Button>
             </div>
           </form>
         </div>
+      </section>
 
+      <div className="page-shell py-12">
         {search ? (
           <SearchResults key={search} query={search} />
         ) : (
           <>
             {isLoading && (
-              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {Array.from({ length: 8 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-40 rounded-xl bg-white/50 border-2 border-orange-100 animate-pulse"
-                  />
+                  <div key={i} className="skeleton h-44" />
                 ))}
               </div>
             )}
 
             {isError && (
-              <p className="text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-4">
+              <p className="alert-error">
                 Couldn't load categories right now. Please try again shortly.
               </p>
             )}
 
             {!isLoading && !isError && categories?.length === 0 && (
-              <p className="text-amber-900">No categories yet — check back soon.</p>
+              <div className="surface p-12 text-center">
+                <p className="font-display text-lg font-semibold">
+                  No categories yet
+                </p>
+                <p className="mt-1 text-muted-foreground">Check back soon.</p>
+              </div>
             )}
 
             {!isLoading && !isError && categories && categories.length > 0 && (
-              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {categories.map((category) => {
                   const theme = themeForCategory(category.id);
                   return (
-                    <Link key={category.id} to={`/category/${category.id}`}>
-                      <div
-                        className={`bg-gradient-to-br ${theme.gradient} border-2 ${theme.border} rounded-xl p-6 h-full hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer`}
+                    <Link
+                      key={category.id}
+                      to={`/category/${category.id}`}
+                      className="surface-lift group flex flex-col p-6"
+                    >
+                      <span
+                        className={`flex size-12 items-center justify-center rounded-2xl text-2xl ${theme.chip}`}
                       >
-                        <div className="flex items-start justify-between mb-4">
-                          <h3 className={`text-2xl font-bold ${theme.text}`}>
-                            {category.name}
-                          </h3>
-                          {category.iconUrl?.startsWith("http") ? (
-                            <img
-                              src={category.iconUrl}
-                              alt=""
-                              className="w-10 h-10 object-contain"
-                            />
-                          ) : (
-                            <span className="text-4xl">
-                              {category.iconUrl ?? theme.fallbackIcon}
-                            </span>
-                          )}
-                        </div>
-                        {category.description && (
-                          <p className={`text-sm ${theme.text} opacity-90 mb-4`}>
-                            {category.description}
-                          </p>
+                        {category.iconUrl?.startsWith("http") ? (
+                          <img
+                            src={category.iconUrl}
+                            alt=""
+                            className="size-7 object-contain"
+                          />
+                        ) : (
+                          (category.iconUrl ?? theme.fallbackIcon)
                         )}
-                        <p className={`text-xs font-semibold ${theme.text} opacity-70`}>
-                          View artisans →
+                      </span>
+
+                      <h3 className="mt-5 font-display text-xl font-semibold">
+                        {category.name}
+                      </h3>
+
+                      {category.description && (
+                        <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                          {category.description}
                         </p>
-                      </div>
+                      )}
+
+                      <span className="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-medium text-primary">
+                        View artisans
+                        <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                      </span>
                     </Link>
                   );
                 })}

@@ -33,7 +33,7 @@ export function ShopPhotosTab() {
       </CardHeader>
       <CardContent className="space-y-6">
         {uploadPhoto.isError && (
-          <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+          <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
             Couldn't upload that photo. Please try again.
           </div>
         )}
@@ -58,19 +58,19 @@ export function ShopPhotosTab() {
         {isLoading && (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="aspect-square rounded-lg bg-gray-100 animate-pulse" />
+              <div key={i} className="aspect-square rounded-lg bg-muted animate-pulse" />
             ))}
           </div>
         )}
 
         {isError && (
-          <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
             Couldn't load your photos right now.
           </p>
         )}
 
         {!isLoading && !isError && (photos ?? []).length === 0 && (
-          <p className="text-gray-600 text-sm">No photos yet.</p>
+          <p className="text-muted-foreground text-sm">No photos yet.</p>
         )}
 
         {!isLoading && !isError && (photos ?? []).length > 0 && (
@@ -80,7 +80,7 @@ export function ShopPhotosTab() {
                 <img
                   src={photo.url}
                   alt={photo.caption ?? ""}
-                  className="w-full aspect-square object-cover rounded-lg border border-gray-200"
+                  className="w-full aspect-square object-cover rounded-lg border border-border"
                 />
                 <Button
                   type="button"

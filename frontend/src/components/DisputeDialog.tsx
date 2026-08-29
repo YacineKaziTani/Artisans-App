@@ -54,7 +54,7 @@ export function DisputeDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {createDispute.isError && (
-            <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+            <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
               Couldn't open the dispute. It may already have one open.
             </div>
           )}

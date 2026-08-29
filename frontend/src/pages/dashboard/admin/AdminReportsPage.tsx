@@ -12,8 +12,8 @@ import type { ReportStatus } from "@/types";
 
 const STATUS_STYLES: Record<ReportStatus, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  dismissed: "bg-gray-100 text-gray-700 border-gray-300",
-  actioned: "bg-green-100 text-green-800 border-green-300",
+  dismissed: "bg-muted text-foreground/80 border-border",
+  actioned: "bg-jade-50 text-jade-600 border-jade-500/25",
 };
 
 export default function AdminReportsPage() {
@@ -24,8 +24,8 @@ export default function AdminReportsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Reports</h1>
-        <p className="text-gray-600">Flagged shops, products, services, and reviews</p>
+        <h1 className="text-3xl font-bold text-foreground">Reports</h1>
+        <p className="text-muted-foreground">Flagged shops, products, services, and reviews</p>
       </div>
 
       <div className="flex gap-2">
@@ -35,8 +35,8 @@ export default function AdminReportsPage() {
             onClick={() => setFilter(s)}
             className={`px-3 py-1.5 rounded-full text-sm font-medium border ${
               filter === s
-                ? "bg-orange-600 text-white border-orange-600"
-                : "bg-white text-gray-700 border-gray-300"
+                ? "bg-primary text-white border-primary"
+                : "bg-card text-foreground/80 border-border"
             }`}
           >
             {s ?? "All"}
@@ -53,19 +53,19 @@ export default function AdminReportsPage() {
           {isLoading && (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-20 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-20 rounded-lg bg-muted animate-pulse" />
               ))}
             </div>
           )}
 
           {isError && (
-            <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
               Couldn't load reports.
             </p>
           )}
 
           {!isLoading && !isError && (reports ?? []).length === 0 && (
-            <p className="text-gray-600 text-sm">No reports here.</p>
+            <p className="text-muted-foreground text-sm">No reports here.</p>
           )}
 
           {!isLoading &&
@@ -75,13 +75,13 @@ export default function AdminReportsPage() {
                 resolveReport.isPending && resolveReport.variables?.id === report.id;
 
               return (
-                <div key={report.id} className="border border-gray-200 rounded-lg p-4 space-y-2">
+                <div key={report.id} className="border border-border rounded-lg p-4 space-y-2">
                   <div className="flex justify-between items-start flex-wrap gap-2">
                     <div>
-                      <p className="font-semibold text-gray-900">
+                      <p className="font-semibold text-foreground">
                         {report.targetType}: {report.targetLabel ?? report.targetId}
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         Reported by {report.reporter?.name} ·{" "}
                         {new Date(report.createdAt).toLocaleString()}
                       </p>
@@ -92,9 +92,9 @@ export default function AdminReportsPage() {
                       {report.status}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-800">"{report.reason}"</p>
+                  <p className="text-sm text-foreground">"{report.reason}"</p>
                   {report.adminNote && (
-                    <p className="text-xs text-gray-500">Note: {report.adminNote}</p>
+                    <p className="text-xs text-muted-foreground">Note: {report.adminNote}</p>
                   )}
 
                   {report.status === "pending" && (

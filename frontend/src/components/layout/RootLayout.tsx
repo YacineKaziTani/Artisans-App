@@ -8,7 +8,7 @@ export function RootLayout() {
   useSocketConnection();
   if (isLoading) return <PageLoader />;
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] antialiased">
+    <div className="min-h-screen bg-background text-foreground antialiased">
       <Outlet />
     </div>
   );

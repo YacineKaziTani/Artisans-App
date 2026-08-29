@@ -20,8 +20,8 @@ export default function AdminServicesPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Services</h1>
-        <p className="text-gray-600">Moderate services listed across all shops</p>
+        <h1 className="text-3xl font-bold text-foreground">Services</h1>
+        <p className="text-muted-foreground">Moderate services listed across all shops</p>
       </div>
 
       <Card>
@@ -33,19 +33,19 @@ export default function AdminServicesPage() {
           {isLoading && (
             <div className="space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
               ))}
             </div>
           )}
 
           {isError && (
-            <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
               Couldn't load services.
             </p>
           )}
 
           {!isLoading && !isError && (services ?? []).length === 0 && (
-            <p className="text-gray-600 text-sm">No services yet.</p>
+            <p className="text-muted-foreground text-sm">No services yet.</p>
           )}
 
           {!isLoading &&
@@ -56,11 +56,11 @@ export default function AdminServicesPage() {
               return (
                 <div
                   key={service.id}
-                  className="flex items-center justify-between border border-gray-200 rounded-lg p-3 flex-wrap gap-2"
+                  className="flex items-center justify-between border border-border rounded-lg p-3 flex-wrap gap-2"
                 >
                   <div>
-                    <p className="font-medium text-gray-900">{service.name}</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="font-medium text-foreground">{service.name}</p>
+                    <p className="text-sm text-muted-foreground">
                       {service.shop?.shopName} · ${Number(service.price).toFixed(2)}
                     </p>
                   </div>

@@ -1,87 +1,116 @@
 import { Link } from "react-router";
+import { Heart, Package, Store } from "lucide-react";
 import { useMyFavorites } from "@/hooks/useFavorites";
 import { FavoriteButton } from "@/components/FavoriteButton";
+
+function EmptyRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
+      {children}
+    </div>
+  );
+}
 
 export default function MyFavoritesPage() {
   const { data, isLoading, isError } = useMyFavorites();
 
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto space-y-10">
+    <main className="page-narrow py-12">
+      <div className="mb-10 flex items-center gap-4">
+        <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-100 text-brand-700">
+          <Heart className="size-5" />
+        </span>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">My Favorites</h1>
-          <p className="text-gray-600">Shops and products you've saved</p>
-        </div>
-
-        {isLoading && (
-          <div className="grid md:grid-cols-2 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-24 rounded-lg bg-white animate-pulse" />
-            ))}
-          </div>
-        )}
-
-        {isError && (
-          <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
-            Couldn't load your favorites right now.
+          <h1 className="font-display text-3xl font-semibold">My favorites</h1>
+          <p className="mt-1 text-muted-foreground">
+            Shops and products you've saved.
           </p>
-        )}
-
-        {!isLoading && !isError && (
-          <>
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Shops</h2>
-              {data!.shops.length === 0 ? (
-                <p className="text-sm text-gray-600">No favorited shops yet.</p>
-              ) : (
-                <div className="grid md:grid-cols-2 gap-4">
-                  {data!.shops.map((shop) => (
-                    <div
-                      key={shop.id}
-                      className="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between"
-                    >
-                      <Link to={`/artisan/${shop.id}`} className="flex-1">
-                        <p className="font-medium text-gray-900 hover:underline">
-                          {shop.shopName}
-                        </p>
-                        <p className="text-sm text-gray-500">{shop.category?.name}</p>
-                      </Link>
-                      <FavoriteButton targetType="shop" targetId={shop.id} isFavorited />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Products</h2>
-              {data!.products.length === 0 ? (
-                <p className="text-sm text-gray-600">No favorited products yet.</p>
-              ) : (
-                <div className="grid md:grid-cols-2 gap-4">
-                  {data!.products.map((product) => (
-                    <div
-                      key={product.id}
-                      className="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between"
-                    >
-                      <Link to={`/artisan/${product.shop?.id}`} className="flex-1">
-                        <p className="font-medium text-gray-900 hover:underline">
-                          {product.title}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {product.shop?.shopName} · $
-                          {Number(product.basePrice).toFixed(2)}
-                        </p>
-                      </Link>
-                      <FavoriteButton targetType="product" targetId={product.id} isFavorited />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </>
-        )}
+        </div>
       </div>
+
+      {isLoading && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="skeleton h-24" />
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <p className="alert-error">Couldn't load your favorites right now.</p>
+      )}
+
+      {!isLoading && !isError && (
+        <div className="space-y-10">
+          <section>
+            <h2 className="mb-4 flex items-center gap-2 font-display text-xl font-semibold">
+              <Store className="size-[18px] text-muted-foreground" /> Shops
+            </h2>
+            {data!.shops.length === 0 ? (
+              <EmptyRow>No favorited shops yet.</EmptyRow>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {data!.shops.map((shop) => (
+                  <div
+                    key={shop.id}
+                    className="surface-lift flex items-center justify-between gap-3 p-5"
+                  >
+                    <Link to={`/artisan/${shop.id}`} className="min-w-0 flex-1">
+                      <p className="truncate font-semibold hover:text-primary">
+                        {shop.shopName}
+                      </p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {shop.category?.name}
+                      </p>
+                    </Link>
+                    <FavoriteButton
+                      targetType="shop"
+                      targetId={shop.id}
+                      isFavorited
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <h2 className="mb-4 flex items-center gap-2 font-display text-xl font-semibold">
+              <Package className="size-[18px] text-muted-foreground" /> Products
+            </h2>
+            {data!.products.length === 0 ? (
+              <EmptyRow>No favorited products yet.</EmptyRow>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {data!.products.map((product) => (
+                  <div
+                    key={product.id}
+                    className="surface-lift flex items-center justify-between gap-3 p-5"
+                  >
+                    <Link
+                      to={`/artisan/${product.shop?.id}`}
+                      className="min-w-0 flex-1"
+                    >
+                      <p className="truncate font-semibold hover:text-primary">
+                        {product.title}
+                      </p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {product.shop?.shopName} · $
+                        {Number(product.basePrice).toFixed(2)}
+                      </p>
+                    </Link>
+                    <FavoriteButton
+                      targetType="product"
+                      targetId={product.id}
+                      isFavorited
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </main>
   );
 }

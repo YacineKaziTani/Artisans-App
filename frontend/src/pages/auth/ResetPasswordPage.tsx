@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
+import { useMutation } from "@tanstack/react-query";
+import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AuthShell } from "@/components/layout/AuthShell";
 import { authApi } from "@/api/auth.api";
-import { useMutation } from "@tanstack/react-query";
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -32,74 +34,94 @@ export default function ResetPasswordPage() {
   const missingLinkParams = !email || !token;
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 px-4">
-      <div className="w-full max-w-md bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl border-2 border-orange-200 p-8">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-700 to-amber-600 bg-clip-text text-transparent mb-6">
-          Reset Password
-        </h1>
+    <AuthShell
+      title="Set a new password"
+      subtitle="Choose a password you haven't used before."
+      footer={
+        <Link to="/login" className="font-semibold text-primary hover:underline">
+          Back to login
+        </Link>
+      }
+    >
+      {missingLinkParams && (
+        <p className="alert-error">
+          This reset link is invalid. Please request a new one.
+        </p>
+      )}
 
-        {missingLinkParams && (
-          <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
-            This reset link is invalid. Please request a new one.
-          </p>
-        )}
-
-        {!missingLinkParams && isSuccess && (
-          <div className="space-y-4">
-            <div className="p-4 bg-green-100 border border-green-300 rounded-lg text-green-800 text-sm">
-              Your password has been reset.
-            </div>
-            <Button className="w-full" onClick={() => navigate("/login")}>
-              Go to Login
-            </Button>
+      {!missingLinkParams && isSuccess && (
+        <div className="space-y-5">
+          <div className="surface flex gap-4 p-5">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-jade-50 text-jade-500">
+              <CheckCircle2 className="size-5" />
+            </span>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Your password has been reset. You can sign in with it now.
+            </p>
           </div>
-        )}
+          <Button
+            variant="gradient"
+            size="lg"
+            className="w-full"
+            onClick={() => navigate("/login")}
+          >
+            Go to login
+          </Button>
+        </div>
+      )}
 
-        {!missingLinkParams && !isSuccess && (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isError && (
-              <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
-                That link may have expired. Please request a new one.
-              </div>
-            )}
-            {mismatch && (
-              <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
-                Passwords don't match.
-              </div>
-            )}
+      {!missingLinkParams && !isSuccess && (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {isError && (
+            <p className="alert-error">
+              That link may have expired. Please request a new one.
+            </p>
+          )}
+          {mismatch && <p className="alert-error">Passwords don't match.</p>}
+
+          <div>
+            <label htmlFor="new-password" className="field-label">
+              New password
+            </label>
             <Input
+              id="new-password"
               type="password"
+              autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="New password"
+              placeholder="••••••••"
               minLength={8}
               required
             />
+          </div>
+
+          <div>
+            <label htmlFor="confirm-password" className="field-label">
+              Confirm new password
+            </label>
             <Input
+              id="confirm-password"
               type="password"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm new password"
+              placeholder="••••••••"
               minLength={8}
               required
             />
-            <Button
-              type="submit"
-              className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
-              disabled={isPending}
-            >
-              {isPending ? "Resetting..." : "Reset Password"}
-            </Button>
-          </form>
-        )}
+          </div>
 
-        <Link
-          to="/login"
-          className="block text-center text-sm text-orange-700 hover:underline mt-6"
-        >
-          Back to Login
-        </Link>
-      </div>
-    </main>
+          <Button
+            type="submit"
+            variant="gradient"
+            size="lg"
+            className="w-full"
+            disabled={isPending}
+          >
+            {isPending ? "Resetting…" : "Reset password"}
+          </Button>
+        </form>
+      )}
+    </AuthShell>
   );
 }

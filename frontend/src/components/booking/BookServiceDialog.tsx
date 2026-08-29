@@ -103,7 +103,7 @@ export function BookServiceDialog({
             </DialogHeader>
             <form onSubmit={handleRequestBooking} className="space-y-4">
               {createBooking.isError && (
-                <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
+                <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
                   Couldn't start the booking. Please try again.
                 </div>
               )}
@@ -129,7 +129,7 @@ export function BookServiceDialog({
               </div>
               <Button
                 type="submit"
-                className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
+                className="w-full btn-gradient text-white"
                 disabled={createBooking.isPending}
               >
                 {createBooking.isPending ? "Starting..." : "Continue to Payment"}
