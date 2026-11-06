@@ -1,9 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { reportApi, type CreateReportPayload } from "@/api/report.api";
 import type { ReportStatus } from "@/types";
 
 export const reportKeys = {
-  admin: (status?: ReportStatus) => ["reports", "admin", status ?? "all"] as const,
+  admin: (status?: ReportStatus, page = 1) =>
+    ["reports", "admin", status ?? "all", page] as const,
 };
 
 export function useCreateReport() {
@@ -12,10 +18,11 @@ export function useCreateReport() {
   });
 }
 
-export function useAdminReports(status?: ReportStatus) {
+export function useAdminReports(status?: ReportStatus, page = 1) {
   return useQuery({
-    queryKey: reportKeys.admin(status),
-    queryFn: () => reportApi.listAllAdmin(status),
+    queryKey: reportKeys.admin(status, page),
+    queryFn: () => reportApi.listAllAdmin(status, page),
+    placeholderData: keepPreviousData,
   });
 }
 

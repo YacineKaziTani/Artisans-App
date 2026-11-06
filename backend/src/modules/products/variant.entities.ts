@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -15,6 +16,7 @@ import { Product } from "./product.entities";
 // one product; a t-shirt might have two of these (Size, Color), a watch
 // might have two different ones (Color, Material).
 @Entity("variant_options")
+@Index(["product"])
 export class VariantOption {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -30,7 +32,7 @@ export class VariantOption {
   @OneToMany(() => VariantValue, (value) => value.option, { cascade: true })
   values!: VariantValue[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }
 
@@ -39,6 +41,7 @@ export class VariantOption {
 // base price when this value is part of a chosen variant (e.g. a larger
 // size costing $2 more) — most values will leave it at 0.
 @Entity("variant_values")
+@Index(["option"])
 export class VariantValue {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -60,19 +63,20 @@ export class VariantValue {
 // SKU a client selects and buys; Product.basePrice/imageUrl stay as the
 // "default"/display values for the listing overall.
 @Entity("product_variants")
+@Index(["product"])
 export class ProductVariant {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ nullable: true })
-  sku?: string;
+  @Column({ type: "varchar", nullable: true })
+  sku?: string | null;
 
   @Column({ type: "int", default: 0 })
   stockQuantity!: number;
 
   // If set, this exact price is used instead of basePrice + value modifiers.
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
-  priceOverride?: number;
+  priceOverride?: number | null;
 
   @ManyToOne(() => Product, (product) => product.variants, {
     onDelete: "CASCADE",
@@ -83,9 +87,9 @@ export class ProductVariant {
   @JoinTable({ name: "product_variant_values" })
   values!: VariantValue[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

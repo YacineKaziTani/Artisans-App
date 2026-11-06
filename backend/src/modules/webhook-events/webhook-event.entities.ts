@@ -8,6 +8,6 @@ export class ProcessedWebhookEvent {
   @PrimaryColumn()
   id!: string; // the Stripe event.id
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   processedAt!: Date;
 }

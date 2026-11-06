@@ -1,15 +1,34 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { productApi, type ListProductsParams } from "@/api/product.api";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  productApi,
+  type ListProductsParams,
+  type ProductUpdatePayload,
+} from "@/api/product.api";
 
 export const productKeys = {
   mine: ["products", "mine"] as const,
   list: (params: ListProductsParams) => ["products", "list", params] as const,
 };
 
+/** One page of the public catalogue (`{ data, meta }`). */
 export function useProducts(params: ListProductsParams) {
   return useQuery({
     queryKey: productKeys.list(params),
     queryFn: () => productApi.listAll(params),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useProduct(id: string | undefined) {
+  return useQuery({
+    queryKey: ["products", "detail", id ?? ""],
+    queryFn: () => productApi.getById(id!),
+    enabled: Boolean(id),
   });
 }
 
@@ -36,7 +55,7 @@ export function useUpdateProduct() {
       payload,
     }: {
       id: string;
-      payload: Partial<{ title: string; description: string; basePrice: number }>;
+      payload: ProductUpdatePayload;
     }) => productApi.update(id, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: productKeys.mine }),
   });

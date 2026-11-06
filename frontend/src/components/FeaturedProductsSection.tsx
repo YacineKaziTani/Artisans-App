@@ -3,9 +3,10 @@ import { ArrowRight, Package } from "lucide-react";
 import { useProducts } from "@/hooks/useProducts";
 
 export function FeaturedProductsSection() {
-  const { data: products, isLoading, isError } = useProducts({});
+  // Just the 12 newest — this used to download the entire catalogue.
+  const { data: productsPage, isLoading, isError } = useProducts({ limit: 12 });
 
-  const featured = (products ?? []).slice(0, 12);
+  const featured = productsPage?.data ?? [];
   // Duplicate the list so the CSS animation can loop seamlessly at -50%.
   const track = [...featured, ...featured];
 
@@ -54,7 +55,7 @@ export function FeaturedProductsSection() {
               {track.map((product, i) => (
                 <Link
                   key={`${product.id}-${i}`}
-                  to={`/artisan/${product.shop?.id}`}
+                  to={`/product/${product.id}`}
                   className="surface-lift w-64 shrink-0 overflow-hidden"
                 >
                   {product.imageUrl ? (

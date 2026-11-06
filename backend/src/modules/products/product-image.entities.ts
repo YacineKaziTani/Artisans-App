@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -8,6 +9,7 @@ import {
 import { Product } from "./product.entities";
 
 @Entity("product_images")
+@Index(["product"])
 export class ProductImage {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -21,6 +23,6 @@ export class ProductImage {
   @ManyToOne(() => Product, (product) => product.images, { onDelete: "CASCADE" })
   product!: Product;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

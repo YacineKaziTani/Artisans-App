@@ -1,76 +1,103 @@
 import { Request, Response } from "express";
+import { In, IsNull, MoreThan } from "typeorm";
 import { AppDataSource } from "../../data-source";
-import { Shop, ShopStatus, VerificationStatus } from "./shop.entities";
+import {
+  Shop,
+  ShopStatus,
+  VerificationStatus,
+  ownerShopView,
+} from "./shop.entities";
+import { accountView } from "../users/user.views";
 import { Category } from "../category/category.entities";
 import { User, UserRole } from "../users/entities/user.entities";
+import { Service } from "../services/service.entities";
+import { Product } from "../products/product.entities";
+import { Order, OrderPaymentStatus, OrderStatus } from "../orders/order.entities";
+import { Booking, BookingStatus } from "../booking/booking.entities";
+import { Review } from "../reviews/review.entities";
+import { shopCanAcceptPayments } from "../../config/connect";
+import { fromCents, toCents } from "../../lib/money";
 import { stripe } from "../../config/stripe";
 import { parsePagination } from "../../middleware/validate.middleware";
+import { primaryFrontendUrl } from "../../lib/urls";
+import { isUniqueViolation } from "../../lib/db";
+import { notifyInBackground } from "../../notifications/deliver";
+import {
+  notifyShopStatusChanged,
+  notifyVerificationResolved,
+} from "../../notifications";
+
+// Request bodies are validated by the zod schemas in shop.schemas.ts.
 
 const shopRepo = AppDataSource.getRepository(Shop);
 const userRepo = AppDataSource.getRepository(User);
 const categoryRepo = AppDataSource.getRepository(Category);
-export const uploadShopPhoto = async (req: Request, res: Response) => {
-  try {
-    const imageUrl = req.file?.path;
-    if (!imageUrl) {
-      return res.status(400).json({ message: "No image file provided" });
-    }
-    res.status(200).json({
-      success: true,
-      url: imageUrl,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: "Failed to upload image",
-      error: error instanceof Error ? error.message : error,
-    });
-  }
-};
+const serviceRepo = AppDataSource.getRepository(Service);
+const productRepo = AppDataSource.getRepository(Product);
+
+/** Admins also see the owner's contact details, for moderation. */
+function adminShopView(shop: Shop) {
+  return {
+    ...ownerShopView(shop),
+    owner: shop.owner ? accountView(shop.owner) : null,
+  };
+}
+
+/** Escapes LIKE wildcards so a search for "50%" matches literally. */
+function likePattern(value: unknown) {
+  return `%${String(value).replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+/** A shop's live (non-archived) services, oldest first. */
+function activeServices(shopId: string) {
+  return serviceRepo.find({
+    where: { shop: { id: shopId }, archivedAt: IsNull() },
+    order: { createdAt: "ASC" },
+  });
+}
+
 export const createShop = async (req: Request, res: Response) => {
   try {
     const { shopName, description, address, city, phone, categoryId } =
       req.body;
-    const imageUrl = req.file?.path;
     const userId = req.user!.id;
 
-    if (!shopName?.trim() || !categoryId) {
-      return res
-        .status(400)
-        .json({ message: "shopName and categoryId are required" });
-    }
-
-    const existing = await shopRepo.findOne({
-      where: { owner: { id: userId } },
-    });
-    if (existing) {
-      return res.status(400).json({ message: "You already have a shop" });
+    if (await shopRepo.exists({ where: { owner: { id: userId } } })) {
+      return res.status(409).json({ message: "You already have a shop" });
     }
 
     const category = await categoryRepo.findOne({
-      where: { id: String(categoryId) },
+      where: { id: categoryId, isActive: true },
     });
     if (!category) {
       return res.status(404).json({ message: "Category not found" });
     }
 
     const owner = await userRepo.findOne({ where: { id: userId } });
-    if (!owner) {
-      return res.status(404).json({ message: "User not found" });
+    if (!owner) return res.status(404).json({ message: "User not found" });
+
+    let saved: Shop;
+    try {
+      saved = await shopRepo.save(
+        shopRepo.create({
+          shopName,
+          description: description || null,
+          address: address || null,
+          city: city || null,
+          phone: phone || null,
+          category,
+          logoUrl: req.file?.path ?? null,
+          owner,
+          status: ShopStatus.PENDING,
+        }),
+      );
+    } catch (err) {
+      // One shop per owner is a unique constraint; a double-submit loses here.
+      if (isUniqueViolation(err)) {
+        return res.status(409).json({ message: "You already have a shop" });
+      }
+      throw err;
     }
-
-    const shop = shopRepo.create({
-      shopName: shopName.trim(),
-      description,
-      address,
-      city,
-      phone,
-      category,
-      logoUrl: imageUrl,
-      owner,
-      status: ShopStatus.PENDING,
-    });
-
-    const saved = await shopRepo.save(shop);
 
     if (owner.role !== UserRole.ARTISAN) {
       await userRepo.update(userId, { role: UserRole.ARTISAN });
@@ -78,9 +105,10 @@ export const createShop = async (req: Request, res: Response) => {
 
     return res.status(201).json({
       message: "Shop created waiting for approval",
-      shop: saved,
+      shop: ownerShopView(saved),
     });
   } catch (error) {
+    console.error("createShop failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -89,28 +117,26 @@ export const updateMyShop = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const { shopName, description, address, city, phone, categoryId } =
-      req.body;
-    const imageUrl = req.file?.path;
+      req.body as Record<string, string | undefined>;
 
     const shop = await shopRepo.findOne({
       where: { owner: { id: userId } },
       relations: { category: true },
     });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
 
-    if (!shop) {
-      return res.status(404).json({ message: "Shop not found" });
-    }
+    // undefined = leave unchanged; "" = clear (the old `if (description)`
+    // checks made it impossible to ever empty a field).
+    if (shopName !== undefined) shop.shopName = shopName;
+    if (description !== undefined) shop.description = description || null;
+    if (address !== undefined) shop.address = address || null;
+    if (city !== undefined) shop.city = city || null;
+    if (phone !== undefined) shop.phone = phone || null;
+    if (req.file?.path) shop.logoUrl = req.file.path;
 
-    if (shopName) shop.shopName = shopName;
-    if (description) shop.description = description;
-    if (address) shop.address = address;
-    if (city) shop.city = city;
-    if (phone) shop.phone = phone;
-    if (imageUrl) shop.logoUrl = imageUrl;
-
-    if (categoryId) {
+    if (categoryId && categoryId !== shop.category?.id) {
       const category = await categoryRepo.findOne({
-        where: { id: categoryId },
+        where: { id: categoryId, isActive: true },
       });
       if (!category) {
         return res.status(404).json({ message: "Category not found" });
@@ -119,9 +145,10 @@ export const updateMyShop = async (req: Request, res: Response) => {
     }
 
     const updated = await shopRepo.save(shop);
-    return res.json({ message: "Shop updated", shop: updated });
+    return res.json({ message: "Shop updated", shop: ownerShopView(updated) });
   } catch (error) {
-    return res.status(500).json({ message: "server error" });
+    console.error("updateMyShop failed:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -129,23 +156,14 @@ export const getMyShop = async (req: Request, res: Response) => {
   try {
     const shop = await shopRepo.findOne({
       where: { owner: { id: req.user!.id } },
-      relations: {
-        category: true,
-        services: true,
-        photos: true,
-        products: {
-          images: true,
-          variantOptions: { values: true },
-          variants: { values: { option: true } },
-        },
-        reviews: { author: true },
-      },
+      relations: { category: true, photos: true },
     });
-
     if (!shop) return res.status(404).json({ message: "Shop not found" });
 
-    return res.json(shop);
+    shop.services = await activeServices(shop.id);
+    return res.json(ownerShopView(shop));
   } catch (error) {
+    console.error("getMyShop failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -164,20 +182,24 @@ export const getAllShops = async (req: Request, res: Response) => {
       .where("shop.status = :status", { status: ShopStatus.ACTIVE });
 
     if (category) {
-      qb.andWhere("LOWER(category.name) = LOWER(:category)", { category });
+      qb.andWhere("LOWER(category.name) = LOWER(:category)", {
+        category: String(category),
+      });
     }
     if (city) {
-      qb.andWhere("LOWER(shop.city) LIKE LOWER(:city)", { city: `%${city}%` });
+      qb.andWhere("shop.city ILIKE :city", { city: likePattern(city) });
     }
     if (search) {
       qb.andWhere(
-        "(LOWER(shop.shopName) LIKE LOWER(:search) OR LOWER(shop.description) LIKE LOWER(:search))",
-        { search: `%${search}%` },
+        "(shop.shopName ILIKE :search OR shop.description ILIKE :search)",
+        { search: likePattern(search) },
       );
     }
 
     const [shops, total] = await qb
       .orderBy("shop.averageRating", "DESC")
+      // Tie-break so pages don't shuffle between requests.
+      .addOrderBy("shop.id", "ASC")
       .skip(skip)
       .take(take)
       .getManyAndCount();
@@ -187,39 +209,44 @@ export const getAllShops = async (req: Request, res: Response) => {
       meta: { total, page, lastPage: Math.ceil(total / take) },
     });
   } catch (error) {
+    console.error("getAllShops failed:", error);
     return res.status(500).json({ message: "server error" });
   }
 };
 
 export const getShopById = async (req: Request, res: Response) => {
   try {
+    const id = String(req.params.id);
     const shop = await shopRepo.findOne({
-      where: {
-        id: String(req.params.id),
-        status: ShopStatus.ACTIVE,
-      },
-      relations: {
-        category: true,
-        services: true,
-        photos: true,
-        products: {
+      where: { id, status: ShopStatus.ACTIVE },
+      relations: { category: true, photos: true, owner: true },
+      select: { owner: { id: true, name: true, avatarUrl: true } },
+    });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+
+    // Loaded separately rather than as joins on the shop query: joining
+    // products × variants × values × photos multiplied into thousands of
+    // rows, and relations can't be filtered for archived rows in a join.
+    // (Reviews have their own paginated endpoint.)
+    const [services, products] = await Promise.all([
+      activeServices(id),
+      productRepo.find({
+        where: { shop: { id }, archivedAt: IsNull() },
+        relations: {
           images: true,
           variantOptions: { values: true },
           variants: { values: { option: true } },
         },
-        reviews: { author: true },
-        owner: true,
-      },
-      select: {
-        owner: { id: true, name: true, avatarUrl: true },
-        reviews: { id: true, rating: true, comment: true, createdAt: true },
-      },
-    });
-
-    if (!shop) return res.status(404).json({ message: "Shop not found" });
+        order: { createdAt: "DESC" },
+        relationLoadStrategy: "query",
+      }),
+    ]);
+    shop.services = services;
+    shop.products = products;
 
     return res.json(shop);
   } catch (error) {
+    console.error("getShopById failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -237,21 +264,23 @@ export const getAllShopsAdmin = async (req: Request, res: Response) => {
       .leftJoinAndSelect("shop.category", "category")
       .leftJoinAndSelect("shop.owner", "owner");
 
-    if (status) {
+    if (status && Object.values(ShopStatus).includes(status as ShopStatus)) {
       qb.andWhere("shop.status = :status", { status });
     }
 
     const [shops, total] = await qb
       .orderBy("shop.createdAt", "DESC")
+      .addOrderBy("shop.id", "ASC")
       .skip(skip)
       .take(take)
       .getManyAndCount();
 
     return res.json({
-      data: shops,
+      data: shops.map(adminShopView),
       meta: { total, page, lastPage: Math.ceil(total / take) },
     });
   } catch (error) {
+    console.error("getAllShopsAdmin failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -261,47 +290,50 @@ export const updateShopStatus = async (req: Request, res: Response) => {
     const id = String(req.params.id);
     const { status } = req.body as { status: ShopStatus };
 
-    if (!Object.values(ShopStatus).includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
-    }
-
     const shop = await shopRepo.findOne({ where: { id } });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
 
+    const changed = shop.status !== status;
     shop.status = status;
     const saved = await shopRepo.save(shop);
-    return res.json({ message: "Shop status updated", shop: saved });
+    if (changed) notifyInBackground(() => notifyShopStatusChanged(id));
+    return res.json({ message: "Shop status updated", shop: ownerShopView(saved) });
   } catch (error) {
+    console.error("updateShopStatus failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
 export const closeMyShop = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    const shop = await shopRepo.findOne({
+      where: { owner: { id: req.user!.id } },
+    });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
+    if (shop.status !== ShopStatus.ACTIVE) {
+      return res.status(400).json({ message: "Only an open shop can be closed" });
+    }
 
     shop.status = ShopStatus.CLOSED;
     const saved = await shopRepo.save(shop);
-    return res.json({ message: "Shop closed", shop: saved });
+    return res.json({ message: "Shop closed", shop: ownerShopView(saved) });
   } catch (error) {
+    console.error("closeMyShop failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
 export const reopenMyShop = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    const shop = await shopRepo.findOne({
+      where: { owner: { id: req.user!.id } },
+    });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
     if (shop.status === ShopStatus.SUSPENDED) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "This shop was suspended by an admin and can't be reopened directly",
-        });
+      return res.status(403).json({
+        message:
+          "This shop was suspended by an admin and can't be reopened directly",
+      });
     }
     if (shop.status !== ShopStatus.CLOSED) {
       return res.status(400).json({
@@ -314,8 +346,9 @@ export const reopenMyShop = async (req: Request, res: Response) => {
 
     shop.status = ShopStatus.ACTIVE;
     const saved = await shopRepo.save(shop);
-    return res.json({ message: "Shop reopened", shop: saved });
+    return res.json({ message: "Shop reopened", shop: ownerShopView(saved) });
   } catch (error) {
+    console.error("reopenMyShop failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -323,8 +356,9 @@ export const reopenMyShop = async (req: Request, res: Response) => {
 // Artisan requests a verification badge for their own shop.
 export const requestShopVerification = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    const shop = await shopRepo.findOne({
+      where: { owner: { id: req.user!.id } },
+    });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
 
     if (shop.verificationStatus === VerificationStatus.VERIFIED) {
@@ -337,10 +371,13 @@ export const requestShopVerification = async (req: Request, res: Response) => {
     }
 
     shop.verificationStatus = VerificationStatus.PENDING;
-    shop.verificationNote = undefined;
+    // null, not undefined — save() skips undefined, so the previous
+    // rejection note used to survive a new request.
+    shop.verificationNote = null;
     const saved = await shopRepo.save(shop);
-    return res.json({ message: "Verification requested", shop: saved });
+    return res.json({ message: "Verification requested", shop: ownerShopView(saved) });
   } catch (error) {
+    console.error("requestShopVerification failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -354,30 +391,25 @@ export const resolveShopVerification = async (req: Request, res: Response) => {
       note?: string;
     };
 
-    if (
-      ![VerificationStatus.VERIFIED, VerificationStatus.REJECTED].includes(
-        status,
-      )
-    ) {
-      return res.status(400).json({ message: "Invalid verification status" });
-    }
-
     const shop = await shopRepo.findOne({ where: { id } });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
 
     shop.verificationStatus = status;
-    shop.verificationNote = note;
+    shop.verificationNote = note || null;
     const saved = await shopRepo.save(shop);
-    return res.json({ message: "Verification updated", shop: saved });
+    notifyInBackground(() => notifyVerificationResolved(id));
+    return res.json({ message: "Verification updated", shop: ownerShopView(saved) });
   } catch (error) {
+    console.error("resolveShopVerification failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
 export const connectStripeAccount = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    const shop = await shopRepo.findOne({
+      where: { owner: { id: req.user!.id } },
+    });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
 
     if (!shop.stripeAccountId) {
@@ -410,7 +442,7 @@ export const connectStripeAccount = async (req: Request, res: Response) => {
       await shopRepo.save(shop);
     }
 
-    const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:5173";
+    const frontendUrl = primaryFrontendUrl();
     const accountLink = await stripe.v2.core.accountLinks.create({
       account: shop.stripeAccountId,
       use_case: {
@@ -427,19 +459,18 @@ export const connectStripeAccount = async (req: Request, res: Response) => {
 
     return res.json({ url: accountLink.url });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Error starting Stripe onboarding";
     console.error("connectStripeAccount failed:", error);
-    return res.status(500).json({ message });
+    return res
+      .status(500)
+      .json({ message: "Couldn't start Stripe onboarding. Please try again." });
   }
 };
 
 export const getStripeAccountStatus = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    const shop = await shopRepo.findOne({
+      where: { owner: { id: req.user!.id } },
+    });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
 
     if (!shop.stripeAccountId) {
@@ -470,14 +501,119 @@ export const getStripeAccountStatus = async (req: Request, res: Response) => {
       await shopRepo.save(shop);
     }
 
+    return res.json({ connected: true, onboardingComplete });
+  } catch (error) {
+    console.error("getStripeAccountStatus failed:", error);
+    return res
+      .status(500)
+      .json({ message: "Couldn't check your Stripe status. Please try again." });
+  }
+};
+
+// ── Dashboard & admin views ────────────────────────────────────────────────
+
+const PAID_OR_HELD = [OrderPaymentStatus.AUTHORIZED, OrderPaymentStatus.PAID];
+
+/**
+ * Numbers for the artisan dashboard: what needs action now, what's coming
+ * up, and the last 30 days. Revenue is the gross amount clients paid
+ * (before the platform commission and Stripe fees).
+ */
+export const getMyShopStats = async (req: Request, res: Response) => {
+  try {
+    const shop = await shopRepo.findOne({ where: { owner: { id: req.user!.id } } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+    const shopId = shop.id;
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const orders = AppDataSource.getRepository(Order);
+    const bookings = AppDataSource.getRepository(Booking);
+
+    const paidSince = (repo: typeof orders | typeof bookings, alias: string) =>
+      repo
+        .createQueryBuilder(alias)
+        .select(`COALESCE(SUM(${alias}.totalAmount), 0)`, "total")
+        .addSelect("COUNT(*)", "count")
+        .where(`${alias}.shopId = :shopId`, { shopId })
+        .andWhere(`${alias}.paymentStatus = :paid`, { paid: "paid" })
+        .andWhere(`${alias}.createdAt >= :since`, { since })
+        .getRawOne<{ total: string; count: string }>();
+
+    const [
+      ordersToFulfil,
+      bookingsToConfirm,
+      upcomingBookings,
+      ordersPaid,
+      bookingsPaid,
+      reviewCount,
+      productCount,
+      serviceCount,
+    ] = await Promise.all([
+      orders.count({
+        where: { shop: { id: shopId }, status: OrderStatus.PENDING, paymentStatus: In(PAID_OR_HELD) },
+      }),
+      bookings.count({
+        where: { shop: { id: shopId }, status: BookingStatus.PENDING, paymentStatus: In(PAID_OR_HELD) },
+      }),
+      bookings.count({
+        where: { shop: { id: shopId }, status: BookingStatus.CONFIRMED, scheduledAt: MoreThan(new Date()) },
+      }),
+      paidSince(orders, "o"),
+      paidSince(bookings, "b"),
+      AppDataSource.getRepository(Review).count({ where: { shop: { id: shopId } } }),
+      productRepo.count({ where: { shop: { id: shopId }, archivedAt: IsNull() } }),
+      serviceRepo.count({ where: { shop: { id: shopId }, archivedAt: IsNull() } }),
+    ]);
+
     return res.json({
-      connected: true,
-      onboardingComplete,
+      ordersToFulfil,
+      bookingsToConfirm,
+      upcomingBookings,
+      last30Days: {
+        revenue: fromCents(toCents(ordersPaid?.total) + toCents(bookingsPaid?.total)),
+        paidOrders: Number(ordersPaid?.count ?? 0),
+        paidBookings: Number(bookingsPaid?.count ?? 0),
+      },
+      averageRating: shop.averageRating,
+      reviewCount,
+      productCount,
+      serviceCount,
+      status: shop.status,
+      acceptsPayments: shopCanAcceptPayments(shop),
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Error checking Stripe status";
-    console.error("getStripeAccountStatus failed:", error);
-    return res.status(500).json({ message });
+    console.error("getMyShopStats failed:", error);
+    return res.status(500).json({ message: "Couldn't load your shop stats" });
+  }
+};
+
+/**
+ * Admin preview of any shop — including pending ones, which the public
+ * endpoint hides — so an admin can see what they're approving.
+ */
+export const getShopAdmin = async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const shop = await shopRepo.findOne({
+      where: { id },
+      relations: { category: true, photos: true, owner: true },
+    });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+
+    const [services, products, productCount] = await Promise.all([
+      activeServices(id),
+      productRepo.find({
+        where: { shop: { id }, archivedAt: IsNull() },
+        order: { createdAt: "DESC" },
+        take: 12,
+      }),
+      productRepo.count({ where: { shop: { id }, archivedAt: IsNull() } }),
+    ]);
+    shop.services = services;
+    shop.products = products;
+
+    return res.json({ ...adminShopView(shop), productCount });
+  } catch (error) {
+    console.error("getShopAdmin failed:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };

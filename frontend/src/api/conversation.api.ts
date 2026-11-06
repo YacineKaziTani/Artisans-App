@@ -1,5 +1,12 @@
 import { api } from "@/lib/axios";
-import type { ChatMessage, Conversation, PageMeta } from "@/types";
+import type { ChatMessage, Conversation, Page, PageParams } from "@/types";
+
+/** One page of a thread, oldest → newest, plus whether older ones exist. */
+export interface MessagePage {
+  conversation: Conversation;
+  messages: ChatMessage[];
+  hasMore: boolean;
+}
 
 export const conversationApi = {
   start: (shopId: string) =>
@@ -8,11 +15,12 @@ export const conversationApi = {
   mine: () =>
     api.get<Conversation[]>("/conversations/mine").then((r) => r.data),
 
-  messages: (id: string) =>
+  /** `before` = id of the oldest message already loaded. */
+  messages: (id: string, before?: string) =>
     api
-      .get<{ conversation: Conversation; messages: ChatMessage[] }>(
-        `/conversations/${id}/messages`,
-      )
+      .get<MessagePage>(`/conversations/${id}/messages`, {
+        params: before ? { before } : {},
+      })
       .then((r) => r.data),
 
   send: (id: string, content: string) =>
@@ -20,17 +28,15 @@ export const conversationApi = {
       .post<ChatMessage>(`/conversations/${id}/messages`, { content })
       .then((r) => r.data),
 
-  listAllAdmin: (params: { page?: number; limit?: number } = {}) =>
+  listAllAdmin: (params: PageParams = {}) =>
     api
-      .get<{ data: Conversation[]; meta: PageMeta }>("/conversations/admin/all", {
-        params,
-      })
-      .then((r) => r.data.data),
+      .get<Page<Conversation>>("/conversations/admin/all", { params })
+      .then((r) => r.data),
 
-  messagesAdmin: (id: string) =>
+  messagesAdmin: (id: string, before?: string) =>
     api
-      .get<{ conversation: Conversation; messages: ChatMessage[] }>(
-        `/conversations/admin/${id}/messages`,
-      )
+      .get<MessagePage>(`/conversations/admin/${id}/messages`, {
+        params: before ? { before } : {},
+      })
       .then((r) => r.data),
 };

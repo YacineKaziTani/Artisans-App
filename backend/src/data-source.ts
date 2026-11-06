@@ -26,12 +26,18 @@ import { User } from "./modules/users/entities/user.entities";
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DATABASE_URL,
-  // Render Postgres requires TLS but serves a cert node-pg will not verify.
-  ssl: { rejectUnauthorized: false },
-  // Temporary: lets the hosted DB build its schema from the entities. Turn
-  // this off (drop DB_SYNC) and switch to migrations before real traffic.
-  synchronize:
-    process.env.DB_SYNC === "true" || process.env.NODE_ENV !== "production",
+  // Hosted Postgres (Neon, Render) requires TLS but serves a cert node-pg
+  // will not verify. A local or CI Postgres usually has no TLS at all, so
+  // DB_SSL=false turns it off (it used to be forced on, which made the
+  // localhost URL in .env.example fail to connect).
+  ssl: process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false },
+  // The schema is managed by migrations (src/migrations), applied on boot.
+  // `synchronize` rewrites the live schema to match the entities — it can
+  // drop a column on a rename — so it's strictly opt-in via DB_SYNC=true.
+  // It used to be on whenever NODE_ENV wasn't "production", which meant a
+  // local `npm run dev` pointed at a hosted database altered that schema.
+  synchronize: process.env.DB_SYNC === "true",
+  migrationsRun: true,
   logging: process.env.NODE_ENV === "development",
   entities: [
     User,

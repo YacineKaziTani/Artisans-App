@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { format, isThisYear, isToday, isYesterday } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { PartyAvatar } from "@/components/messages/PartyAvatar";
 import {
+  conversationKeys,
   useConversationMessages,
+  useLoadEarlierMessages,
   useSendMessage,
 } from "@/hooks/useConversations";
 import { useAuthStore } from "@/store/auth.store";
 import { getSocket } from "@/lib/socket";
+import { getErrorMessage } from "@/lib/errors";
 import type { ChatMessage } from "@/types";
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -64,6 +68,8 @@ export default function MessageThreadPage() {
   const user = useAuthStore((s) => s.user);
   const { data, isLoading, isError } = useConversationMessages(id);
   const sendMessage = useSendMessage(id ?? "");
+  const loadEarlier = useLoadEarlierMessages(id ?? "");
+  const qc = useQueryClient();
   const [content, setContent] = useState("");
   const [otherTyping, setOtherTyping] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -76,10 +82,25 @@ export default function MessageThreadPage() {
     if (!id) return;
     const socket = getSocket();
     socket.emit("join_conversation", id);
+
+    // Rooms don't survive a reconnect (network blip, server restart), and
+    // live messages silently stopped arriving after one. Rejoin, and refetch
+    // to pick up anything sent while we were disconnected.
+    let connectedBefore = socket.connected;
+    const handleConnect = () => {
+      socket.emit("join_conversation", id);
+      if (connectedBefore) {
+        qc.invalidateQueries({ queryKey: conversationKeys.messages(id) });
+      }
+      connectedBefore = true;
+    };
+    socket.on("connect", handleConnect);
+
     return () => {
+      socket.off("connect", handleConnect);
       socket.emit("leave_conversation", id);
     };
-  }, [id]);
+  }, [id, qc]);
 
   useEffect(() => {
     if (!id) return;
@@ -94,9 +115,12 @@ export default function MessageThreadPage() {
     };
   }, [id, user?.id]);
 
+  // Follow the newest message — keyed on the last message, not the count,
+  // so loading earlier history doesn't yank the view to the bottom.
+  const lastMessageId = data?.messages[data.messages.length - 1]?.id;
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [data?.messages.length, otherTyping]);
+  }, [lastMessageId, otherTyping]);
 
   const rendered = useMemo(
     () => layOutMessages(data?.messages ?? [], user?.id),
@@ -199,6 +223,18 @@ export default function MessageThreadPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
+        {data.hasMore && (
+          <div className="flex justify-center mb-4">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={loadEarlier.isPending}
+              onClick={() => loadEarlier.mutate()}
+            >
+              {loadEarlier.isPending ? "Loading…" : "Load earlier messages"}
+            </Button>
+          </div>
+        )}
         {rendered.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-2">
             <PartyAvatar name={otherPartyName} />
@@ -291,7 +327,10 @@ export default function MessageThreadPage() {
       >
         {sendMessage.isError && (
           <p className="text-xs text-destructive mb-2">
-            Couldn't send that message. Please try again.
+            {getErrorMessage(
+              sendMessage.error,
+              "Couldn't send that message. Please try again.",
+            )}
           </p>
         )}
         <div className="flex items-end gap-2">

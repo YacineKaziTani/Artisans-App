@@ -12,6 +12,9 @@ import { BuyProductDialog } from "@/components/booking/BuyProductDialog";
 import { ReviewsSection } from "@/components/ReviewsSection";
 import { ReportDialog } from "@/components/ReportDialog";
 import { shopCanAcceptPayments } from "@/lib/stripe";
+import { LoginLink } from "@/components/LoginLink";
+import { getErrorMessage } from "@/lib/errors";
+import { isAxiosError } from "axios";
 import type { Product, Service } from "@/types";
 
 function digitsOnly(phone: string) {
@@ -21,13 +24,15 @@ function digitsOnly(phone: string) {
 export default function ArtisanShopPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: shop, isLoading, isError } = useShop(id);
+  const { data: shop, isLoading, isError, error, refetch } = useShop(id);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const addToCart = useCartStore((s) => s.addItem);
   const startConversation = useStartConversation();
   const { data: favoriteIds } = useFavoriteIds("shop", { enabled: isAuthenticated });
-  const isOwnShop = shop?.owner?.id === user?.id;
+  // Both sides must exist — `undefined === undefined` would make every
+  // logged-out visitor the "owner".
+  const isOwnShop = Boolean(user && shop?.owner && shop.owner.id === user.id);
   const [bookingService, setBookingService] = useState<Service | null>(null);
   const [buyingProduct, setBuyingProduct] = useState<Product | null>(null);
   const [justAdded, setJustAdded] = useState<string | null>(null);
@@ -59,9 +64,20 @@ export default function ArtisanShopPage() {
           >
             ← Back to Categories
           </Link>
-          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4">
-            This shop couldn't be found — it may no longer be active.
-          </p>
+          {isError && !(isAxiosError(error) && error.response?.status === 404) ? (
+            <div className="space-y-3">
+              <p className="alert-error">
+                {getErrorMessage(error, "Couldn't load this shop right now.")}
+              </p>
+              <Button variant="outline" onClick={() => refetch()}>
+                Try again
+              </Button>
+            </div>
+          ) : (
+            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4">
+              This shop couldn't be found — it may no longer be active.
+            </p>
+          )}
         </div>
       </main>
     );
@@ -158,19 +174,19 @@ export default function ArtisanShopPage() {
 
               {(whatsappLink || phoneLink) && (
                 <div className="flex gap-3 pt-4 flex-wrap">
+                  {/* Button asChild renders the <a> itself — a <button> nested
+                      inside an <a> is invalid HTML and confuses screen readers. */}
                   {whatsappLink && (
-                    <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                      <Button className="bg-jade-500 text-white hover:bg-jade-600">
+                    <Button asChild variant="jade">
+                      <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
                         💬 Contact on WhatsApp
-                      </Button>
-                    </a>
+                      </a>
+                    </Button>
                   )}
                   {phoneLink && (
-                    <a href={phoneLink}>
-                      <Button className="bg-jade-500 text-white hover:bg-jade-600">
-                        📞 Call
-                      </Button>
-                    </a>
+                    <Button asChild variant="jade">
+                      <a href={phoneLink}>📞 Call</a>
+                    </Button>
                   )}
                 </div>
               )}
@@ -191,11 +207,16 @@ export default function ArtisanShopPage() {
                   </Button>
                 )}
                 {!isAuthenticated && (
-                  <Link to="/login">
-                    <Button variant="outline">✉️ Message</Button>
-                  </Link>
+                  <Button asChild variant="outline">
+                    <LoginLink>✉️ Message</LoginLink>
+                  </Button>
                 )}
               </div>
+              {startConversation.isError && (
+                <p className="text-sm text-destructive">
+                  {getErrorMessage(startConversation.error, "Couldn't open a conversation.")}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -224,7 +245,7 @@ export default function ArtisanShopPage() {
           </h2>
 
           {services.length === 0 && (
-            <p className="text-foreground/80 bg-white/70 border border-border rounded-xl p-6">
+            <p className="text-foreground/80 bg-card border border-border rounded-xl p-6">
               This shop hasn't listed any services yet.
             </p>
           )}
@@ -254,7 +275,11 @@ export default function ArtisanShopPage() {
                       </span>
                     )}
                   </div>
-                  {isAuthenticated ? (
+                  {isOwnShop ? (
+                    <p className="text-sm text-muted-foreground">
+                      This is your service — clients book it from here.
+                    </p>
+                  ) : isAuthenticated ? (
                     <Button
                       className="w-full btn-gradient text-white"
                       disabled={!shopCanAcceptPayments(shop)}
@@ -263,11 +288,9 @@ export default function ArtisanShopPage() {
                       {shopCanAcceptPayments(shop) ? "Book Now" : "Not Available Yet"}
                     </Button>
                   ) : (
-                    <Link to="/login" className="block">
-                      <Button variant="outline" className="w-full">
-                        Login to Book
-                      </Button>
-                    </Link>
+                    <Button asChild variant="outline" className="w-full">
+                      <LoginLink>Log in to book</LoginLink>
+                    </Button>
                   )}
                 </div>
               ))}
@@ -293,15 +316,19 @@ export default function ArtisanShopPage() {
                   className="bg-card border border-border rounded-xl overflow-hidden shadow-[var(--shadow-md)] hover:shadow-lg transition-shadow"
                 >
                   {product.imageUrl && (
-                    <img
-                      src={product.imageUrl}
-                      alt={product.title}
-                      className="w-full h-40 object-cover"
-                    />
+                    <Link to={`/product/${product.id}`} className="block">
+                      <img
+                        src={product.imageUrl}
+                        alt={product.title}
+                        className="w-full h-40 object-cover"
+                      />
+                    </Link>
                   )}
                   <div className="p-6">
                     <h3 className="text-xl font-bold text-primary mb-2">
-                      {product.title}
+                      <Link to={`/product/${product.id}`} className="hover:underline">
+                        {product.title}
+                      </Link>
                     </h3>
                     {product.description && (
                       <p className="text-foreground/80 text-sm mb-4">
@@ -312,14 +339,25 @@ export default function ArtisanShopPage() {
                       <span className="text-3xl font-bold text-gradient">
                         ${Number(product.basePrice).toFixed(2)}
                       </span>
+                      {product.stockQuantity === 0 ? (
+                        <span className="text-sm font-medium text-destructive">Out of stock</span>
+                      ) : product.stockQuantity != null && product.stockQuantity <= 5 ? (
+                        <span className="text-sm text-muted-foreground">
+                          Only {product.stockQuantity} left
+                        </span>
+                      ) : null}
                     </div>
-                    {isAuthenticated ? (
+                    {isOwnShop ? (
+                      <p className="text-sm text-muted-foreground">
+                        This is your product — clients buy it from here.
+                      </p>
+                    ) : isAuthenticated ? (
                       <div className="flex gap-2">
                         {!product.variantOptions?.length && (
                           <Button
                             variant="outline"
                             className="flex-1"
-                            disabled={!shopCanAcceptPayments(shop)}
+                            disabled={!shopCanAcceptPayments(shop) || product.stockQuantity === 0}
                             onClick={() => {
                               if (!addToCart(product)) {
                                 setWrongShop(true);
@@ -335,22 +373,22 @@ export default function ArtisanShopPage() {
                         )}
                         <Button
                           className="flex-1 btn-gradient text-white"
-                          disabled={!shopCanAcceptPayments(shop)}
+                          disabled={!shopCanAcceptPayments(shop) || product.stockQuantity === 0}
                           onClick={() => setBuyingProduct(product)}
                         >
                           {!shopCanAcceptPayments(shop)
                             ? "Not Available Yet"
-                            : product.variantOptions?.length
+                            : product.stockQuantity === 0
+                              ? "Out of Stock"
+                              : product.variantOptions?.length
                               ? "Select Options"
                               : "Buy Now"}
                         </Button>
                       </div>
                     ) : (
-                      <Link to="/login" className="block">
-                        <Button variant="outline" className="w-full">
-                          Login to Buy
-                        </Button>
-                      </Link>
+                      <Button asChild variant="outline" className="w-full">
+                        <LoginLink>Log in to buy</LoginLink>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -370,14 +408,11 @@ export default function ArtisanShopPage() {
             <p className="text-foreground/80 mb-6 text-lg">
               Get in touch directly to discuss your project requirements.
             </p>
-            <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-              <Button
-                size="lg"
-                className="bg-jade-500 text-white hover:bg-jade-600 px-8"
-              >
+            <Button asChild size="lg" variant="jade" className="px-8">
+              <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
                 Send Message on WhatsApp
-              </Button>
-            </a>
+              </a>
+            </Button>
           </div>
         )}
       </div>

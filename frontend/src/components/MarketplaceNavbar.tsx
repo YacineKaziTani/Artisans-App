@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LoginLink } from "@/components/LoginLink";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -135,7 +136,7 @@ export function MarketplaceNavbar() {
             {!isAuthenticated && (
               <div className="hidden items-center gap-2 sm:flex">
                 <Button asChild variant="ghost" size="sm">
-                  <Link to="/login">Log in</Link>
+                  <LoginLink>Log in</LoginLink>
                 </Button>
                 <Button asChild variant="gradient" size="sm">
                   <Link to="/register">Get started</Link>
@@ -253,7 +254,7 @@ export function MarketplaceNavbar() {
             {!isAuthenticated && (
               <div className="flex gap-2 pt-3">
                 <Button asChild variant="outline" className="flex-1">
-                  <Link to="/login">Log in</Link>
+                  <LoginLink>Log in</LoginLink>
                 </Button>
                 <Button asChild variant="gradient" className="flex-1">
                   <Link to="/register">Get started</Link>

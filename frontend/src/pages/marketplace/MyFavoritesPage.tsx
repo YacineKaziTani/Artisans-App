@@ -88,7 +88,7 @@ export default function MyFavoritesPage() {
                     className="surface-lift flex items-center justify-between gap-3 p-5"
                   >
                     <Link
-                      to={`/artisan/${product.shop?.id}`}
+                      to={`/product/${product.id}`}
                       className="min-w-0 flex-1"
                     >
                       <p className="truncate font-semibold hover:text-primary">

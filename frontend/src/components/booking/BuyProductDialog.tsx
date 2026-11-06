@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { isAxiosError } from "axios";
 import { Elements } from "@stripe/react-stripe-js";
 import {
   Dialog,
@@ -12,10 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateOrder } from "@/hooks/useOrders";
+import { useAbandonCheckout, useCreateOrder } from "@/hooks/useOrders";
 import { stripePromise } from "@/lib/stripe";
 import { BookingPaymentForm } from "@/components/booking/BookingPaymentForm";
 import type { DeliveryMethod, Product, ProductVariant } from "@/types";
+import { lineTotal, variantLabel, variantUnitPrice } from "@/lib/pricing";
+import { getErrorMessage } from "@/lib/errors";
 
 export function BuyProductDialog({
   product,
@@ -37,6 +38,7 @@ export function BuyProductDialog({
   const [confirmed, setConfirmed] = useState(false);
 
   const createOrder = useCreateOrder();
+  const abandonCheckout = useAbandonCheckout();
   const options = useMemo(
     () => product.variantOptions ?? [],
     [product.variantOptions],
@@ -55,22 +57,15 @@ export function BuyProductDialog({
     });
   }, [hasVariants, options, selectedValues, product.variants]);
 
-  const unitPrice = selectedVariant
-    ? selectedVariant.priceOverride !== undefined &&
-      selectedVariant.priceOverride !== null
-      ? Number(selectedVariant.priceOverride)
-      : Number(product.basePrice) +
-        selectedVariant.values.reduce(
-          (sum, v) => sum + Number(v.priceModifier),
-          0,
-        )
-    : Number(product.basePrice);
+  const unitPrice = variantUnitPrice(product, selectedVariant);
 
-  const outOfStock = Boolean(
-    hasVariants && selectedVariant && selectedVariant.stockQuantity < 1,
-  );
+  // Stock lives on the chosen variant, or on the product itself when it has
+  // no variants (null there = made to order, no limit).
+  const stockLimit = hasVariants
+    ? selectedVariant?.stockQuantity
+    : (product.stockQuantity ?? undefined);
+  const outOfStock = stockLimit !== undefined && stockLimit < 1;
   const needsSelection = hasVariants && !selectedVariant;
-  const stockLimit = selectedVariant?.stockQuantity;
   const exceedsStock = stockLimit !== undefined && quantity > stockLimit;
 
   const reset = () => {
@@ -84,7 +79,13 @@ export function BuyProductDialog({
   };
 
   const handleClose = (next: boolean) => {
-    if (!next) reset();
+    if (!next) {
+      // Closing before the card was authorized: the order already reserved
+      // its stock, so hand it back now rather than when it expires.
+      const unpaidOrderId = createOrder.data?.order.id;
+      if (unpaidOrderId && !confirmed) abandonCheckout.mutate([unpaidOrderId]);
+      reset();
+    }
     onOpenChange(next);
   };
 
@@ -106,7 +107,7 @@ export function BuyProductDialog({
     );
   };
 
-  const total = unitPrice * quantity;
+  const total = lineTotal(unitPrice, quantity);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -116,7 +117,8 @@ export function BuyProductDialog({
             <div className="text-5xl">✅</div>
             <DialogTitle>Payment Authorized</DialogTitle>
             <DialogDescription>
-              Your card has been authorized and the artisan has been notified.
+              Your card is on hold — nothing is charged yet. The artisan has been emailed
+              your order, and a confirmation is on its way to your inbox.
               You'll be charged once they fulfill the order — if they can't, the
               hold is released and you're never charged.
             </DialogDescription>
@@ -151,9 +153,10 @@ export function BuyProductDialog({
             <form onSubmit={handleRequestOrder} className="space-y-4">
               {createOrder.isError && (
                 <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
-                  {(isAxiosError(createOrder.error) &&
-                    createOrder.error.response?.data?.message) ||
-                    "Couldn't start the order. Please try again."}
+                  {getErrorMessage(
+                    createOrder.error,
+                    "Couldn't start the order. Please try again.",
+                  )}
                 </div>
               )}
               {hasVariants && (
@@ -166,18 +169,8 @@ export function BuyProductDialog({
                   ) : (
                     <div className="space-y-1.5">
                       {(product.variants ?? []).map((variant) => {
-                        const label = variant.values
-                          .map((v) => `${v.option?.name}: ${v.value}`)
-                          .join(", ");
-                        const price =
-                          variant.priceOverride !== undefined &&
-                          variant.priceOverride !== null
-                            ? Number(variant.priceOverride)
-                            : Number(product.basePrice) +
-                              variant.values.reduce(
-                                (sum, v) => sum + Number(v.priceModifier),
-                                0,
-                              );
+                        const label = variantLabel(variant);
+                        const price = variantUnitPrice(product, variant);
                         const isSelected = selectedVariant?.id === variant.id;
                         const isOut = variant.stockQuantity < 1;
 
@@ -247,7 +240,7 @@ export function BuyProductDialog({
                 )}
                 {exceedsStock && (
                   <p className="text-xs text-destructive">
-                    Only {stockLimit} left of this option.
+                    Only {stockLimit} left{hasVariants ? " of this option" : ""}.
                   </p>
                 )}
               </div>

@@ -1,36 +1,85 @@
 import { Request, Response } from "express";
 import { v2 as cloudinary } from "cloudinary";
+import { IsNull } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { Product } from "./product.entities";
 import { ProductImage } from "./product-image.entities";
-import { Shop } from "../shop/shop.entities";
-import { UserRole } from "../users/entities/user.entities";
+import { Shop, ShopStatus } from "../shop/shop.entities";
+import { Order } from "../orders/order.entities";
+import { canManageShopOf, findManageableProduct } from "./ownership";
+import {
+  isUuid,
+  pageResult,
+  parsePagination,
+  queryString,
+} from "../../middleware/validate.middleware";
+
+// Request bodies are validated by the zod schemas in product.schemas.ts.
 
 const productRepo = AppDataSource.getRepository(Product);
 const productImageRepo = AppDataSource.getRepository(ProductImage);
 const shopRepo = AppDataSource.getRepository(Shop);
+const orderRepo = AppDataSource.getRepository(Order);
 
 interface CloudinaryFile extends Omit<Express.Multer.File, "filename"> {
   filename?: string;
 }
 
+/** Best-effort removal of an uploaded image we no longer reference. */
+async function destroyUpload(publicId: string | undefined | null) {
+  if (!publicId) return;
+  try {
+    await cloudinary.uploader.destroy(publicId);
+  } catch (err) {
+    console.warn("[cloudinary] couldn't delete", publicId, err);
+  }
+}
+
+function likePattern(value: unknown) {
+  return `%${String(value).replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+const PRODUCT_SORTS = {
+  newest: ["product.createdAt", "DESC"],
+  price_asc: ["product.basePrice", "ASC"],
+  price_desc: ["product.basePrice", "DESC"],
+} as const;
+
+/**
+ * Public product listing, paginated. It used to return every product with
+ * eight joined relations (images, options, values, variants…) — the home
+ * page downloaded the whole catalogue to show 12 cards. A listing card only
+ * needs the product, its shop, and whether it has options (to show "Select
+ * options" instead of "Add to cart"); the full detail is GET /products/:id.
+ */
 export const getAllProducts = async (req: Request, res: Response) => {
   try {
-    const { shopId, category, search, minPrice, maxPrice } = req.query;
+    const shopId = queryString(req.query.shopId);
+    const category = queryString(req.query.category);
+    const search = queryString(req.query.search);
+    const minPrice = Number(queryString(req.query.minPrice));
+    const maxPrice = Number(queryString(req.query.maxPrice));
+    const sortKey = queryString(req.query.sort) as keyof typeof PRODUCT_SORTS;
+    const [sortColumn, sortDirection] =
+      PRODUCT_SORTS[sortKey] ?? PRODUCT_SORTS.newest;
+    const { page, take, skip } = parsePagination(req.query, {
+      defaultLimit: 12,
+      maxLimit: 48,
+    });
 
     const qb = productRepo
       .createQueryBuilder("product")
-      .leftJoinAndSelect("product.shop", "shop")
-      .leftJoinAndSelect("shop.category", "category")
-      .leftJoinAndSelect("product.images", "images")
-      .leftJoinAndSelect("product.variantOptions", "variantOptions")
-      .leftJoinAndSelect("variantOptions.values", "optionValues")
-      .leftJoinAndSelect("product.variants", "variants")
-      .leftJoinAndSelect("variants.values", "variantValues")
-      .leftJoinAndSelect("variantValues.option", "variantValueOption")
-      .where("shop.status = :status", { status: "active" });
+      .innerJoinAndSelect("product.shop", "shop")
+      // Just the id, so the page can tell an artisan which products are theirs.
+      .leftJoin("shop.owner", "owner")
+      .addSelect(["owner.id"])
+      .leftJoin("shop.category", "category")
+      .leftJoin("product.variantOptions", "variantOptions")
+      .addSelect(["variantOptions.id", "variantOptions.name"])
+      .where("shop.status = :status", { status: "active" })
+      .andWhere("product.archivedAt IS NULL");
 
-    if (shopId) {
+    if (shopId && isUuid(shopId)) {
       qb.andWhere("shop.id = :shopId", { shopId });
     }
     if (category) {
@@ -38,32 +87,40 @@ export const getAllProducts = async (req: Request, res: Response) => {
     }
     if (search) {
       qb.andWhere(
-        "(LOWER(product.title) LIKE LOWER(:search) OR LOWER(product.description) LIKE LOWER(:search))",
-        { search: `%${search}%` },
+        "(product.title ILIKE :search OR product.description ILIKE :search)",
+        { search: likePattern(search) },
       );
     }
-    if (minPrice) {
+    if (Number.isFinite(minPrice)) {
       qb.andWhere("product.basePrice >= :minPrice", { minPrice });
     }
-    if (maxPrice) {
+    if (Number.isFinite(maxPrice)) {
       qb.andWhere("product.basePrice <= :maxPrice", { maxPrice });
     }
 
-    const products = await qb.orderBy("product.createdAt", "DESC").getMany();
-    res.json(products);
+    const [products, total] = await qb
+      .orderBy(sortColumn, sortDirection)
+      .addOrderBy("product.id", "ASC") // stable pages
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    res.json(pageResult(products, total, page, take));
   } catch (error) {
+    console.error("getAllProducts failed:", error);
     res.status(500).json({ message: "Error fetching products" });
   }
 };
 
 export const getMyProducts = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    const shop = await shopRepo.findOne({
+      where: { owner: { id: req.user!.id } },
+    });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
 
     const products = await productRepo.find({
-      where: { shop: { id: shop.id } },
+      where: { shop: { id: shop.id }, archivedAt: IsNull() },
       relations: [
         "images",
         "variantOptions",
@@ -73,44 +130,75 @@ export const getMyProducts = async (req: Request, res: Response) => {
         "variants.values.option",
       ],
       order: { createdAt: "DESC" },
+      relationLoadStrategy: "query",
     });
     res.json(products);
   } catch (error) {
+    console.error("getMyProducts failed:", error);
     res.status(500).json({ message: "Error fetching products" });
   }
 };
 
-export const createProduct = async (req: Request, res: Response) => {
+/**
+ * One product with everything its page needs — gallery, options, variants
+ * and the shop. Only live products of active shops are public.
+ */
+export const getProductById = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const { title, description, basePrice } = req.body;
-    const imageUrl = req.file?.path;
+    const product = await productRepo.findOne({
+      where: {
+        id: String(req.params.id),
+        archivedAt: IsNull(),
+        shop: { status: ShopStatus.ACTIVE },
+      },
+      relations: {
+        images: true,
+        variantOptions: { values: true },
+        variants: { values: { option: true } },
+        shop: { category: true, owner: true },
+      },
+      // Not `order: { images: … }`: TypeORM builds invalid SQL for an
+      // order on a relation under relationLoadStrategy "query".
+      relationLoadStrategy: "query",
+    });
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    product.images?.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    return res.json(product);
+  } catch (error) {
+    console.error("getProductById failed:", error);
+    return res.status(500).json({ message: "Error fetching product" });
+  }
+};
 
-    if (!title || basePrice === undefined) {
-      return res
-        .status(400)
-        .json({ message: "title and basePrice are required" });
-    }
+export const createProduct = async (req: Request, res: Response) => {
+  const file = req.file as CloudinaryFile | undefined;
+  try {
+    const { title, description, basePrice, stockQuantity } = req.body;
 
-    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    const shop = await shopRepo.findOne({
+      where: { owner: { id: req.user!.id } },
+    });
     if (!shop) {
+      // multer already uploaded the image; don't leave it orphaned.
+      await destroyUpload(file?.filename);
       return res.status(404).json({ message: "You don't have a shop yet" });
     }
 
-    const product = productRepo.create({
-      title,
-      description,
-      basePrice,
-      imageUrl,
-      shop,
-    });
-    const saved = await productRepo.save(product);
+    const saved = await productRepo.save(
+      productRepo.create({
+        title,
+        description: description || undefined,
+        basePrice,
+        stockQuantity: stockQuantity ?? null,
+        imageUrl: file?.path,
+        shop,
+      }),
+    );
 
-    if (imageUrl) {
-      const file = req.file as CloudinaryFile;
+    if (file?.path) {
       await productImageRepo.save(
         productImageRepo.create({
-          url: imageUrl,
+          url: file.path,
           publicId: file.filename,
           product: saved,
         }),
@@ -119,94 +207,89 @@ export const createProduct = async (req: Request, res: Response) => {
 
     return res.status(201).json(saved);
   } catch (error) {
+    console.error("createProduct failed:", error);
+    await destroyUpload(file?.filename);
     return res.status(500).json({ message: "Error creating product" });
   }
 };
 
-async function findOwnedProduct(id: string, userId: string, role?: UserRole) {
-  const product = await productRepo.findOne({
-    where: { id },
-    relations: ["shop", "shop.owner"],
-  });
-  if (!product) return { product: null, allowed: false };
-  const allowed =
-    product.shop.owner.id === userId || role === UserRole.SUPER_ADMIN;
-  return { product, allowed };
-}
-
 export const updateProduct = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const id = String(req.params.id);
-    const { title, description, basePrice } = req.body;
-
-    const { product, allowed } = await findOwnedProduct(
-      id,
-      userId,
-      req.user!.role,
+    const { product, allowed } = await findManageableProduct(
+      String(req.params.id),
+      req.user!,
     );
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-    if (!allowed) {
-      return res.status(403).json({ message: "Forbidden" });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!allowed) return res.status(403).json({ message: "Forbidden" });
 
-    if (title !== undefined) product.title = title;
-    if (description !== undefined) product.description = description;
-    if (basePrice !== undefined) product.basePrice = basePrice;
+    const { title, description, basePrice, stockQuantity } = req.body;
+    const changes: Partial<Product> = {};
+    if (title !== undefined) changes.title = title;
+    if (description !== undefined) changes.description = description;
+    if (basePrice !== undefined) changes.basePrice = basePrice;
+    if (stockQuantity !== undefined) changes.stockQuantity = stockQuantity;
 
-    const saved = await productRepo.save(product);
-    return res.json(saved);
+    // update(), not save(): save() writes back the stock it read a moment
+    // ago, which could undo a reservation a checkout made in between.
+    if (Object.keys(changes).length) await productRepo.update(product.id, changes);
+    return res.json(await productRepo.findOne({ where: { id: product.id } }));
   } catch (error) {
+    console.error("updateProduct failed:", error);
     return res.status(500).json({ message: "Error updating product" });
   }
 };
 
+/**
+ * A product that has been ordered is archived, not deleted: orders reference
+ * it (so a hard delete failed with a foreign-key error) and clients' order
+ * history should still show what they bought. A never-ordered product is
+ * deleted outright, along with its uploaded images.
+ */
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const id = String(req.params.id);
-
-    const { product, allowed } = await findOwnedProduct(
-      id,
-      userId,
-      req.user!.role,
+    const { product, allowed } = await findManageableProduct(
+      String(req.params.id),
+      req.user!,
     );
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-    if (!allowed) {
-      return res.status(403).json({ message: "Forbidden" });
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!allowed) return res.status(403).json({ message: "Forbidden" });
+
+    const hasOrders = await orderRepo.exists({
+      where: { product: { id: product.id } },
+    });
+    if (hasOrders) {
+      await productRepo.update(product.id, { archivedAt: new Date() });
+      return res.status(204).send();
     }
 
+    const images = await productImageRepo.find({
+      where: { product: { id: product.id } },
+    });
     await productRepo.remove(product);
+    await Promise.all(images.map((image) => destroyUpload(image.publicId)));
     return res.status(204).send();
   } catch (error) {
+    console.error("deleteProduct failed:", error);
     return res.status(500).json({ message: "Error deleting product" });
   }
 };
 
 export const addProductImage = async (req: Request, res: Response) => {
+  const file = req.file as CloudinaryFile | undefined;
   try {
-    const userId = req.user!.id;
-    const id = String(req.params.id);
-    const file = req.file as CloudinaryFile | undefined;
-
     if (!file?.path) {
       return res.status(400).json({ message: "No image file provided" });
     }
 
-    const { product, allowed } = await findOwnedProduct(
-      id,
-      userId,
-      req.user!.role,
+    const { product, allowed } = await findManageableProduct(
+      String(req.params.id),
+      req.user!,
     );
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-    if (!allowed) {
-      return res.status(403).json({ message: "Forbidden" });
+    if (!product || !allowed) {
+      await destroyUpload(file.filename);
+      return product
+        ? res.status(403).json({ message: "Forbidden" })
+        : res.status(404).json({ message: "Product not found" });
     }
 
     const image = await productImageRepo.save(
@@ -218,19 +301,19 @@ export const addProductImage = async (req: Request, res: Response) => {
     );
 
     if (!product.imageUrl) {
-      product.imageUrl = file.path;
-      await productRepo.save(product);
+      await productRepo.update(product.id, { imageUrl: file.path });
     }
 
     return res.status(201).json(image);
   } catch (error) {
+    console.error("addProductImage failed:", error);
+    await destroyUpload(file?.filename);
     return res.status(500).json({ message: "Error adding product image" });
   }
 };
 
 export const removeProductImage = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
     const imageId = String(req.params.imageId);
 
     const image = await productImageRepo.findOne({
@@ -238,33 +321,26 @@ export const removeProductImage = async (req: Request, res: Response) => {
       relations: ["product", "product.shop", "product.shop.owner"],
     });
     if (!image) return res.status(404).json({ message: "Image not found" });
-
-    const allowed =
-      image.product.shop.owner.id === userId ||
-      req.user!.role === UserRole.SUPER_ADMIN;
-    if (!allowed) return res.status(403).json({ message: "Forbidden" });
-
-    if (image.publicId) {
-      try {
-        await cloudinary.uploader.destroy(image.publicId);
-      } catch {}
+    if (!canManageShopOf(image.product.shop.owner?.id, req.user!)) {
+      return res.status(403).json({ message: "Forbidden" });
     }
 
     const product = image.product;
     const wasCover = product.imageUrl === image.url;
     await productImageRepo.remove(image);
+    await destroyUpload(image.publicId);
 
     if (wasCover) {
       const remaining = await productImageRepo.findOne({
         where: { product: { id: product.id } },
         order: { createdAt: "ASC" },
       });
-      product.imageUrl = remaining?.url;
-      await productRepo.save(product);
+      await productRepo.update(product.id, { imageUrl: remaining?.url ?? null });
     }
 
     return res.status(204).send();
   } catch (error) {
+    console.error("removeProductImage failed:", error);
     return res.status(500).json({ message: "Error removing product image" });
   }
 };

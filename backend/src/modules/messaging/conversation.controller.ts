@@ -3,10 +3,60 @@ import { AppDataSource } from "../../data-source";
 import { Conversation } from "./conversation.entities";
 import { Message } from "./message.entities";
 import { Shop } from "../shop/shop.entities";
-import { parsePagination } from "../../middleware/validate.middleware";
+import {
+  isUuid,
+  pageResult,
+  parsePagination,
+  queryString,
+} from "../../middleware/validate.middleware";
 import { User } from "../users/entities/user.entities";
+import { MAX_MESSAGE_LENGTH } from "./message.limits";
 
-export const MAX_MESSAGE_LENGTH = 2000;
+export { MAX_MESSAGE_LENGTH };
+
+const MESSAGE_PAGE_SIZE = 50;
+
+/**
+ * One page of a thread, oldest-to-newest, plus whether older messages
+ * exist. `?before=<messageId>` pages backwards from that message. Threads
+ * used to be loaded in full on every open.
+ *
+ * The cursor is compared as (createdAt, id) in SQL — at the database's
+ * microsecond precision — rather than as a JS timestamp, which is only
+ * millisecond-precise and could skip messages sharing a millisecond.
+ */
+async function loadMessagePage(
+  conversationId: string,
+  query: Request["query"],
+) {
+  const limit = Math.min(
+    Math.max(Math.floor(Number(query.limit)) || MESSAGE_PAGE_SIZE, 1),
+    100,
+  );
+  const before = queryString(query.before);
+
+  const qb = messageRepo
+    .createQueryBuilder("m")
+    .leftJoinAndSelect("m.sender", "sender")
+    .where("m.conversationId = :conversationId", { conversationId });
+  if (before && isUuid(before)) {
+    qb.andWhere(
+      `(m.createdAt, m.id) < (SELECT "createdAt", "id" FROM "messages" WHERE "id" = :before)`,
+      { before },
+    );
+  }
+
+  const newestFirst = await qb
+    .orderBy("m.createdAt", "DESC")
+    .addOrderBy("m.id", "DESC")
+    .limit(limit + 1) // one extra row tells us whether there's more
+    .getMany();
+
+  return {
+    messages: newestFirst.slice(0, limit).reverse(),
+    hasMore: newestFirst.length > limit,
+  };
+}
 
 const conversationRepo = AppDataSource.getRepository(Conversation);
 const messageRepo = AppDataSource.getRepository(Message);
@@ -115,6 +165,7 @@ export const startConversation = async (req: Request, res: Response) => {
 
     return res.status(201).json(conversation);
   } catch (error) {
+    console.error("startConversation failed:", error);
     return res.status(500).json({ message: "Error starting conversation" });
   }
 };
@@ -142,6 +193,7 @@ export const getMyConversations = async (req: Request, res: Response) => {
       conversations.map((c) => ({ ...c, unreadCount: unread.get(c.id) ?? 0 })),
     );
   } catch (error) {
+    console.error("getMyConversations failed:", error);
     return res.status(500).json({ message: "Error fetching conversations" });
   }
 };
@@ -162,23 +214,23 @@ export const getConversationMessages = async (req: Request, res: Response) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const messages = await messageRepo.find({
-      where: { conversation: { id } },
-      relations: ["sender"],
-      order: { createdAt: "ASC" },
-    });
+    const page = await loadMessagePage(id, req.query);
 
-    await messageRepo
-      .createQueryBuilder()
-      .update(Message)
-      .set({ readAt: new Date() })
-      .where("conversationId = :id", { id })
-      .andWhere("senderId != :userId", { userId })
-      .andWhere("readAt IS NULL")
-      .execute();
+    // Opening the thread (the newest page) reads everything in it.
+    if (!queryString(req.query.before)) {
+      await messageRepo
+        .createQueryBuilder()
+        .update(Message)
+        .set({ readAt: new Date() })
+        .where("conversationId = :id", { id })
+        .andWhere("senderId != :userId", { userId })
+        .andWhere("readAt IS NULL")
+        .execute();
+    }
 
-    return res.json({ conversation, messages });
+    return res.json({ conversation, ...page });
   } catch (error) {
+    console.error("getConversationMessages failed:", error);
     return res.status(500).json({ message: "Error fetching messages" });
   }
 };
@@ -213,6 +265,7 @@ export const sendMessage = async (req: Request, res: Response) => {
     const saved = await persistMessage(conversation, userId, content);
     return res.status(201).json(saved);
   } catch (error) {
+    console.error("sendMessage failed:", error);
     return res.status(500).json({ message: "Error sending message" });
   }
 };
@@ -225,15 +278,13 @@ export const getAllConversationsAdmin = async (req: Request, res: Response) => {
     });
     const [conversations, total] = await conversationRepo.findAndCount({
       relations: ["client", "shop", "shop.owner"],
-      order: { updatedAt: "DESC" },
+      order: { updatedAt: "DESC", id: "ASC" },
       skip,
       take,
     });
-    return res.json({
-      data: conversations,
-      meta: { total, page, lastPage: Math.ceil(total / take) },
-    });
+    return res.json(pageResult(conversations, total, page, take));
   } catch (error) {
+    console.error("getAllConversationsAdmin failed:", error);
     return res.status(500).json({ message: "Error fetching conversations" });
   }
 };
@@ -253,14 +304,9 @@ export const getConversationMessagesAdmin = async (
       return res.status(404).json({ message: "Conversation not found" });
     }
 
-    const messages = await messageRepo.find({
-      where: { conversation: { id } },
-      relations: ["sender"],
-      order: { createdAt: "ASC" },
-    });
-
-    return res.json({ conversation, messages });
+    return res.json({ conversation, ...(await loadMessagePage(id, req.query)) });
   } catch (error) {
+    console.error("getConversationMessagesAdmin failed:", error);
     return res.status(500).json({ message: "Error fetching messages" });
   }
 };

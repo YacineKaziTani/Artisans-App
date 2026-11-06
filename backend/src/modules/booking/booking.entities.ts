@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -27,12 +28,22 @@ export enum PaymentStatus {
 }
 
 @Entity("bookings")
+// Slot-overlap checks and the artisan/client booking lists.
+@Index(["shop", "scheduledAt"])
+@Index(["client", "createdAt"])
+@Index("IDX_bookings_unpaid_checkouts", ["createdAt"], { where: `"status" = 'pending' AND "paymentStatus" IN ('unpaid', 'failed')` })
 export class Booking {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ type: "timestamp" })
+  @Column({ type: "timestamptz" })
   scheduledAt!: Date;
+
+  // scheduledAt + the service's appointment length, snapshotted at booking
+  // time; used for overlap checks. Older rows have none (treated as a
+  // one-minute slot).
+  @Column({ type: "timestamptz", nullable: true })
+  endsAt?: Date | null;
 
   @Column({ type: "text", nullable: true })
   notes!: string;
@@ -63,9 +74,9 @@ export class Booking {
   @ManyToOne(() => Service)
   service!: Service;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

@@ -1,10 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { disputeApi, type CreateDisputePayload } from "@/api/dispute.api";
 import type { DisputeStatus } from "@/types";
 
 export const disputeKeys = {
   mine: ["disputes", "mine"] as const,
-  admin: (status?: DisputeStatus) => ["disputes", "admin", status ?? "all"] as const,
+  admin: (status?: DisputeStatus, page = 1) =>
+    ["disputes", "admin", status ?? "all", page] as const,
 };
 
 export function useCreateDispute() {
@@ -24,10 +30,11 @@ export function useMyDisputes() {
   });
 }
 
-export function useAdminDisputes(status?: DisputeStatus) {
+export function useAdminDisputes(status?: DisputeStatus, page = 1) {
   return useQuery({
-    queryKey: disputeKeys.admin(status),
-    queryFn: () => disputeApi.listAllAdmin(status),
+    queryKey: disputeKeys.admin(status, page),
+    queryFn: () => disputeApi.listAllAdmin(status, page),
+    placeholderData: keepPreviousData,
   });
 }
 

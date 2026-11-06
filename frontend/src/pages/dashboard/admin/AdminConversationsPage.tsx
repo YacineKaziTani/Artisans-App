@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { Link, Outlet, useParams } from "react-router";
+import { Pagination } from "@/components/Pagination";
 import { useAdminConversations } from "@/hooks/useConversations";
 
 export default function AdminConversationsPage() {
-  const { data: conversations, isLoading, isError } = useAdminConversations();
+  const [page, setPage] = useState(1);
+  const { data: conversationsPage, isLoading, isError, isFetching } = useAdminConversations(page);
+  const conversations = conversationsPage?.data;
   const { id: activeId } = useParams<{ id?: string }>();
 
   return (
@@ -52,6 +56,9 @@ export default function AdminConversationsPage() {
                 </p>
               </Link>
             ))}
+          <div className="px-3 pb-3">
+            <Pagination meta={conversationsPage?.meta} onPageChange={setPage} disabled={isFetching} />
+          </div>
         </div>
 
         <div className={`flex-1 ${activeId ? "block" : "hidden sm:block"}`}>

@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -26,6 +27,8 @@ export enum ReportStatus {
 // reporting doesn't require a new FK/migration every time a new reportable
 // entity is added, and a report survives even if the target is later deleted.
 @Entity("reports")
+@Index(["targetType", "targetId"])
+@Index(["status", "createdAt"])
 export class Report {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -54,9 +57,9 @@ export class Report {
   @ManyToOne(() => User)
   reporter!: User;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

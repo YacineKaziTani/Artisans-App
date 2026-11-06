@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Check, Package, ShoppingBag, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LoginLink } from "@/components/LoginLink";
 import { Input } from "@/components/ui/input";
 import { useProducts } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
@@ -10,6 +11,16 @@ import { useAuthStore } from "@/store/auth.store";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { useCartStore } from "@/store/cart.store";
 import { shopCanAcceptPayments } from "@/lib/stripe";
+import { Pagination } from "@/components/Pagination";
+import type { ProductSort } from "@/api/product.api";
+
+const PAGE_SIZE = 12;
+
+const SORT_OPTIONS: { value: ProductSort; label: string }[] = [
+  { value: "newest", label: "Newest" },
+  { value: "price_asc", label: "Price: low to high" },
+  { value: "price_desc", label: "Price: high to low" },
+];
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -17,6 +28,8 @@ export default function ProductsPage() {
   const category = searchParams.get("category") ?? "";
   const minPrice = searchParams.get("minPrice") ?? "";
   const maxPrice = searchParams.get("maxPrice") ?? "";
+  const sort = (searchParams.get("sort") as ProductSort | null) ?? "newest";
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
 
   const [searchInput, setSearchInput] = useState(search);
   const [minInput, setMinInput] = useState(minPrice);
@@ -24,6 +37,7 @@ export default function ProductsPage() {
 
   const { data: categories } = useCategories();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const userId = useAuthStore((s) => s.user?.id);
   const { data: favoriteIds } = useFavoriteIds("product", {
     enabled: isAuthenticated,
   });
@@ -32,33 +46,46 @@ export default function ProductsPage() {
   const [wrongShop, setWrongShop] = useState(false);
 
   const {
-    data: products,
+    data: productsPage,
     isLoading,
     isError,
+    isFetching,
   } = useProducts({
     search: search || undefined,
     category: category || undefined,
     minPrice: minPrice ? Number(minPrice) : undefined,
     maxPrice: maxPrice ? Number(maxPrice) : undefined,
+    sort,
+    page,
+    limit: PAGE_SIZE,
   });
+  const products = productsPage?.data;
 
-  const applyFilters = (e: React.FormEvent) => {
-    e.preventDefault();
-    const next: Record<string, string> = {};
-    if (searchInput.trim()) next.search = searchInput.trim();
-    if (category) next.category = category;
-    if (minInput) next.minPrice = minInput;
-    if (maxInput) next.maxPrice = maxInput;
+  /** Merge changes into the URL; any filter change goes back to page 1. */
+  const updateParams = (changes: Record<string, string | undefined>) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    if (!("page" in changes)) next.delete("page");
     setSearchParams(next);
   };
 
-  const setCategory = (value: string) => {
-    const next: Record<string, string> = {};
-    if (search) next.search = search;
-    if (value) next.category = value;
-    if (minPrice) next.minPrice = minPrice;
-    if (maxPrice) next.maxPrice = maxPrice;
-    setSearchParams(next);
+  const applyFilters = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateParams({
+      search: searchInput.trim() || undefined,
+      minPrice: minInput || undefined,
+      maxPrice: maxInput || undefined,
+    });
+  };
+
+  const setCategory = (value: string) => updateParams({ category: value || undefined });
+
+  const goToPage = (next: number) => {
+    updateParams({ page: next > 1 ? String(next) : undefined });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const hasFilters = Boolean(search || category || minPrice || maxPrice);
@@ -144,6 +171,28 @@ export default function ProductsPage() {
             />
           </div>
 
+          <div>
+            <label htmlFor="product-sort" className="field-label">
+              Sort
+            </label>
+            <select
+              id="product-sort"
+              value={sort}
+              onChange={(e) =>
+                updateParams({
+                  sort: e.target.value === "newest" ? undefined : e.target.value,
+                })
+              }
+              className="h-11 rounded-xl border border-input bg-card px-3.5 text-sm shadow-[var(--shadow-xs)] outline-none transition-colors hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <Button type="submit">
             <SlidersHorizontal className="size-4" /> Apply
           </Button>
@@ -214,7 +263,7 @@ export default function ProductsPage() {
                 )}
 
                 <Link
-                  to={`/artisan/${product.shop?.id}`}
+                  to={`/product/${product.id}`}
                   className="block overflow-hidden"
                 >
                   {product.imageUrl ? (
@@ -232,14 +281,17 @@ export default function ProductsPage() {
                 </Link>
 
                 <div className="flex flex-1 flex-col p-5">
-                  <Link to={`/artisan/${product.shop?.id}`}>
+                  <Link to={`/product/${product.id}`}>
                     <h3 className="font-display text-lg font-semibold hover:text-primary">
                       {product.title}
                     </h3>
                   </Link>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <Link
+                    to={`/artisan/${product.shop?.id}`}
+                    className="mt-0.5 text-xs text-muted-foreground hover:text-primary"
+                  >
                     {product.shop?.shopName}
-                  </p>
+                  </Link>
 
                   {product.description && (
                     <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
@@ -255,15 +307,23 @@ export default function ProductsPage() {
                     {isAuthenticated ? (
                       // Matches ArtisanShopPage: a shop that can't take payment
                       // shouldn't offer a buy path that fails at checkout.
-                      !shopCanAcceptPayments(product.shop ?? {}) ? (
+                      userId && product.shop?.owner?.id === userId ? (
+                        <Button asChild variant="outline" className="w-full">
+                          <Link to="/profile-artisan?tab=products">Your product — manage</Link>
+                        </Button>
+                      ) : !shopCanAcceptPayments(product.shop ?? {}) ? (
                         <Button variant="outline" className="w-full" disabled>
                           Not available yet
                         </Button>
                       ) : product.variantOptions?.length ? (
                         <Button asChild variant="outline" className="w-full">
-                          <Link to={`/artisan/${product.shop?.id}`}>
+                          <Link to={`/product/${product.id}`}>
                             Select options
                           </Link>
+                        </Button>
+                      ) : product.stockQuantity === 0 ? (
+                        <Button variant="outline" className="w-full" disabled>
+                          Out of stock
                         </Button>
                       ) : (
                         <Button
@@ -294,7 +354,7 @@ export default function ProductsPage() {
                       )
                     ) : (
                       <Button asChild variant="outline" className="w-full">
-                        <Link to="/login">Log in to buy</Link>
+                        <LoginLink>Log in to buy</LoginLink>
                       </Button>
                     )}
                   </div>
@@ -303,6 +363,13 @@ export default function ProductsPage() {
             ))}
           </div>
         )}
+
+        <Pagination
+          className="mt-10"
+          meta={productsPage?.meta}
+          onPageChange={goToPage}
+          disabled={isFetching}
+        />
       </div>
     </main>
   );

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateReport } from "@/hooks/useReports";
 import type { ReportTargetType } from "@/types";
+import { getErrorMessage } from "@/lib/errors";
 
 export function ReportDialog({
   targetType,
@@ -38,8 +39,9 @@ export function ReportDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim()) return;
+    // The API looks the target up and labels the report itself.
     createReport.mutate(
-      { targetType, targetId, targetLabel, reason: reason.trim() },
+      { targetType, targetId, reason: reason.trim() },
       { onSuccess: () => handleClose(false) },
     );
   };
@@ -56,7 +58,10 @@ export function ReportDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           {createReport.isError && (
             <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
-              Couldn't submit your report. Please try again.
+              {getErrorMessage(
+                createReport.error,
+                "Couldn't submit your report. Please try again.",
+              )}
             </div>
           )}
           <Textarea

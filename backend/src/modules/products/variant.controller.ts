@@ -1,80 +1,54 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../../data-source";
-import { Product } from "./product.entities";
 import {
   VariantOption,
   VariantValue,
   ProductVariant,
 } from "./variant.entities";
-import { UserRole } from "../users/entities/user.entities";
+import { canManageShopOf, findManageableProduct } from "./ownership";
 
-const productRepo = AppDataSource.getRepository(Product);
+// Request bodies are validated by the zod schemas in product.schemas.ts.
+
 const optionRepo = AppDataSource.getRepository(VariantOption);
 const valueRepo = AppDataSource.getRepository(VariantValue);
 const variantRepo = AppDataSource.getRepository(ProductVariant);
 
-async function findOwnedProduct(
-  productId: string,
-  userId: string,
-  role?: UserRole,
-) {
-  const product = await productRepo.findOne({
-    where: { id: productId },
-    relations: ["shop", "shop.owner"],
-  });
-  if (!product) return { product: null, allowed: false };
-  const allowed =
-    product.shop.owner.id === userId || role === UserRole.SUPER_ADMIN;
-  return { product, allowed };
-}
+const OWNER_RELATIONS = ["product", "product.shop", "product.shop.owner"];
 
 export const createVariantOption = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const productId = String(req.params.productId);
-    const { name } = req.body;
-
-    if (!name?.trim()) {
-      return res.status(400).json({ message: "name is required" });
-    }
-
-    const { product, allowed } = await findOwnedProduct(
-      productId,
-      userId,
-      req.user!.role,
+    const { product, allowed } = await findManageableProduct(
+      String(req.params.productId),
+      req.user!,
     );
     if (!product) return res.status(404).json({ message: "Product not found" });
     if (!allowed) return res.status(403).json({ message: "Forbidden" });
 
     const option = await optionRepo.save(
-      optionRepo.create({ name: name.trim(), product }),
+      optionRepo.create({ name: req.body.name, product }),
     );
     return res.status(201).json(option);
   } catch (error) {
+    console.error("createVariantOption failed:", error);
     return res.status(500).json({ message: "Error creating variant option" });
   }
 };
 
 export const deleteVariantOption = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const id = String(req.params.id);
-
     const option = await optionRepo.findOne({
-      where: { id },
-      relations: ["product", "product.shop", "product.shop.owner"],
+      where: { id: String(req.params.id) },
+      relations: OWNER_RELATIONS,
     });
     if (!option) return res.status(404).json({ message: "Option not found" });
-    if (
-      option.product.shop.owner.id !== userId &&
-      req.user!.role !== UserRole.SUPER_ADMIN
-    ) {
+    if (!canManageShopOf(option.product.shop.owner?.id, req.user!)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
     await optionRepo.remove(option);
     return res.status(204).send();
   } catch (error) {
+    console.error("deleteVariantOption failed:", error);
     return res.status(500).json({ message: "Error deleting variant option" });
   }
 };
@@ -83,46 +57,30 @@ export const deleteVariantOption = async (req: Request, res: Response) => {
 
 export const createVariantValue = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const optionId = String(req.params.optionId);
-    const { value, priceModifier } = req.body;
-
-    if (!value?.trim()) {
-      return res.status(400).json({ message: "value is required" });
-    }
-
     const option = await optionRepo.findOne({
-      where: { id: optionId },
-      relations: ["product", "product.shop", "product.shop.owner"],
+      where: { id: String(req.params.optionId) },
+      relations: OWNER_RELATIONS,
     });
     if (!option) return res.status(404).json({ message: "Option not found" });
-    if (
-      option.product.shop.owner.id !== userId &&
-      req.user!.role !== UserRole.SUPER_ADMIN
-    ) {
+    if (!canManageShopOf(option.product.shop.owner?.id, req.user!)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
+    const { value, priceModifier } = req.body;
     const saved = await valueRepo.save(
-      valueRepo.create({
-        value: value.trim(),
-        priceModifier: priceModifier ?? 0,
-        option,
-      }),
+      valueRepo.create({ value, priceModifier: priceModifier ?? 0, option }),
     );
     return res.status(201).json(saved);
   } catch (error) {
+    console.error("createVariantValue failed:", error);
     return res.status(500).json({ message: "Error creating variant value" });
   }
 };
 
 export const deleteVariantValue = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const id = String(req.params.id);
-
     const value = await valueRepo.findOne({
-      where: { id },
+      where: { id: String(req.params.id) },
       relations: [
         "option",
         "option.product",
@@ -131,16 +89,14 @@ export const deleteVariantValue = async (req: Request, res: Response) => {
       ],
     });
     if (!value) return res.status(404).json({ message: "Value not found" });
-    if (
-      value.option.product.shop.owner.id !== userId &&
-      req.user!.role !== UserRole.SUPER_ADMIN
-    ) {
+    if (!canManageShopOf(value.option.product.shop.owner?.id, req.user!)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
     await valueRepo.remove(value);
     return res.status(204).send();
   } catch (error) {
+    console.error("deleteVariantValue failed:", error);
     return res.status(500).json({ message: "Error deleting variant value" });
   }
 };
@@ -149,29 +105,27 @@ export const deleteVariantValue = async (req: Request, res: Response) => {
 
 export const createProductVariant = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
     const productId = String(req.params.productId);
-    const { valueIds, sku, stockQuantity, priceOverride } = req.body;
+    const { valueIds, sku, stockQuantity, priceOverride } = req.body as {
+      valueIds: string[];
+      sku?: string;
+      stockQuantity?: number;
+      priceOverride?: number | null;
+    };
 
-    if (!Array.isArray(valueIds) || valueIds.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "valueIds must be a non-empty array" });
-    }
-
-    const { product, allowed } = await findOwnedProduct(
+    const { product, allowed } = await findManageableProduct(
       productId,
-      userId,
-      req.user!.role,
+      req.user!,
     );
     if (!product) return res.status(404).json({ message: "Product not found" });
     if (!allowed) return res.status(403).json({ message: "Forbidden" });
 
+    const uniqueIds = [...new Set(valueIds)];
     const values = await valueRepo.find({
-      where: valueIds.map((id: string) => ({ id })),
+      where: uniqueIds.map((id) => ({ id })),
       relations: ["option", "option.product"],
     });
-    if (values.length !== new Set(valueIds).size) {
+    if (values.length !== uniqueIds.length) {
       return res
         .status(404)
         .json({ message: "One or more values were not found" });
@@ -200,59 +154,59 @@ export const createProductVariant = async (req: Request, res: Response) => {
     );
     return res.status(201).json(variant);
   } catch (error) {
+    console.error("createProductVariant failed:", error);
     return res.status(500).json({ message: "Error creating product variant" });
   }
 };
 
 export const updateProductVariant = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const id = String(req.params.id);
-    const { sku, stockQuantity, priceOverride } = req.body;
-
     const variant = await variantRepo.findOne({
-      where: { id },
-      relations: ["product", "product.shop", "product.shop.owner"],
+      where: { id: String(req.params.id) },
+      relations: OWNER_RELATIONS,
     });
     if (!variant) return res.status(404).json({ message: "Variant not found" });
-    if (
-      variant.product.shop.owner.id !== userId &&
-      req.user!.role !== UserRole.SUPER_ADMIN
-    ) {
+    if (!canManageShopOf(variant.product.shop.owner?.id, req.user!)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    if (sku !== undefined) variant.sku = sku;
-    if (stockQuantity !== undefined) variant.stockQuantity = stockQuantity;
-    if (priceOverride !== undefined) variant.priceOverride = priceOverride;
+    const { sku, stockQuantity, priceOverride } = req.body as {
+      sku?: string;
+      stockQuantity?: number;
+      priceOverride?: number | null;
+    };
+    const changes: Partial<ProductVariant> = {};
+    if (sku !== undefined) changes.sku = sku || null;
+    if (stockQuantity !== undefined) changes.stockQuantity = stockQuantity;
+    if (priceOverride !== undefined) changes.priceOverride = priceOverride;
 
-    const saved = await variantRepo.save(variant);
-    return res.json(saved);
+    // update(), not save(): save() writes back the stock it read a moment
+    // ago, which could undo a reservation a checkout made in between.
+    if (Object.keys(changes).length) {
+      await variantRepo.update(variant.id, changes);
+    }
+    return res.json(await variantRepo.findOne({ where: { id: variant.id } }));
   } catch (error) {
+    console.error("updateProductVariant failed:", error);
     return res.status(500).json({ message: "Error updating product variant" });
   }
 };
 
 export const deleteProductVariant = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const id = String(req.params.id);
-
     const variant = await variantRepo.findOne({
-      where: { id },
-      relations: ["product", "product.shop", "product.shop.owner"],
+      where: { id: String(req.params.id) },
+      relations: OWNER_RELATIONS,
     });
     if (!variant) return res.status(404).json({ message: "Variant not found" });
-    if (
-      variant.product.shop.owner.id !== userId &&
-      req.user!.role !== UserRole.SUPER_ADMIN
-    ) {
+    if (!canManageShopOf(variant.product.shop.owner?.id, req.user!)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
     await variantRepo.remove(variant);
     return res.status(204).send();
   } catch (error) {
+    console.error("deleteProductVariant failed:", error);
     return res.status(500).json({ message: "Error deleting product variant" });
   }
 };

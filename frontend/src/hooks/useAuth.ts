@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
+import { homePathFor, returnPathFrom } from "@/lib/redirects";
 import { authApi } from "@/api/auth.api";
 import { useAuthStore } from "@/store/auth.store";
 import type { LoginPayload, RegisterPayload } from "@/types";
@@ -28,9 +29,16 @@ export function useMe() {
   return query;
 }
 
+/**
+ * Signs in, then returns to the page that sent the user to /login (the
+ * cart, a shop, a protected page) — or their role's home if none. It used
+ * to always go to /dashboard, which bounced clients to "/" and lost the
+ * checkout they were in the middle of.
+ */
 export function useLogin() {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
 
   return useMutation({
@@ -38,7 +46,9 @@ export function useLogin() {
     onSuccess: ({ user }) => {
       setAuth(user);
       qc.setQueryData(authKeys.me, user);
-      navigate("/dashboard");
+      navigate(returnPathFrom(location.state) ?? homePathFor(user), {
+        replace: true,
+      });
     },
   });
 }
@@ -46,6 +56,7 @@ export function useLogin() {
 export function useRegister() {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
 
   return useMutation({
@@ -53,7 +64,9 @@ export function useRegister() {
     onSuccess: ({ user }) => {
       setAuth(user);
       qc.setQueryData(authKeys.me, user);
-      navigate("/dashboard");
+      // A new artisan's first job is creating their shop.
+      const fallback = user.role === "artisan" ? "/profile-artisan" : "/";
+      navigate(returnPathFrom(location.state) ?? fallback, { replace: true });
     },
   });
 }

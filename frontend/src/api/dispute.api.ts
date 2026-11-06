@@ -1,5 +1,5 @@
 import { api } from "@/lib/axios";
-import type { Dispute, DisputeStatus, DisputeTargetType } from "@/types";
+import type { Dispute, DisputeStatus, DisputeTargetType, Page } from "@/types";
 
 export interface CreateDisputePayload {
   targetType: DisputeTargetType;
@@ -13,10 +13,10 @@ export const disputeApi = {
 
   mine: () => api.get<Dispute[]>("/disputes/mine").then((r) => r.data),
 
-  listAllAdmin: (status?: DisputeStatus) =>
+  listAllAdmin: (status?: DisputeStatus, page = 1) =>
     api
-      .get<Dispute[]>("/disputes/admin/all", {
-        params: status ? { status } : {},
+      .get<Page<Dispute>>("/disputes/admin/all", {
+        params: { page, ...(status ? { status } : {}) },
       })
       .then((r) => r.data),
 

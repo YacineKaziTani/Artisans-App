@@ -5,7 +5,6 @@ import {
   getMyShop,
   getAllShops,
   getShopById,
-  uploadShopPhoto,
   getAllShopsAdmin,
   updateShopStatus,
   closeMyShop,
@@ -14,25 +13,26 @@ import {
   resolveShopVerification,
   connectStripeAccount,
   getStripeAccountStatus,
+  getMyShopStats,
+  getShopAdmin,
 } from "./shop.controller";
 import { authorize } from "../../middleware/authorize.middleware";
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { UserRole } from "../users/entities/user.entities";
 import { parser } from "../../config/cloudinary";
-import { uuidParam } from "../../middleware/validate.middleware";
+import { uuidParam, validateBody } from "../../middleware/validate.middleware";
+import {
+  createShopSchema,
+  resolveVerificationSchema,
+  shopStatusSchema,
+  updateShopSchema,
+} from "./shop.schemas";
 
 const router = Router();
 
 // Reject malformed ids with a 404 instead of a Postgres cast error.
 router.param("id", uuidParam);
 
-router.post(
-  "/upload-photo",
-  authMiddleware,
-  authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
-  parser.single("image"),
-  uploadShopPhoto,
-);
 router.get("/", getAllShops);
 router.get("/mine", authMiddleware, getMyShop);
 router.put(
@@ -40,6 +40,7 @@ router.put(
   authMiddleware,
   authorize(UserRole.ARTISAN),
   parser.single("image"),
+  validateBody(updateShopSchema),
   updateMyShop,
 );
 
@@ -48,6 +49,7 @@ router.post(
   authMiddleware,
   authorize(UserRole.CLIENT, UserRole.ARTISAN),
   parser.single("image"),
+  validateBody(createShopSchema),
   createShop,
 );
 router.patch(
@@ -72,6 +74,7 @@ router.patch(
   "/:id/verification",
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
+  validateBody(resolveVerificationSchema),
   resolveShopVerification,
 );
 router.post(
@@ -86,6 +89,12 @@ router.get(
   authorize(UserRole.ARTISAN),
   getStripeAccountStatus,
 );
+router.get(
+  "/mine/stats",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  getMyShopStats,
+);
 router.get("/:id", getShopById);
 
 router.get(
@@ -94,10 +103,18 @@ router.get(
   authorize(UserRole.SUPER_ADMIN),
   getAllShopsAdmin,
 );
+// After /admin/all: the :id param check would otherwise reject "all".
+router.get(
+  "/admin/:id",
+  authMiddleware,
+  authorize(UserRole.SUPER_ADMIN),
+  getShopAdmin,
+);
 router.patch(
   "/:id/status",
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
+  validateBody(shopStatusSchema),
   updateShopStatus,
 );
 

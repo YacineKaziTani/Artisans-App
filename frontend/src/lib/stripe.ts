@@ -12,11 +12,12 @@ if (!publishableKey) {
 
 export const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
-export const bypassConnect =
-  import.meta.env.VITE_STRIPE_BYPASS_CONNECT === "true";
-
-export function shopCanAcceptPayments(shop: {
-  stripeOnboardingComplete?: boolean;
-}) {
-  return bypassConnect || Boolean(shop.stripeOnboardingComplete);
+/**
+ * Whether a shop can take bookings/orders right now. The API works this out
+ * (Connect onboarding, plus its own STRIPE_TEST_BYPASS_CONNECT setting) and
+ * sends `acceptsPayments` with every shop — there's no separate frontend
+ * flag to keep in sync any more.
+ */
+export function shopCanAcceptPayments(shop: { acceptsPayments?: boolean }) {
+  return Boolean(shop.acceptsPayments);
 }

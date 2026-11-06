@@ -7,14 +7,22 @@ import {
 } from "./report.controller";
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
+import { moderationLimiter } from "../../middleware/rate-limit.middleware";
 import { UserRole } from "../users/entities/user.entities";
-import { uuidParam } from "../../middleware/validate.middleware";
+import { uuidParam, validateBody } from "../../middleware/validate.middleware";
+import { createReportSchema, resolveReportSchema } from "./report.schemas";
 
 const router = Router();
 
 router.param("id", uuidParam);
 
-router.post("/", authMiddleware, createReport);
+router.post(
+  "/",
+  authMiddleware,
+  moderationLimiter,
+  validateBody(createReportSchema),
+  createReport,
+);
 router.get("/mine", authMiddleware, getMyReports);
 router.get(
   "/admin/all",
@@ -26,6 +34,7 @@ router.patch(
   "/:id",
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
+  validateBody(resolveReportSchema),
   resolveReport,
 );
 

@@ -1,30 +1,70 @@
 import { Request, Response } from "express";
-import { AppDataSource } from "../../../data-source";
+import crypto from "crypto";
 import bcrypt from "bcrypt";
+import { IsNull, Not } from "typeorm";
+import { AppDataSource } from "../../../data-source";
 import { User, UserRole } from "../entities/user.entities";
+import { Shop, ShopStatus } from "../../shop/shop.entities";
+import { Favorite } from "../../favorites/favorite.entities";
 import { CLEAR_COOKIE_OPTIONS } from "../../../config/cookie";
+import { disconnectUserSockets } from "../../../realtime/socket";
+import { isUniqueViolation } from "../../../lib/db";
+import { accountView } from "../user.views";
+import {
+  pageResult,
+  parsePagination,
+  queryString,
+} from "../../../middleware/validate.middleware";
 
-const MIN_PASSWORD_LENGTH = 8;
+// Request bodies are validated by the zod schemas in user.schemas.ts.
 
 const userRepo = AppDataSource.getRepository(User);
 
+const PROFILE_FIELDS = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  role: true,
+  isActive: true,
+  avatarUrl: true,
+  createdAt: true,
+} as const;
+
+/** Admin user list: paginated, searchable by name/email/phone, filterable by role. */
 export const getUsers = async (req: Request, res: Response) => {
   try {
-    const users = await userRepo.find({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        isActive: true,
-        avatarUrl: true,
-        createdAt: true,
-      },
+    const { page, take, skip } = parsePagination(req.query, {
+      defaultLimit: 25,
+      maxLimit: 100,
     });
-    res.json(users);
+    const search = queryString(req.query.search);
+    const role = queryString(req.query.role) as UserRole | undefined;
+
+    const qb = userRepo
+      .createQueryBuilder("user")
+      .select(Object.keys(PROFILE_FIELDS).map((field) => `user.${field}`))
+      .where("user.deletedAt IS NULL");
+    if (role && Object.values(UserRole).includes(role)) {
+      qb.andWhere("user.role = :role", { role });
+    }
+    if (search) {
+      qb.andWhere(
+        "(user.name ILIKE :search OR user.email ILIKE :search OR user.phone ILIKE :search)",
+        { search: `%${search.replace(/[\\%_]/g, "\\$&")}%` },
+      );
+    }
+
+    const [users, total] = await qb
+      .orderBy("user.createdAt", "DESC")
+      .addOrderBy("user.id", "ASC")
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+    res.json(pageResult(users.map(accountView), total, page, take));
   } catch (error) {
-    res.status(500).json({ error: "Server error fetching users" });
+    console.error("getUsers failed:", error);
+    res.status(500).json({ message: "Server error fetching users" });
   }
 };
 
@@ -37,94 +77,72 @@ export const getUserById = async (req: Request, res: Response) => {
     const user = await userRepo.findOne({
       where: { id },
       select: privileged
-        ? {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            role: true,
-            isActive: true,
-            avatarUrl: true,
-            createdAt: true,
-          }
-        : {
-            id: true,
-            name: true,
-            role: true,
-            avatarUrl: true,
-            createdAt: true,
-          },
+        ? PROFILE_FIELDS
+        : { id: true, name: true, role: true, avatarUrl: true, createdAt: true },
     });
-    if (!user) return res.status(404).json({ error: "User not found" });
-    res.json(user);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json(privileged ? accountView(user) : user);
   } catch (error) {
-    res.status(500).json({ error: "Server error fetching user" });
+    console.error("getUserById failed:", error);
+    res.status(500).json({ message: "Server error fetching user" });
   }
 };
 
 export const getMe = async (req: Request, res: Response) => {
   try {
-    const userReq = req as any;
-    if (!userReq.user)
-      return res.status(401).json({ error: "Not authenticated" });
-
     const user = await userRepo.findOne({
-      where: { id: userReq.user.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        isActive: true,
-        avatarUrl: true,
-        createdAt: true,
-      },
+      where: { id: req.user!.id },
+      select: PROFILE_FIELDS,
     });
-    if (!user) return res.status(404).json({ error: "User not found" });
-    res.json(user);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json(accountView(user));
   } catch (error) {
-    res.status(500).json({ error: "Server error fetching profile" });
+    console.error("getMe failed:", error);
+    res.status(500).json({ message: "Server error fetching profile" });
   }
 };
 
 export const updateMe = async (req: Request, res: Response) => {
   try {
-    const userReq = req as any;
-    if (!userReq.user)
-      return res.status(401).json({ error: "Not authenticated" });
+    const userId = req.user!.id;
+    const { name, phone, avatarUrl } = req.body as {
+      name?: string;
+      phone?: string;
+      avatarUrl?: string | null;
+    };
 
-    const user = await userRepo.findOneBy({ id: userReq.user.id });
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    const { name, phone, avatarUrl } = req.body;
-
-    if (name !== undefined) {
-      if (typeof name !== "string" || !name.trim()) {
-        return res.status(400).json({ error: "Name can't be empty" });
-      }
-      user.name = name.trim();
-    }
     if (phone !== undefined) {
-      if (typeof phone !== "string" || !phone.trim()) {
-        return res.status(400).json({ error: "Phone can't be empty" });
-      }
-      const taken = await userRepo.findOne({ where: { phone: phone.trim() } });
-      if (taken && taken.id !== user.id) {
+      const taken = await userRepo.exists({
+        where: { phone, id: Not(userId) },
+      });
+      if (taken) {
         return res
           .status(409)
-          .json({ error: "That phone number is already in use" });
+          .json({ message: "That phone number is already in use" });
       }
-      user.phone = phone.trim();
     }
-    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
 
-    const updatedUser = await userRepo.save(user);
+    const changes: Partial<User> = {};
+    if (name !== undefined) changes.name = name;
+    if (phone !== undefined) changes.phone = phone;
+    if (avatarUrl !== undefined) changes.avatarUrl = avatarUrl;
 
-    const { password, ...userData } = updatedUser;
-    res.json(userData);
+    try {
+      if (Object.keys(changes).length) await userRepo.update(userId, changes);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        return res
+          .status(409)
+          .json({ message: "That phone number is already in use" });
+      }
+      throw err;
+    }
+
+    const fresh = await userRepo.findOne({ where: { id: userId }, select: PROFILE_FIELDS });
+    res.json(fresh && accountView(fresh));
   } catch (error) {
-    res.status(500).json({ error: "Server error updating profile" });
+    console.error("updateMe failed:", error);
+    res.status(500).json({ message: "Server error updating profile" });
   }
 };
 
@@ -132,98 +150,163 @@ export const changeMyPassword = async (req: Request, res: Response) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
-      return res
-        .status(400)
-        .json({ error: "currentPassword and newPassword are required" });
-    }
-    if (
-      typeof newPassword !== "string" ||
-      newPassword.length < MIN_PASSWORD_LENGTH
-    ) {
-      return res.status(400).json({
-        error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-      });
-    }
-
     const user = await userRepo
       .createQueryBuilder("user")
       .addSelect("user.password")
       .where("user.id = :id", { id: req.user!.id })
       .getOne();
-    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     if (!(await bcrypt.compare(currentPassword, user.password))) {
-      return res.status(401).json({ error: "Current password is incorrect" });
+      return res
+        .status(401)
+        .json({ message: "Current password is incorrect", field: "currentPassword" });
     }
 
     user.password = await bcrypt.hash(newPassword, 12);
     user.passwordChangedAt = new Date();
     await userRepo.save(user);
+    disconnectUserSockets(user.id);
 
     res.clearCookie("token", CLEAR_COOKIE_OPTIONS);
     res.json({ message: "Password changed — please log in again" });
   } catch (error) {
-    res.status(500).json({ error: "Server error changing password" });
+    console.error("changeMyPassword failed:", error);
+    res.status(500).json({ message: "Server error changing password" });
   }
 };
 
+/**
+ * Admin "delete": the account is anonymized and deactivated rather than
+ * removed. A hard delete failed with a foreign-key error for anyone who had
+ * ever ordered, booked, reviewed or messaged — and would have torn holes in
+ * other people's order history if it had worked. Their shop is closed.
+ */
 export const deleteUser = async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    if (id === req.user?.id) {
+    if (id === req.user!.id) {
       return res
         .status(400)
-        .json({ error: "You can't delete your own account here" });
+        .json({ message: "You can't delete your own account here" });
     }
 
-    const user = await userRepo.findOneBy({ id });
-    if (!user) return res.status(404).json({ error: "User not found" });
+    const user = await userRepo.findOne({ where: { id, deletedAt: IsNull() } });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     if (user.role === UserRole.SUPER_ADMIN) {
       const admins = await userRepo.count({
-        where: { role: UserRole.SUPER_ADMIN },
+        where: { role: UserRole.SUPER_ADMIN, deletedAt: IsNull() },
       });
       if (admins <= 1) {
-        return res
-          .status(400)
-          .json({
-            error: "This is the only admin account — promote another one first",
-          });
+        return res.status(400).json({
+          message: "This is the only admin account — promote another one first",
+        });
       }
     }
 
-    await userRepo.remove(user);
+    const now = new Date();
+    // An unguessable password nobody knows, so the row can never sign in
+    // even if it were reactivated by mistake.
+    const lockedPassword = await bcrypt.hash(
+      crypto.randomBytes(32).toString("hex"),
+      10,
+    );
+
+    await AppDataSource.transaction(async (manager) => {
+      await manager.update(User, id, {
+        name: "Deleted user",
+        email: `deleted-${id}@deleted.invalid`,
+        phone: `deleted-${id}`,
+        avatarUrl: null,
+        password: lockedPassword,
+        resetPasswordTokenHash: null,
+        resetPasswordExpiresAt: null,
+        isActive: false,
+        passwordChangedAt: now,
+        deletedAt: now,
+      });
+
+      const shop = await manager.findOne(Shop, { where: { owner: { id } } });
+      if (shop) {
+        await manager.update(Shop, shop.id, { status: ShopStatus.CLOSED });
+      }
+
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from(Favorite)
+        .where(`"userId" = :id`, { id })
+        .execute();
+    });
+
+    disconnectUserSockets(id);
     res.status(204).send();
   } catch (error) {
-    res.status(500).json({ error: "Server error deleting user" });
+    console.error("deleteUser failed:", error);
+    res.status(500).json({ message: "Server error deleting user" });
   }
 };
 
 export const updateUserByAdmin = async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { role, isActive } = req.body;
+    const { role, isActive } = req.body as {
+      role?: UserRole;
+      isActive?: boolean;
+    };
 
-    if (id === req.user?.id && (role !== undefined || isActive === false)) {
+    if (id === req.user!.id && (role !== undefined || isActive === false)) {
       return res.status(400).json({
-        error: "You can't change your own role or suspend yourself",
+        message: "You can't change your own role or suspend yourself",
       });
     }
-    if (role !== undefined && !Object.values(UserRole).includes(role)) {
-      return res.status(400).json({ error: "Invalid role" });
-    }
 
-    const user = await userRepo.findOneBy({ id });
-    if (!user) return res.status(404).json({ error: "User not found" });
+    const user = await userRepo.findOne({ where: { id, deletedAt: IsNull() } });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (
+      user.role === UserRole.SUPER_ADMIN &&
+      (role !== undefined && role !== UserRole.SUPER_ADMIN || isActive === false)
+    ) {
+      const admins = await userRepo.count({
+        where: { role: UserRole.SUPER_ADMIN, isActive: true, deletedAt: IsNull() },
+      });
+      if (admins <= 1) {
+        return res.status(400).json({
+          message: "This is the only active admin — promote another one first",
+        });
+      }
+    }
 
     if (role !== undefined) user.role = role;
     if (isActive !== undefined) user.isActive = isActive;
+    await userRepo.save(user);
 
-    const updated = await userRepo.save(user);
-    const { password, ...userData } = updated;
-    res.json(userData);
+    // Live sockets were authorized with the old role/status — drop them.
+    disconnectUserSockets(id);
+
+    const fresh = await userRepo.findOne({ where: { id }, select: PROFILE_FIELDS });
+    res.json(fresh && accountView(fresh));
   } catch (error) {
-    res.status(500).json({ error: "Server error updating user" });
+    console.error("updateUserByAdmin failed:", error);
+    res.status(500).json({ message: "Server error updating user" });
+  }
+};
+
+/** Upload a new profile photo (multipart "image", via the Cloudinary parser). */
+export const uploadMyAvatar = async (req: Request, res: Response) => {
+  try {
+    const url = req.file?.path;
+    if (!url) return res.status(400).json({ message: "No image file provided" });
+    await userRepo.update(req.user!.id, { avatarUrl: url });
+    const fresh = await userRepo.findOne({
+      where: { id: req.user!.id },
+      select: PROFILE_FIELDS,
+    });
+    res.json(fresh && accountView(fresh));
+  } catch (error) {
+    console.error("uploadMyAvatar failed:", error);
+    res.status(500).json({ message: "Couldn't update your photo" });
   }
 };

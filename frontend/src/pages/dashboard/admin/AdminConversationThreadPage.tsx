@@ -1,9 +1,14 @@
 import { Link, useParams } from "react-router";
-import { useAdminConversationMessages } from "@/hooks/useConversations";
+import { Button } from "@/components/ui/button";
+import {
+  useAdminConversationMessages,
+  useLoadEarlierMessages,
+} from "@/hooks/useConversations";
 
 export default function AdminConversationThreadPage() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, isError } = useAdminConversationMessages(id);
+  const loadEarlier = useLoadEarlierMessages(id ?? "", { admin: true });
 
   if (isLoading) {
     return (
@@ -48,6 +53,18 @@ export default function AdminConversationThreadPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {data.hasMore && (
+          <div className="flex justify-center">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={loadEarlier.isPending}
+              onClick={() => loadEarlier.mutate()}
+            >
+              {loadEarlier.isPending ? "Loading…" : "Load earlier messages"}
+            </Button>
+          </div>
+        )}
         {messages.length === 0 && (
           <p className="text-sm text-muted-foreground text-center mt-8">No messages yet.</p>
         )}

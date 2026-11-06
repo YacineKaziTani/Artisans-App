@@ -9,7 +9,11 @@ import {
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { UserRole } from "../users/entities/user.entities";
-import { uuidParam } from "../../middleware/validate.middleware";
+import { uuidParam, validateBody } from "../../middleware/validate.middleware";
+import {
+  createCategorySchema,
+  updateCategorySchema,
+} from "./category.schemas";
 
 const router = Router();
 
@@ -26,12 +30,14 @@ router.post(
   "/create",
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
+  validateBody(createCategorySchema),
   createCategory,
 );
 router.put(
   "/:id",
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
+  validateBody(updateCategorySchema),
   updateCategory,
 );
 router.delete(

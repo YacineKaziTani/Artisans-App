@@ -10,13 +10,22 @@ import {
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { UserRole } from "../users/entities/user.entities";
-import { uuidParam } from "../../middleware/validate.middleware";
+import { uuidParam, validateBody } from "../../middleware/validate.middleware";
+import {
+  sendMessageSchema,
+  startConversationSchema,
+} from "./conversation.schemas";
 
 const router = Router();
 
 router.param("id", uuidParam);
 
-router.post("/", authMiddleware, startConversation);
+router.post(
+  "/",
+  authMiddleware,
+  validateBody(startConversationSchema),
+  startConversation,
+);
 router.get("/mine", authMiddleware, getMyConversations);
 
 router.get(
@@ -33,6 +42,11 @@ router.get(
 );
 
 router.get("/:id/messages", authMiddleware, getConversationMessages);
-router.post("/:id/messages", authMiddleware, sendMessage);
+router.post(
+  "/:id/messages",
+  authMiddleware,
+  validateBody(sendMessageSchema),
+  sendMessage,
+);
 
 export default router;

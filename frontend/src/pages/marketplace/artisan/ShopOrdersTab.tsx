@@ -3,27 +3,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useShopOrders, useUpdateOrderStatus } from "@/hooks/useOrders";
-import { isAxiosError } from "axios";
-import type { OrderStatus } from "@/types";
+import { getErrorMessage } from "@/lib/errors";
+import { useConfirm } from "@/hooks/useConfirm";
+import { Pagination } from "@/components/Pagination";
+import { StatusBadge } from "@/components/StatusBadge";
 
-const STATUS_STYLES: Record<OrderStatus, string> = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  fulfilled: "bg-jade-50 text-jade-600 border-jade-500/25",
-  cancelled: "bg-destructive/10 text-destructive border-destructive/25",
-};
 
-const PAYMENT_STYLES: Record<string, string> = {
-  unpaid: "bg-muted text-foreground/80 border-border",
-  authorized: "bg-sky-100 text-sky-800 border-sky-200",
-  paid: "bg-jade-50 text-jade-600 border-jade-500/25",
-  partially_refunded: "bg-brand-100 text-primary border-border",
-  refunded: "bg-brand-100 text-primary border-border",
-  failed: "bg-destructive/10 text-destructive border-destructive/25",
-};
 
 export function ShopOrdersTab() {
-  const { data: orders, isLoading, isError } = useShopOrders();
+  const [page, setPage] = useState(1);
+  const { data: ordersPage, isLoading, isError, isFetching } = useShopOrders({ page });
+  const orders = ordersPage?.data;
   const updateStatus = useUpdateOrderStatus();
+  const confirm = useConfirm();
   const [trackingDraft, setTrackingDraft] = useState<Record<string, string>>({});
 
   return (
@@ -83,16 +75,8 @@ export function ShopOrdersTab() {
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <span
-                        className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_STYLES[order.status]}`}
-                      >
-                        {order.status}
-                      </span>
-                      <span
-                        className={`text-xs font-semibold px-2 py-1 rounded-full border ${PAYMENT_STYLES[order.paymentStatus]}`}
-                      >
-                        {order.paymentStatus}
-                      </span>
+                      <StatusBadge status={order.status} />
+                      <StatusBadge status={order.paymentStatus} />
                     </div>
                   </div>
 
@@ -101,14 +85,22 @@ export function ShopOrdersTab() {
                       {updateStatus.isError &&
                         updateStatus.variables?.id === order.id && (
                           <p className="p-2 bg-destructive/10 border border-destructive/25 rounded text-destructive text-xs">
-                            {(isAxiosError(updateStatus.error) &&
-                              updateStatus.error.response?.data?.message) ||
-                              "Couldn't update this order. Please try again."}
+                            {getErrorMessage(
+                              updateStatus.error,
+                              "Couldn't update this order. Please try again.",
+                            )}
                           </p>
                         )}
                       {order.paymentStatus === "authorized" && (
                         <p className="text-xs text-muted-foreground">
-                          Marking fulfilled will charge the client's card. Cancelling releases the hold instead.
+                          {order.checkoutGroupId
+                            ? "Part of a multi-item order: the card is charged for the fulfilled items once every item is fulfilled or cancelled."
+                            : "Marking fulfilled will charge the client's card. Cancelling releases the hold instead."}
+                        </p>
+                      )}
+                      {order.paymentStatus === "failed" && (
+                        <p className="text-xs text-destructive">
+                          The client's card was declined — wait for them to complete payment before fulfilling.
                         </p>
                       )}
                       {order.deliveryMethod === "delivery" && (
@@ -126,7 +118,10 @@ export function ShopOrdersTab() {
                       <div className="flex gap-2">
                         <Button
                           size="sm"
-                          disabled={isUpdating}
+                          disabled={
+                            isUpdating ||
+                            !(order.paymentStatus === "authorized" || order.paymentStatus === "paid")
+                          }
                           onClick={() =>
                             updateStatus.mutate({
                               id: order.id,
@@ -141,9 +136,19 @@ export function ShopOrdersTab() {
                           size="sm"
                           variant="destructive"
                           disabled={isUpdating}
-                          onClick={() =>
-                            updateStatus.mutate({ id: order.id, status: "cancelled" })
-                          }
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: "Cancel this order?",
+                              description:
+                                order.paymentStatus === "paid"
+                                  ? "The client is refunded for this item and its stock is put back."
+                                  : "The client isn't charged for it, and its stock is put back.",
+                              confirmLabel: "Cancel order",
+                              cancelLabel: "Keep it",
+                              destructive: true,
+                            });
+                            if (ok) updateStatus.mutate({ id: order.id, status: "cancelled" });
+                          }}
                         >
                           Cancel
                         </Button>
@@ -155,6 +160,8 @@ export function ShopOrdersTab() {
             })}
           </div>
         )}
+
+        <Pagination meta={ordersPage?.meta} onPageChange={setPage} disabled={isFetching} />
       </CardContent>
     </Card>
   );

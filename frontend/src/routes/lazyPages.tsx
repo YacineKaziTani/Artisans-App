@@ -8,6 +8,9 @@ export const CategoryDetailPage = lazy(
   () => import("@/pages/marketplace/CategoryDetailPage"),
 );
 export const ProductsPage = lazy(() => import("@/pages/marketplace/ProductsPage"));
+export const ProductDetailPage = lazy(
+  () => import("@/pages/marketplace/ProductDetailPage"),
+);
 export const MyFavoritesPage = lazy(
   () => import("@/pages/marketplace/MyFavoritesPage"),
 );

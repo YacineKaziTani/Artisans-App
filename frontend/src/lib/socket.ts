@@ -1,6 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? "http://localhost:3000";
+// `||`, not `??`, so an empty VITE_SOCKET_URL= also falls back.
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:3000";
 
 let socket: Socket | null = null;
 

@@ -7,19 +7,44 @@ import {
   updateOrderStatus,
   cancelMyOrder,
   getAllOrdersAdmin,
+  abandonMyCheckout,
 } from "./order.controller";
 import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { paymentLimiter } from "../../middleware/rate-limit.middleware";
 import { UserRole } from "../users/entities/user.entities";
-import { uuidParam } from "../../middleware/validate.middleware";
+import { uuidParam, validateBody } from "../../middleware/validate.middleware";
+import {
+  abandonCheckoutSchema,
+  cartCheckoutSchema,
+  createOrderSchema,
+  orderStatusSchema,
+} from "./order.schemas";
 
 const router = Router();
 
 router.param("id", uuidParam);
 
-router.post("/", authMiddleware, paymentLimiter, createOrder);
-router.post("/checkout", authMiddleware, paymentLimiter, createCartCheckout);
+router.post(
+  "/",
+  authMiddleware,
+  paymentLimiter,
+  validateBody(createOrderSchema),
+  createOrder,
+);
+router.post(
+  "/checkout",
+  authMiddleware,
+  paymentLimiter,
+  validateBody(cartCheckoutSchema),
+  createCartCheckout,
+);
+router.post(
+  "/abandon",
+  authMiddleware,
+  validateBody(abandonCheckoutSchema),
+  abandonMyCheckout,
+);
 router.get("/mine", authMiddleware, getMyOrders);
 router.get("/shop", authMiddleware, authorize(UserRole.ARTISAN), getShopOrders);
 router.get(
@@ -32,6 +57,7 @@ router.patch(
   "/:id/status",
   authMiddleware,
   authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
+  validateBody(orderStatusSchema),
   updateOrderStatus,
 );
 router.patch("/:id/cancel", authMiddleware, cancelMyOrder);

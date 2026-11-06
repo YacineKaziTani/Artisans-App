@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Pagination } from "@/components/Pagination";
 import {
   Card,
   CardContent,
@@ -9,16 +10,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAdminReports, useResolveReport } from "@/hooks/useReports";
 import type { ReportStatus } from "@/types";
+import { getErrorMessage } from "@/lib/errors";
+import { StatusBadge } from "@/components/StatusBadge";
 
-const STATUS_STYLES: Record<ReportStatus, string> = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  dismissed: "bg-muted text-foreground/80 border-border",
-  actioned: "bg-jade-50 text-jade-600 border-jade-500/25",
-};
 
 export default function AdminReportsPage() {
   const [filter, setFilter] = useState<ReportStatus | undefined>("pending");
-  const { data: reports, isLoading, isError } = useAdminReports(filter);
+  const [page, setPage] = useState(1);
+  const { data: reportsPage, isLoading, isError, isFetching } = useAdminReports(filter, page);
+  const reports = reportsPage?.data;
   const resolveReport = useResolveReport();
 
   return (
@@ -32,7 +32,10 @@ export default function AdminReportsPage() {
         {(["pending", "dismissed", "actioned", undefined] as const).map((s) => (
           <button
             key={s ?? "all"}
-            onClick={() => setFilter(s)}
+            onClick={() => {
+              setFilter(s);
+              setPage(1);
+            }}
             className={`px-3 py-1.5 rounded-full text-sm font-medium border ${
               filter === s
                 ? "bg-primary text-white border-primary"
@@ -47,7 +50,7 @@ export default function AdminReportsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Reports</CardTitle>
-          <CardDescription>{reports?.length ?? 0} total</CardDescription>
+          <CardDescription>{reportsPage?.meta.total ?? 0} total</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {isLoading && (
@@ -64,6 +67,9 @@ export default function AdminReportsPage() {
             </p>
           )}
 
+          {resolveReport.isError && (
+            <p className="alert-error">{getErrorMessage(resolveReport.error)}</p>
+          )}
           {!isLoading && !isError && (reports ?? []).length === 0 && (
             <p className="text-muted-foreground text-sm">No reports here.</p>
           )}
@@ -86,11 +92,7 @@ export default function AdminReportsPage() {
                         {new Date(report.createdAt).toLocaleString()}
                       </p>
                     </div>
-                    <span
-                      className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_STYLES[report.status]}`}
-                    >
-                      {report.status}
-                    </span>
+                    <StatusBadge status={report.status} />
                   </div>
                   <p className="text-sm text-foreground">"{report.reason}"</p>
                   {report.adminNote && (
@@ -123,6 +125,7 @@ export default function AdminReportsPage() {
                 </div>
               );
             })}
+        <Pagination meta={reportsPage?.meta} onPageChange={setPage} disabled={isFetching} />
         </CardContent>
       </Card>
     </div>

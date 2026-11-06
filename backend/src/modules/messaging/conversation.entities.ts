@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -15,6 +16,7 @@ import { Message } from "./message.entities";
 // One conversation per (client, shop) pair — the client always talks to
 // "the shop", and whichever artisan owns that shop sees it in their inbox.
 @Entity("conversations")
+@Index(["shop", "updatedAt"])
 @Unique(["client", "shop"])
 export class Conversation {
   @PrimaryGeneratedColumn("uuid")
@@ -29,11 +31,11 @@ export class Conversation {
   @OneToMany(() => Message, (m) => m.conversation)
   messages!: Message[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
   // Bumped whenever a new message lands, so conversation lists can sort by
   // most-recently-active without a join+aggregate on every list request.
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

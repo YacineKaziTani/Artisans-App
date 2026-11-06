@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -24,6 +25,8 @@ export enum DisputeStatus {
 // so one dispute model covers both bookings and orders without a union of
 // optional relations.
 @Entity("disputes")
+@Index(["targetType", "targetId"])
+@Index(["status", "createdAt"])
 export class Dispute {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -46,9 +49,9 @@ export class Dispute {
   @ManyToOne(() => User)
   raisedBy!: User;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

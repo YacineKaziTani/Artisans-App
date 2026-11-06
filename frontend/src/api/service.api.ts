@@ -6,6 +6,8 @@ export interface CreateServicePayload {
   description?: string;
   price: number;
   duration?: string;
+  /** Appointment length in minutes (5–1440); null clears it. */
+  durationMinutes?: number | null;
 }
 
 export type UpdateServicePayload = Partial<CreateServicePayload> & {

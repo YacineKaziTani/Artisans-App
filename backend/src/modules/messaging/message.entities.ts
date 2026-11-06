@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -9,6 +10,8 @@ import { User } from "../users/entities/user.entities";
 import { Conversation } from "./conversation.entities";
 
 @Entity("messages")
+// Loading a thread (newest first, paged) and unread counts.
+@Index(["conversation", "createdAt"])
 export class Message {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -25,6 +28,6 @@ export class Message {
   @Column({ type: "timestamptz", nullable: true })
   readAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

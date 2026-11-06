@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Pagination } from "@/components/Pagination";
 import {
   Card,
   CardContent,
@@ -6,25 +8,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAdminBookings } from "@/hooks/useBookings";
-import type { BookingStatus } from "@/types";
+import { StatusBadge } from "@/components/StatusBadge";
 
-const STATUS_STYLES: Record<BookingStatus, string> = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  confirmed: "bg-jade-50 text-jade-600 border-jade-500/25",
-  cancelled: "bg-destructive/10 text-destructive border-destructive/25",
-  completed: "bg-sky-100 text-sky-800 border-sky-200",
-};
 
-const PAYMENT_STYLES: Record<string, string> = {
-  unpaid: "bg-muted text-foreground/80 border-border",
-  authorized: "bg-sky-100 text-sky-800 border-sky-200",
-  paid: "bg-jade-50 text-jade-600 border-jade-500/25",
-  refunded: "bg-brand-100 text-primary border-border",
-  failed: "bg-destructive/10 text-destructive border-destructive/25",
-};
 
 export default function AdminBookingsPage() {
-  const { data: bookings, isLoading, isError } = useAdminBookings();
+  const [page, setPage] = useState(1);
+  const { data: bookingsPage, isLoading, isError, isFetching } = useAdminBookings({ page });
+  const bookings = bookingsPage?.data;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -36,7 +27,7 @@ export default function AdminBookingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>All Bookings</CardTitle>
-          <CardDescription>{bookings?.length ?? 0} total</CardDescription>
+          <CardDescription>{bookingsPage?.meta.total ?? 0} total</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {isLoading && (
@@ -74,19 +65,12 @@ export default function AdminBookingsPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <span
-                    className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_STYLES[booking.status]}`}
-                  >
-                    {booking.status}
-                  </span>
-                  <span
-                    className={`text-xs font-semibold px-2 py-1 rounded-full border ${PAYMENT_STYLES[booking.paymentStatus]}`}
-                  >
-                    {booking.paymentStatus}
-                  </span>
+                  <StatusBadge status={booking.status} />
+                  <StatusBadge status={booking.paymentStatus} />
                 </div>
               </div>
             ))}
+        <Pagination meta={bookingsPage?.meta} onPageChange={setPage} disabled={isFetching} />
         </CardContent>
       </Card>
     </div>

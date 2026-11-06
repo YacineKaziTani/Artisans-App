@@ -1,24 +1,40 @@
+import { MAX_IMAGE_BYTES } from "@/lib/uploads";
 import { useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useDeletePhoto, useMyPhotos, useUploadPhoto } from "@/hooks/usePhotos";
+import { useConfirm } from "@/hooks/useConfirm";
+import { getErrorMessage } from "@/lib/errors";
+
 
 export function ShopPhotosTab() {
   const { data: photos, isLoading, isError } = useMyPhotos();
   const uploadPhoto = useUploadPhoto();
   const deletePhoto = useDeletePhoto();
+  const confirm = useConfirm();
   const fileInputRef = useRef<HTMLInputElement>(null);
-
+  const [tooLarge, setTooLarge] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const error = uploadPhoto.error ?? deletePhoto.error;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    uploadPhoto.mutate({ file });
     e.target.value = "";
+    if (!file) return;
+    uploadPhoto.reset();
+    setTooLarge(file.size > MAX_IMAGE_BYTES);
+    if (file.size > MAX_IMAGE_BYTES) return;
+    uploadPhoto.mutate({ file });
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    const ok = await confirm({
+      title: "Delete this photo?",
+      description: "It's removed from your public shop page.",
+      confirmLabel: "Delete photo",
+      destructive: true,
+    });
+    if (!ok) return;
     setPendingDeleteId(id);
     deletePhoto.mutate(id, { onSettled: () => setPendingDeleteId(null) });
   };
@@ -32,9 +48,14 @@ export function ShopPhotosTab() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {uploadPhoto.isError && (
-          <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
-            Couldn't upload that photo. Please try again.
+        {tooLarge && (
+          <div className="alert-error">
+            That image is over 5 MB — please choose a smaller one.
+          </div>
+        )}
+        {Boolean(error) && (
+          <div className="alert-error">
+            {getErrorMessage(error, "Couldn't update your photos. Please try again.")}
           </div>
         )}
 
@@ -53,6 +74,7 @@ export function ShopPhotosTab() {
           >
             {uploadPhoto.isPending ? "Uploading..." : "Upload Photo"}
           </Button>
+          <p className="mt-2 text-xs text-muted-foreground">JPG or PNG, up to 5 MB.</p>
         </div>
 
         {isLoading && (

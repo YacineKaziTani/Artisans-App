@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router";
-import axios from "axios";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { ShoppingBag, Store } from "lucide-react";
+import { getErrorMessage } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AuthShell } from "@/components/layout/AuthShell";
@@ -25,6 +25,7 @@ const ROLES = [
 export default function RegisterPage() {
   const [searchParams] = useSearchParams();
   const initialType = searchParams.get("type");
+  const location = useLocation();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -49,7 +50,11 @@ export default function RegisterPage() {
       footer={
         <>
           Already have an account?{" "}
-          <Link to="/login" className="font-semibold text-primary hover:underline">
+          <Link
+            to="/login"
+            state={location.state}
+            className="font-semibold text-primary hover:underline"
+          >
             Log in
           </Link>
         </>
@@ -58,8 +63,7 @@ export default function RegisterPage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
           <p className="alert-error">
-            {(axios.isAxiosError(error) && error.response?.data?.message) ||
-              "Registration failed"}
+            {getErrorMessage(error, "Registration failed")}
           </p>
         )}
 
@@ -154,6 +158,7 @@ export default function RegisterPage() {
             id="password"
             type="password"
             autoComplete="new-password"
+            minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

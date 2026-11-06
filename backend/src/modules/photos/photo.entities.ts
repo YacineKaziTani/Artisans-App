@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -8,6 +9,7 @@ import {
 import { Shop } from "../shop/shop.entities";
 
 @Entity("photos")
+@Index(["shop"])
 export class Photo {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -24,6 +26,6 @@ export class Photo {
   @ManyToOne(() => Shop, (shop) => shop.photos, { onDelete: "CASCADE" })
   shop!: Shop;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

@@ -1,23 +1,43 @@
 import { Request, Response } from "express";
 import Stripe from "stripe";
-import { In } from "typeorm";
+import { In, IsNull, Not } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { Booking, BookingStatus, PaymentStatus } from "./booking.entities";
 import { Shop, ShopStatus } from "../shop/shop.entities";
 import { Service } from "../services/service.entities";
 import { User } from "../users/entities/user.entities";
-import { parsePagination } from "../../middleware/validate.middleware";
+import {
+  isUuid,
+  pageResult,
+  parsePagination,
+  queryString,
+} from "../../middleware/validate.middleware";
+import { toCents } from "../../lib/money";
 import {
   stripe,
   shopCanAcceptPayments,
   connectChargeParams,
   connectRefundParams,
+  closeUnpaidIntent,
+  cancelIntentQuietly,
 } from "../../config/stripe";
 import {
-  handleOrderPaymentEvent,
-  handleOrderAuthorizedEvent,
+  createdBeforeCheckoutTtl,
+  withinCheckoutTtlSql,
+} from "../../config/checkout";
+import {
+  handleOrderIntentAuthorized,
+  handleOrderIntentCaptured,
+  handleOrderIntentFailed,
+  handleOrderIntentCanceled,
 } from "../orders/order.controller";
 import { ProcessedWebhookEvent } from "../webhook-events/webhook-event.entities";
+import { notifyInBackground } from "../../notifications/deliver";
+import {
+  notifyBookingAuthorized,
+  notifyBookingCancelledByClient,
+  notifyBookingUpdatedByShop,
+} from "../../notifications";
 
 const processedEventRepo = AppDataSource.getRepository(ProcessedWebhookEvent);
 
@@ -25,23 +45,82 @@ const bookingRepo = AppDataSource.getRepository(Booking);
 const shopRepo = AppDataSource.getRepository(Shop);
 const serviceRepo = AppDataSource.getRepository(Service);
 
+// Nothing has been authorized on the card yet.
+const UNPAID_STATES = [PaymentStatus.UNPAID, PaymentStatus.FAILED];
+// The card is on hold or already charged — safe to confirm.
+const CONFIRMABLE_STATES = [PaymentStatus.AUTHORIZED, PaymentStatus.PAID];
+// Bookings that occupy their time slot.
+const LIVE_STATUSES = [BookingStatus.PENDING, BookingStatus.CONFIRMED];
+
+const CONCURRENT_UPDATE = {
+  message: "This booking was just updated — refresh and try again",
+};
+
+// Request bodies are validated by the zod schemas in booking.schemas.ts.
+
+/**
+ * Clients may cancel a *confirmed* (paid) booking for a full refund only up
+ * to this many hours before the appointment. Before the artisan confirms,
+ * nothing has been charged, so a pending booking can always be cancelled.
+ */
+const FREE_CANCELLATION_HOURS = Math.max(
+  0,
+  Number(process.env.BOOKING_FREE_CANCELLATION_HOURS ?? 24) || 0,
+);
+const MAX_BOOKING_AHEAD_MS = 365 * 24 * 60 * 60 * 1000;
+// A service without an appointment length occupies a one-minute slot, so
+// it only clashes with a booking at the same start time.
+const DEFAULT_SLOT_MINUTES = 1;
+
+/** Why the client can't cancel this booking themselves, or null if they can. */
+function clientCancellationBlock(booking: Booking): string | null {
+  if (booking.status === BookingStatus.PENDING) return null;
+  const msUntil = new Date(booking.scheduledAt).getTime() - Date.now();
+  if (msUntil <= 0) {
+    return "This appointment time has already passed — open a dispute if something went wrong.";
+  }
+  if (msUntil < FREE_CANCELLATION_HOURS * 60 * 60 * 1000) {
+    return `Confirmed bookings can be cancelled up to ${FREE_CANCELLATION_HOURS} hours before the appointment. Message the artisan, or open a dispute if something went wrong.`;
+  }
+  return null;
+}
+
+/**
+ * Deletes a booking that was never paid for, freeing its time slot. The
+ * delete only matches a still-pending, never-authorized row, so concurrent
+ * cleanup paths (expiry sweep, client backing out, the canceled webhook)
+ * can't trip over each other. Stripe keeps the cancelled PaymentIntent, with
+ * the booking id in its metadata, as the record.
+ */
+async function discardUnpaidBooking(id: string) {
+  const result = await bookingRepo.delete({
+    id,
+    status: BookingStatus.PENDING,
+    paymentStatus: In(UNPAID_STATES),
+  });
+  return (result.affected ?? 0) > 0;
+}
+
 export const createBooking = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { serviceId, scheduledAt, notes } = req.body;
-
-    if (!serviceId || !scheduledAt) {
-      return res
-        .status(400)
-        .json({ message: "serviceId and scheduledAt are required" });
-    }
+    const { serviceId, scheduledAt, notes } = req.body as {
+      serviceId: string;
+      scheduledAt: Date;
+      notes?: string;
+    };
 
     const service = await serviceRepo.findOne({
-      where: { id: serviceId },
-      relations: ["shop"],
+      where: { id: serviceId, archivedAt: IsNull() },
+      relations: ["shop", "shop.owner"],
     });
     if (!service || !service.isAvailable) {
       return res.status(404).json({ message: "Service not found" });
+    }
+    if (service.shop.owner?.id === userId) {
+      return res
+        .status(400)
+        .json({ message: "You can't book a service from your own shop" });
     }
     if (service.shop.status !== ShopStatus.ACTIVE) {
       return res
@@ -55,97 +134,221 @@ export const createBooking = async (req: Request, res: Response) => {
       });
     }
 
-    const scheduledDate = new Date(scheduledAt);
-    if (Number.isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+    const now = Date.now();
+    if (scheduledAt.getTime() <= now) {
       return res
         .status(400)
-        .json({ message: "scheduledAt must be a valid future date" });
+        .json({ message: "Choose a date and time in the future" });
+    }
+    if (scheduledAt.getTime() > now + MAX_BOOKING_AHEAD_MS) {
+      return res
+        .status(400)
+        .json({ message: "Bookings can be made up to a year in advance" });
     }
 
-    const conflict = await bookingRepo.findOne({
-      where: {
-        shop: { id: service.shop.id },
-        scheduledAt: scheduledDate,
-        status: In([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
-      },
+    const shopId = service.shop.id;
+    const endsAt = new Date(
+      scheduledAt.getTime() +
+        (service.durationMinutes ?? DEFAULT_SLOT_MINUTES) * 60 * 1000,
+    );
+
+    const booking = await AppDataSource.transaction(async (manager) => {
+      // One booking at a time per shop: without this lock, two requests
+      // for the same slot could both pass the overlap check below.
+      await manager.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `booking:${shopId}`,
+      ]);
+
+      // A slot is taken by any live booking overlapping it — except an
+      // unpaid one older than the checkout TTL, which the expiry sweep is
+      // about to delete.
+      const clash = await manager
+        .createQueryBuilder(Booking, "booking")
+        .where("booking.shopId = :shopId", { shopId })
+        .andWhere("booking.status IN (:...live)", { live: LIVE_STATUSES })
+        .andWhere("booking.scheduledAt < :endsAt", { endsAt })
+        .andWhere(
+          `COALESCE(booking.endsAt, booking.scheduledAt + interval '${DEFAULT_SLOT_MINUTES} minute') > :startsAt`,
+          { startsAt: scheduledAt },
+        )
+        .andWhere(
+          `(booking.paymentStatus NOT IN (:...unpaid) OR ${withinCheckoutTtlSql("booking.createdAt")})`,
+          { unpaid: UNPAID_STATES },
+        )
+        .getExists();
+      if (clash) return null;
+
+      return manager.save(
+        manager.create(Booking, {
+          client: { id: userId } as User,
+          shop: service.shop,
+          service,
+          scheduledAt,
+          endsAt,
+          notes,
+          totalAmount: service.price,
+          status: BookingStatus.PENDING,
+          paymentStatus: PaymentStatus.UNPAID,
+        }),
+      );
     });
-    if (conflict) {
+    if (!booking) {
       return res.status(409).json({
-        message: "This shop already has a booking at that exact time",
+        message:
+          "That time overlaps another booking at this shop — please pick a different time",
       });
     }
 
-    const booking = bookingRepo.create({
-      client: { id: userId } as User,
-      shop: service.shop,
-      service,
-      scheduledAt: scheduledDate,
-      notes,
-      totalAmount: service.price,
-      status: BookingStatus.PENDING,
-      paymentStatus: PaymentStatus.UNPAID,
-    });
-    const saved = await bookingRepo.save(booking);
+    const amountInCents = toCents(service.price);
+    let intent: Stripe.PaymentIntent;
+    try {
+      intent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: "usd",
+        capture_method: "manual",
+        metadata: { type: "booking", bookingId: booking.id },
+        automatic_payment_methods: { enabled: true },
+        ...connectChargeParams(service.shop, amountInCents),
+      });
+    } catch (err) {
+      // Nothing the client could pay — free the slot instead of holding it.
+      await discardUnpaidBooking(booking.id);
+      throw err;
+    }
 
-    const amountInCents = Math.round(Number(service.price) * 100);
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amountInCents,
-      currency: "usd",
-      capture_method: "manual",
-      metadata: { type: "booking", bookingId: saved.id },
-      automatic_payment_methods: { enabled: true },
-      ...connectChargeParams(service.shop, amountInCents),
-    });
-
-    saved.stripePaymentIntentId = paymentIntent.id;
-    await bookingRepo.save(saved);
+    await bookingRepo.update(booking.id, { stripePaymentIntentId: intent.id });
+    booking.stripePaymentIntentId = intent.id;
 
     return res.status(201).json({
-      booking: saved,
-      clientSecret: paymentIntent.client_secret,
+      booking,
+      clientSecret: intent.client_secret,
     });
   } catch (error) {
+    console.error("createBooking failed:", error);
     return res.status(500).json({ message: "Error creating booking" });
   }
 };
 
+const LIST_PAGE = { defaultLimit: 20, maxLimit: 100 };
+
+/** Optional ?status= filter, ignored if it isn't a real status. */
+function statusFilter(value: unknown) {
+  const status = queryString(value) as BookingStatus | undefined;
+  return status && Object.values(BookingStatus).includes(status)
+    ? status
+    : undefined;
+}
+
 export const getMyBookings = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const bookings = await bookingRepo.find({
-      where: { client: { id: userId } },
+    const { page, take, skip } = parsePagination(req.query, LIST_PAGE);
+    const status = statusFilter(req.query.status);
+    const [bookings, total] = await bookingRepo.findAndCount({
+      where: { client: { id: req.user!.id }, ...(status ? { status } : {}) },
       relations: ["shop", "service"],
-      order: { createdAt: "DESC" },
+      order: { createdAt: "DESC", id: "ASC" },
+      skip,
+      take,
     });
-    return res.json(bookings);
+    // Tell the client up front whether they can still cancel each booking
+    // themselves (see FREE_CANCELLATION_HOURS), so the UI can explain why not.
+    const withPolicy = bookings.map((booking) => {
+      const cancellable = LIVE_STATUSES.includes(booking.status);
+      const blockedReason = cancellable ? clientCancellationBlock(booking) : null;
+      return Object.assign(booking, {
+        canCancel: cancellable && !blockedReason,
+        cancelBlockedReason: blockedReason,
+      });
+    });
+    return res.json(pageResult(withPolicy, total, page, take));
   } catch (error) {
+    console.error("getMyBookings failed:", error);
     return res.status(500).json({ message: "Error fetching bookings" });
   }
 };
 
 export const getShopBookings = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
-    const shop = await shopRepo.findOne({ where: { owner: { id: userId } } });
+    const shop = await shopRepo.findOne({
+      where: { owner: { id: req.user!.id } },
+    });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
 
-    const bookings = await bookingRepo.find({
-      where: { shop: { id: shop.id } },
-      relations: ["service", "client"],
-      order: { createdAt: "DESC" },
-    });
-    return res.json(bookings);
+    const { page, take, skip } = parsePagination(req.query, LIST_PAGE);
+    const status = statusFilter(req.query.status);
+
+    // A booking the client never paid for isn't something the artisan can
+    // act on (its slot is released after the checkout TTL), so it's left out.
+    const [bookings, total] = await bookingRepo
+      .createQueryBuilder("b")
+      .leftJoinAndSelect("b.service", "service")
+      .leftJoinAndSelect("b.client", "client")
+      .where("b.shopId = :shopId", { shopId: shop.id })
+      .andWhere(
+        "NOT (b.status = :pending AND b.paymentStatus IN (:...unpaid))",
+        { pending: BookingStatus.PENDING, unpaid: UNPAID_STATES },
+      )
+      .andWhere(status ? "b.status = :status" : "TRUE", { status })
+      // Upcoming appointments first (soonest at the top), then past ones
+      // (most recent first).
+      .orderBy(`CASE WHEN b."scheduledAt" >= now() THEN 0 ELSE 1 END`, "ASC")
+      .addOrderBy(`CASE WHEN b."scheduledAt" >= now() THEN b."scheduledAt" END`, "ASC")
+      .addOrderBy("b.scheduledAt", "DESC")
+      .addOrderBy("b.id", "ASC")
+      // Only many-to-one joins, so rows can't multiply: plain OFFSET/LIMIT
+      // is correct here (and skip/take's subquery can't order by expressions).
+      .offset(skip)
+      .limit(take)
+      .getManyAndCount();
+    return res.json(pageResult(bookings, total, page, take));
   } catch (error) {
+    console.error("getShopBookings failed:", error);
     return res.status(500).json({ message: "Error fetching bookings" });
   }
 };
 
-async function releaseHold(stripePaymentIntentId: string) {
-  await stripe.paymentIntents.cancel(stripePaymentIntentId);
-}
+/**
+ * Cancels a pending/confirmed booking: releases the card hold, refunds a
+ * captured payment, or closes an unpaid checkout.
+ *
+ * The row is claimed as CANCELLED *before* Stripe is called (and put back if
+ * Stripe fails), so the payment_intent.canceled webhook our own cancel
+ * triggers finds it already cancelled rather than mistaking it for an
+ * abandoned checkout. Returns false if it was no longer pending/confirmed.
+ */
+async function cancelBooking(booking: Booking) {
+  const previous = booking.status;
+  const claimed = await bookingRepo.update(
+    { id: booking.id, status: In(LIVE_STATUSES) },
+    { status: BookingStatus.CANCELLED },
+  );
+  if (!claimed.affected) return false;
 
-async function captureHold(stripePaymentIntentId: string) {
-  await stripe.paymentIntents.capture(stripePaymentIntentId);
+  const intentId = booking.stripePaymentIntentId;
+  let paymentStatus = booking.paymentStatus;
+  try {
+    if (booking.paymentStatus === PaymentStatus.AUTHORIZED && intentId) {
+      await stripe.paymentIntents.cancel(intentId);
+      paymentStatus = PaymentStatus.UNPAID; // hold released, never charged
+    } else if (booking.paymentStatus === PaymentStatus.PAID && intentId) {
+      await stripe.refunds.create({
+        payment_intent: intentId,
+        ...connectRefundParams(),
+      });
+      paymentStatus = PaymentStatus.REFUNDED;
+    } else if (UNPAID_STATES.includes(booking.paymentStatus)) {
+      await cancelIntentQuietly(intentId);
+    }
+  } catch (err) {
+    await bookingRepo.update(
+      { id: booking.id, status: BookingStatus.CANCELLED },
+      { status: previous },
+    );
+    throw err;
+  }
+
+  await bookingRepo.update(booking.id, { paymentStatus });
+  return true;
 }
 
 export const updateBookingStatus = async (req: Request, res: Response) => {
@@ -177,60 +380,80 @@ export const updateBookingStatus = async (req: Request, res: Response) => {
         message: `This booking is already ${booking.status} and can't be changed`,
       });
     }
-    if (
-      status === BookingStatus.COMPLETED &&
-      booking.status !== BookingStatus.CONFIRMED
-    ) {
+    if (status === BookingStatus.PENDING) {
       return res
         .status(400)
-        .json({ message: "Confirm the booking before marking it completed" });
+        .json({ message: "A booking can't be moved back to pending" });
     }
 
     if (status === BookingStatus.CONFIRMED) {
-      if (
-        booking.paymentStatus === PaymentStatus.AUTHORIZED &&
-        booking.stripePaymentIntentId
-      ) {
+      if (!CONFIRMABLE_STATES.includes(booking.paymentStatus)) {
+        return res.status(400).json({
+          message:
+            booking.paymentStatus === PaymentStatus.FAILED
+              ? "The client's card was declined — this booking can't be confirmed until they complete payment"
+              : "The client hasn't authorized payment for this booking yet",
+        });
+      }
+
+      const claimed = await bookingRepo.update(
+        { id, status: BookingStatus.PENDING },
+        { status: BookingStatus.CONFIRMED },
+      );
+      if (!claimed.affected) return res.status(409).json(CONCURRENT_UPDATE);
+
+      const intentId = booking.stripePaymentIntentId;
+      if (booking.paymentStatus === PaymentStatus.AUTHORIZED && intentId) {
         try {
-          await captureHold(booking.stripePaymentIntentId);
+          await stripe.paymentIntents.capture(
+            intentId,
+            {},
+            { idempotencyKey: `capture-${intentId}` },
+          );
         } catch (err) {
+          await bookingRepo.update(
+            { id, status: BookingStatus.CONFIRMED },
+            { status: BookingStatus.PENDING },
+          );
           return res.status(409).json({
             message:
               "Couldn't charge the client's card — the authorization hold may have expired (holds last about 7 days). Ask the client to book again.",
             error: err instanceof Error ? err.message : err,
           });
         }
-        booking.paymentStatus = PaymentStatus.PAID;
-      } else if (booking.paymentStatus === PaymentStatus.UNPAID) {
+        await bookingRepo.update(id, { paymentStatus: PaymentStatus.PAID });
+      }
+    }
+
+    if (status === BookingStatus.COMPLETED) {
+      if (new Date(booking.scheduledAt).getTime() > Date.now()) {
         return res.status(400).json({
-          message: "The client hasn't authorized payment for this booking yet",
+          message:
+            "You can mark this booking completed once the appointment time has passed",
         });
+      }
+      const done = await bookingRepo.update(
+        { id, status: BookingStatus.CONFIRMED },
+        { status: BookingStatus.COMPLETED },
+      );
+      if (!done.affected) {
+        return res
+          .status(400)
+          .json({ message: "Confirm the booking before marking it completed" });
       }
     }
 
     if (status === BookingStatus.CANCELLED) {
-      if (
-        booking.paymentStatus === PaymentStatus.AUTHORIZED &&
-        booking.stripePaymentIntentId
-      ) {
-        await releaseHold(booking.stripePaymentIntentId);
-        booking.paymentStatus = PaymentStatus.UNPAID;
-      } else if (
-        booking.paymentStatus === PaymentStatus.PAID &&
-        booking.stripePaymentIntentId
-      ) {
-        await stripe.refunds.create({
-          payment_intent: booking.stripePaymentIntentId,
-          ...connectRefundParams(),
-        });
-        booking.paymentStatus = PaymentStatus.REFUNDED;
+      if (!(await cancelBooking(booking))) {
+        return res.status(409).json(CONCURRENT_UPDATE);
       }
     }
 
-    booking.status = status;
-    const saved = await bookingRepo.save(booking);
-    return res.json(saved);
+    // Reached only once the status change has gone through.
+    notifyInBackground(() => notifyBookingUpdatedByShop(id));
+    return res.json(await bookingRepo.findOne({ where: { id } }));
   } catch (error) {
+    console.error("updateBookingStatus failed:", error);
     return res.status(500).json({ message: "Error updating booking" });
   }
 };
@@ -256,31 +479,90 @@ export const cancelMyBooking = async (req: Request, res: Response) => {
         .status(400)
         .json({ message: "Can't cancel a completed booking" });
     }
+    const blocked = clientCancellationBlock(booking);
+    if (blocked) return res.status(400).json({ message: blocked });
 
-    if (
-      booking.paymentStatus === PaymentStatus.AUTHORIZED &&
-      booking.stripePaymentIntentId
-    ) {
-      await releaseHold(booking.stripePaymentIntentId);
-      booking.paymentStatus = PaymentStatus.UNPAID;
-    } else if (
-      booking.paymentStatus === PaymentStatus.PAID &&
-      booking.stripePaymentIntentId
-    ) {
-      await stripe.refunds.create({
-        payment_intent: booking.stripePaymentIntentId,
-        ...connectRefundParams(),
-      });
-      booking.paymentStatus = PaymentStatus.REFUNDED;
+    if (!(await cancelBooking(booking))) {
+      return res.status(409).json(CONCURRENT_UPDATE);
     }
-
-    booking.status = BookingStatus.CANCELLED;
-    const saved = await bookingRepo.save(booking);
-    return res.json(saved);
+    // The artisan only knew about it once the card was held.
+    if (!UNPAID_STATES.includes(booking.paymentStatus)) {
+      notifyInBackground(() => notifyBookingCancelledByClient(id));
+    }
+    return res.json(await bookingRepo.findOne({ where: { id } }));
   } catch (error) {
+    console.error("cancelMyBooking failed:", error);
     return res.status(500).json({ message: "Error cancelling booking" });
   }
 };
+
+/**
+ * Closes one unpaid booking checkout. Stripe is asked first: if the card
+ * actually went through, the booking is kept and marked accordingly.
+ */
+async function abandonUnpaidBooking(booking: Booking) {
+  const outcome = await closeUnpaidIntent(booking.stripePaymentIntentId);
+  if (outcome === "authorized") {
+    await handleBookingIntentAuthorized(booking.id);
+    return false;
+  }
+  if (outcome === "captured") {
+    await handleBookingIntentCaptured(booking.id);
+    return false;
+  }
+  if (outcome === "in_flight") return false;
+  return discardUnpaidBooking(booking.id);
+}
+
+/**
+ * The client backed out of the payment step — free the time slot now
+ * instead of waiting for the expiry sweep.
+ */
+export const abandonMyBooking = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const id = String(req.params.id);
+
+    const booking = await bookingRepo.findOne({
+      where: { id, client: { id: userId } },
+    });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (
+      booking.status !== BookingStatus.PENDING ||
+      !UNPAID_STATES.includes(booking.paymentStatus)
+    ) {
+      return res.json({ discarded: false });
+    }
+
+    return res.json({ discarded: await abandonUnpaidBooking(booking) });
+  } catch (error) {
+    console.error("abandonMyBooking failed:", error);
+    return res.status(500).json({ message: "Error cancelling booking" });
+  }
+};
+
+/** Expiry sweep: unpaid bookings older than the checkout TTL. */
+export async function expireStaleBookings(batchSize = 100) {
+  const stale = await bookingRepo.find({
+    where: {
+      status: BookingStatus.PENDING,
+      paymentStatus: In(UNPAID_STATES),
+      createdAt: createdBeforeCheckoutTtl(),
+    },
+    order: { createdAt: "ASC" },
+    take: batchSize,
+  });
+
+  let discarded = 0;
+  for (const booking of stale) {
+    try {
+      if (await abandonUnpaidBooking(booking)) discarded++;
+    } catch (err) {
+      console.error("Couldn't close unpaid booking", booking.id, err);
+    }
+  }
+  return discarded;
+}
 
 export const getAllBookingsAdmin = async (req: Request, res: Response) => {
   try {
@@ -288,29 +570,145 @@ export const getAllBookingsAdmin = async (req: Request, res: Response) => {
       defaultLimit: 50,
       maxLimit: 200,
     });
+    const status = statusFilter(req.query.status);
     const [bookings, total] = await bookingRepo.findAndCount({
+      where: status ? { status } : {},
       relations: ["shop", "service", "client"],
-      order: { createdAt: "DESC" },
+      order: { createdAt: "DESC", id: "ASC" },
       skip,
       take,
     });
-    return res.json({
-      data: bookings,
-      meta: { total, page, lastPage: Math.ceil(total / take) },
-    });
+    return res.json(pageResult(bookings, total, page, take));
   } catch (error) {
+    console.error("getAllBookingsAdmin failed:", error);
     return res.status(500).json({ message: "Error fetching bookings" });
   }
 };
 
-export async function handleBookingAuthorizedEvent(bookingId: string) {
-  const booking = await bookingRepo.findOne({ where: { id: bookingId } });
-  if (!booking) return;
-  if (booking.paymentStatus === PaymentStatus.UNPAID) {
-    booking.paymentStatus = PaymentStatus.AUTHORIZED;
-    await bookingRepo.save(booking);
+// ── Stripe webhook handlers ────────────────────────────────────────────────
+// Every update is conditional on the current state, so late or out-of-order
+// events can only move a booking *forward*.
+
+async function handleBookingIntentAuthorized(bookingId: string) {
+  // FAILED is included: a declined card followed by a successful retry
+  // fires payment_failed and then this event on the same intent. Upgrading
+  // only from UNPAID left those bookings stuck at FAILED, which the old
+  // confirm check let through without ever capturing the hold.
+  const upgraded = await bookingRepo.update(
+    {
+      id: bookingId,
+      paymentStatus: In(UNPAID_STATES),
+      status: Not(BookingStatus.CANCELLED),
+    },
+    { paymentStatus: PaymentStatus.AUTHORIZED },
+  );
+  // This is when the artisan has something to confirm. The update is
+  // conditional and webhook events are de-duplicated, so this sends once.
+  if (upgraded.affected) {
+    notifyInBackground(() => notifyBookingAuthorized(bookingId));
+  }
+  // A booking cancelled before payment finished still gets its hold
+  // recorded, so the release below can see it.
+  await bookingRepo.update(
+    {
+      id: bookingId,
+      paymentStatus: In(UNPAID_STATES),
+      status: BookingStatus.CANCELLED,
+    },
+    { paymentStatus: PaymentStatus.AUTHORIZED },
+  );
+
+  // Cancelled before the client finished paying — release the hold.
+  try {
+    const booking = await bookingRepo.findOne({ where: { id: bookingId } });
+    if (
+      booking?.status === BookingStatus.CANCELLED &&
+      booking.paymentStatus === PaymentStatus.AUTHORIZED &&
+      booking.stripePaymentIntentId
+    ) {
+      await stripe.paymentIntents.cancel(booking.stripePaymentIntentId);
+      await bookingRepo.update(
+        { id: bookingId, paymentStatus: PaymentStatus.AUTHORIZED },
+        { paymentStatus: PaymentStatus.UNPAID },
+      );
+    }
+  } catch (err) {
+    console.error("Couldn't release a hold on a cancelled booking:", bookingId, err);
   }
 }
+
+async function handleBookingIntentFailed(bookingId: string) {
+  // Only a booking nobody has paid for can "fail" — a late failure event
+  // must never knock an authorized booking back down.
+  await bookingRepo.update(
+    { id: bookingId, paymentStatus: PaymentStatus.UNPAID },
+    { paymentStatus: PaymentStatus.FAILED },
+  );
+}
+
+async function handleBookingIntentCaptured(bookingId: string) {
+  await bookingRepo.update(
+    {
+      id: bookingId,
+      status: Not(BookingStatus.CANCELLED),
+      paymentStatus: In([...UNPAID_STATES, PaymentStatus.AUTHORIZED]),
+    },
+    { paymentStatus: PaymentStatus.PAID },
+  );
+  await bookingRepo.update(
+    {
+      id: bookingId,
+      status: BookingStatus.PENDING,
+      paymentStatus: PaymentStatus.PAID,
+    },
+    { status: BookingStatus.CONFIRMED },
+  );
+}
+
+async function handleBookingIntentCanceled(bookingId: string) {
+  const booking = await bookingRepo.findOne({ where: { id: bookingId } });
+  if (!booking) return;
+
+  const authorized = booking.paymentStatus === PaymentStatus.AUTHORIZED;
+  if (
+    booking.status === BookingStatus.PENDING &&
+    UNPAID_STATES.includes(booking.paymentStatus)
+  ) {
+    await discardUnpaidBooking(booking.id);
+  } else if (booking.status === BookingStatus.PENDING && authorized) {
+    // The hold was released or expired (about 7 days) before the artisan
+    // confirmed the booking.
+    await bookingRepo.update(
+      {
+        id: bookingId,
+        status: BookingStatus.PENDING,
+        paymentStatus: PaymentStatus.AUTHORIZED,
+      },
+      { status: BookingStatus.CANCELLED, paymentStatus: PaymentStatus.UNPAID },
+    );
+  } else if (booking.status === BookingStatus.CANCELLED && authorized) {
+    await bookingRepo.update(
+      { id: bookingId, paymentStatus: PaymentStatus.AUTHORIZED },
+      { paymentStatus: PaymentStatus.UNPAID },
+    );
+  }
+}
+
+type IntentEventHandler = (id: string) => Promise<void>;
+
+const ORDER_EVENT_HANDLERS: Record<string, IntentEventHandler> = {
+  "payment_intent.amount_capturable_updated": handleOrderIntentAuthorized,
+  "payment_intent.succeeded": handleOrderIntentCaptured,
+  "payment_intent.payment_failed": handleOrderIntentFailed,
+  "payment_intent.canceled": handleOrderIntentCanceled,
+};
+
+const BOOKING_EVENT_HANDLERS: Record<string, IntentEventHandler> = {
+  "payment_intent.amount_capturable_updated": handleBookingIntentAuthorized,
+  "payment_intent.succeeded": handleBookingIntentCaptured,
+  "payment_intent.payment_failed": handleBookingIntentFailed,
+  "payment_intent.canceled": handleBookingIntentCanceled,
+};
 
 export const stripeWebhook = async (req: Request, res: Response) => {
   const sig = req.headers["stripe-signature"];
@@ -338,50 +736,17 @@ export const stripeWebhook = async (req: Request, res: Response) => {
       return res.json({ received: true, duplicate: true });
     }
 
-    const relevantTypes = [
-      "payment_intent.amount_capturable_updated",
-      "payment_intent.succeeded",
-      "payment_intent.payment_failed",
-    ];
-
-    if (relevantTypes.includes(event.type)) {
+    if (event.type.startsWith("payment_intent.")) {
       const intent = event.data.object as Stripe.PaymentIntent;
-      const isAuthorized =
-        event.type === "payment_intent.amount_capturable_updated";
-      const isCaptured = event.type === "payment_intent.succeeded";
-      const isFailed = event.type === "payment_intent.payment_failed";
+      const kind = intent.metadata?.type;
 
-      const isOrder =
-        (intent.metadata?.type === "order" && intent.metadata?.orderId) ||
-        (intent.metadata?.type === "cart" && intent.metadata?.orderIds);
-
-      if (isOrder) {
-        const idsCsv =
-          intent.metadata.type === "cart"
-            ? intent.metadata.orderIds
-            : intent.metadata.orderId;
-        if (isAuthorized) await handleOrderAuthorizedEvent(idsCsv);
-        else if (isCaptured || isFailed)
-          await handleOrderPaymentEvent(idsCsv, isCaptured);
-      } else if (intent.metadata?.bookingId) {
-        if (isAuthorized) {
-          await handleBookingAuthorizedEvent(intent.metadata.bookingId);
-        } else if (isCaptured || isFailed) {
-          const booking = await bookingRepo.findOne({
-            where: { id: intent.metadata.bookingId },
-          });
-          if (booking) {
-            if (isCaptured) {
-              booking.paymentStatus = PaymentStatus.PAID;
-              if (booking.status === BookingStatus.PENDING) {
-                booking.status = BookingStatus.CONFIRMED;
-              }
-            } else {
-              booking.paymentStatus = PaymentStatus.FAILED;
-            }
-            await bookingRepo.save(booking);
-          }
-        }
+      if (kind === "order" || kind === "cart") {
+        // Orders are found by PaymentIntent id, which covers single orders
+        // and every line of a cart (older intents carry a CSV of order ids
+        // in metadata; that isn't needed any more).
+        await ORDER_EVENT_HANDLERS[event.type]?.(intent.id);
+      } else if (isUuid(intent.metadata?.bookingId)) {
+        await BOOKING_EVENT_HANDLERS[event.type]?.(intent.metadata.bookingId);
       }
     }
 

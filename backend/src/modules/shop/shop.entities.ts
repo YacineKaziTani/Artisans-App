@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
@@ -17,6 +18,7 @@ import { Photo } from "../photos/photo.entities";
 import { Booking } from "../booking/booking.entities";
 import { Product } from "../products/product.entities";
 import { User } from "../users/entities/user.entities";
+import { shopCanAcceptPayments } from "../../config/connect";
 
 export enum ShopStatus {
   ACTIVE = "active",
@@ -33,6 +35,9 @@ export enum VerificationStatus {
 }
 
 @Entity("shops")
+// Public listing: active shops by rating, and category pages.
+@Index(["status", "averageRating"])
+@Index(["category"])
 export class Shop {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -41,19 +46,19 @@ export class Shop {
   shopName!: string;
 
   @Column({ type: "varchar", nullable: true })
-  description?: string;
+  description?: string | null;
 
   @Column({ type: "varchar", nullable: true })
-  address?: string;
+  address?: string | null;
 
   @Column({ type: "varchar", nullable: true })
-  city?: string;
+  city?: string | null;
 
   @Column({ type: "varchar", nullable: true })
-  logoUrl?: string;
+  logoUrl?: string | null;
 
   @Column({ type: "varchar", nullable: true })
-  phone?: string;
+  phone?: string | null;
 
   @Column({
     type: "enum",
@@ -73,16 +78,17 @@ export class Shop {
   verificationStatus!: VerificationStatus;
 
   @Column({ type: "text", nullable: true })
-  verificationNote?: string;
+  verificationNote?: string | null;
 
   // Stripe Connect (Express) account — required before this shop can
   // receive bookings/orders, since payouts flow through it.
   @Column({ type: "varchar", nullable: true })
-  stripeAccountId?: string;
+  stripeAccountId?: string | null;
 
-  // Mirrors Stripe's charges_enabled && payouts_enabled on the connected
-  // account. Kept in sync by the "account.updated" webhook event, and
-  // refreshed on-demand when the artisan checks their status.
+  // Whether the connected account can take card payments and receive
+  // transfers. Refreshed whenever the artisan's dashboard checks their
+  // Stripe status (GET /shops/mine/stripe-status). There's no Connect
+  // webhook endpoint yet, so it isn't updated in the background.
   @Column({ type: "boolean", default: false })
   stripeOnboardingComplete!: boolean;
 
@@ -113,4 +119,21 @@ export class Shop {
 
   @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
+
+  /**
+   * What a Shop looks like in API responses. The Stripe account id is never
+   * sent (no client needs it), and the admin's verification note is only
+   * added back for the owner and admins (see ownerShopView). Clients get a
+   * ready-made `acceptsPayments` flag instead of re-deriving it from Stripe
+   * fields plus a frontend env var.
+   */
+  toJSON() {
+    const { stripeAccountId: _account, verificationNote: _note, ...rest } = this;
+    return { ...rest, acceptsPayments: shopCanAcceptPayments(this) };
+  }
+}
+
+/** A shop as its owner (or an admin) sees it — includes the verification note. */
+export function ownerShopView(shop: Shop) {
+  return { ...shop.toJSON(), verificationNote: shop.verificationNote ?? null };
 }

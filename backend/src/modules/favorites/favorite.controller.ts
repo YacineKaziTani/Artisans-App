@@ -45,6 +45,7 @@ export const toggleFavorite = async (req: Request, res: Response) => {
     await favoriteRepo.save(favorite);
     return res.json({ favorited: true });
   } catch (error) {
+    console.error("toggleFavorite failed:", error);
     return res.status(500).json({ message: "Error toggling favorite" });
   }
 };
@@ -70,6 +71,7 @@ export const getMyFavoriteIds = async (req: Request, res: Response) => {
     });
     return res.json(favorites.map((f) => f.targetId));
   } catch (error) {
+    console.error("getMyFavoriteIds failed:", error);
     return res.status(500).json({ message: "Error fetching favorites" });
   }
 };
@@ -106,6 +108,7 @@ export const getMyFavorites = async (req: Request, res: Response) => {
 
     return res.json({ shops, products });
   } catch (error) {
+    console.error("getMyFavorites failed:", error);
     return res.status(500).json({ message: "Error fetching favorites" });
   }
 };

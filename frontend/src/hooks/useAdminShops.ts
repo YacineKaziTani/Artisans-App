@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { shopApi } from "@/api/shop.api";
 import type { Shop } from "@/types";
 
@@ -6,10 +11,13 @@ export const adminShopKeys = {
   all: ["admin", "shops"] as const,
 };
 
-export function useAdminShops() {
+export function useAdminShops(
+  params: { status?: Shop["status"]; page?: number; limit?: number } = {},
+) {
   return useQuery({
-    queryKey: adminShopKeys.all,
-    queryFn: () => shopApi.listAllAdmin({ limit: 100 }),
+    queryKey: [...adminShopKeys.all, params],
+    queryFn: () => shopApi.listAllAdmin({ limit: 25, ...params }),
+    placeholderData: keepPreviousData,
   });
 }
 

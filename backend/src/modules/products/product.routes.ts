@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getAllProducts,
   getMyProducts,
+  getProductById,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -21,7 +22,15 @@ import { authMiddleware } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { UserRole } from "../users/entities/user.entities";
 import { parser } from "../../config/cloudinary";
-import { uuidParam } from "../../middleware/validate.middleware";
+import { uuidParam, validateBody } from "../../middleware/validate.middleware";
+import {
+  createProductSchema,
+  createProductVariantSchema,
+  createVariantOptionSchema,
+  createVariantValueSchema,
+  updateProductSchema,
+  updateProductVariantSchema,
+} from "./product.schemas";
 
 const router = Router();
 
@@ -30,48 +39,48 @@ router.param("productId", uuidParam);
 router.param("optionId", uuidParam);
 router.param("imageId", uuidParam);
 
+const artisanOrAdmin = authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN);
+
 router.get("/", getAllProducts);
 router.get("/mine", authMiddleware, authorize(UserRole.ARTISAN), getMyProducts);
+router.get("/:id", getProductById);
 router.post(
   "/",
   authMiddleware,
   authorize(UserRole.ARTISAN),
   parser.single("image"),
+  validateBody(createProductSchema),
   createProduct,
 );
 router.put(
   "/:id",
   authMiddleware,
-  authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
+  artisanOrAdmin,
+  validateBody(updateProductSchema),
   updateProduct,
 );
-router.delete(
-  "/:id",
-  authMiddleware,
-  authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
-  deleteProduct,
-);
+router.delete("/:id", authMiddleware, artisanOrAdmin, deleteProduct);
 router.post(
   "/:id/images",
   authMiddleware,
-  authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
+  artisanOrAdmin,
   parser.single("image"),
   addProductImage,
 );
 router.delete(
   "/images/:imageId",
   authMiddleware,
-  authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
+  artisanOrAdmin,
   removeProductImage,
 );
 
 // ── Variant options/values/SKUs ─────────────────────────────────────────────
-const artisanOrAdmin = authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN);
 
 router.post(
   "/:productId/variant-options",
   authMiddleware,
   artisanOrAdmin,
+  validateBody(createVariantOptionSchema),
   createVariantOption,
 );
 router.delete(
@@ -85,6 +94,7 @@ router.post(
   "/variant-options/:optionId/values",
   authMiddleware,
   artisanOrAdmin,
+  validateBody(createVariantValueSchema),
   createVariantValue,
 );
 router.delete(
@@ -98,12 +108,14 @@ router.post(
   "/:productId/variants",
   authMiddleware,
   artisanOrAdmin,
+  validateBody(createProductVariantSchema),
   createProductVariant,
 );
 router.patch(
   "/variants/:id",
   authMiddleware,
   artisanOrAdmin,
+  validateBody(updateProductVariantSchema),
   updateProductVariant,
 );
 router.delete(

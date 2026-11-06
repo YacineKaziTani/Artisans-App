@@ -2,8 +2,10 @@ import { Link } from "react-router";
 import {
   ArrowRight,
   Calendar,
-  Camera,
   Clock,
+  DollarSign,
+  ShoppingBag,
+  Star,
   Store,
   Tag,
   Users,
@@ -14,7 +16,8 @@ import { useAuthStore } from "@/store/auth.store";
 import { useAdminCategories } from "@/hooks/useAdminCategories";
 import { useAdminUsers } from "@/hooks/useAdminUsers";
 import { useAdminShops } from "@/hooks/useAdminShops";
-import { useMyShop } from "@/hooks/useShops";
+import { useMyShop, useMyShopStats } from "@/hooks/useShops";
+import { formatMoney } from "@/lib/pricing";
 
 function StatCard({
   label,
@@ -71,11 +74,12 @@ function QuickLink({
 
 function AdminDashboardHome() {
   const { data: categories } = useAdminCategories();
-  const { data: users } = useAdminUsers();
-  const { data: shopsPage } = useAdminShops();
+  // limit: 1 — only the totals in `meta` are needed here.
+  const { data: usersPage } = useAdminUsers({ limit: 1 });
+  const { data: shopsPage } = useAdminShops({ limit: 1 });
+  const { data: pendingPage } = useAdminShops({ status: "pending", limit: 1 });
 
-  const pendingShops =
-    shopsPage?.data.filter((s) => s.status === "pending").length ?? 0;
+  const pendingShops = pendingPage?.meta.total ?? 0;
 
   return (
     <div className="space-y-6">
@@ -85,7 +89,7 @@ function AdminDashboardHome() {
           value={categories?.length ?? "—"}
           icon={Tag}
         />
-        <StatCard label="Users" value={users?.length ?? "—"} icon={Users} />
+        <StatCard label="Users" value={usersPage?.meta.total ?? "—"} icon={Users} />
         <StatCard
           label="Shops"
           value={shopsPage?.meta.total ?? "—"}
@@ -125,6 +129,116 @@ function AdminDashboardHome() {
   );
 }
 
+/** A to-do row that links straight to the tab where it gets done. */
+function TodoLink({ to, count, label }: { to: string; count: number; label: string }) {
+  return (
+    <Link
+      to={to}
+      className={`group flex items-center gap-3 rounded-xl border px-4 py-3 text-sm transition-colors hover:bg-accent ${
+        count > 0 ? "border-primary/40" : "border-border/70"
+      }`}
+    >
+      <span
+        className={`font-display text-2xl font-semibold tabular-nums ${
+          count > 0 ? "text-primary" : "text-muted-foreground"
+        }`}
+      >
+        {count}
+      </span>
+      {label}
+      <ArrowRight className="ml-auto size-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+    </Link>
+  );
+}
+
+function ArtisanShopStats() {
+  const { data: stats, isLoading, isError } = useMyShopStats();
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="skeleton h-28" />
+        ))}
+      </div>
+    );
+  }
+  if (isError || !stats) {
+    return <p className="alert-error">Couldn't load your shop's numbers right now.</p>;
+  }
+
+  const { last30Days } = stats;
+  const statusLabel = stats.status.charAt(0).toUpperCase() + stats.status.slice(1);
+
+  return (
+    <div className="space-y-6">
+      {!stats.acceptsPayments && stats.status === "active" && (
+        <p className="alert-note">
+          Clients can't pay you yet — finish Stripe setup from{" "}
+          <Link to="/profile-artisan" className="font-semibold underline">
+            your shop
+          </Link>{" "}
+          so your services and products can be booked and bought.
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Revenue, last 30 days"
+          value={formatMoney(last30Days.revenue)}
+          icon={DollarSign}
+          accent={last30Days.revenue > 0}
+        />
+        <StatCard
+          label="Paid orders & bookings (30 days)"
+          value={last30Days.paidOrders + last30Days.paidBookings}
+          icon={ShoppingBag}
+        />
+        <StatCard
+          label={`Rating (${stats.reviewCount} review${stats.reviewCount === 1 ? "" : "s"})`}
+          value={stats.reviewCount > 0 ? Number(stats.averageRating).toFixed(1) : "—"}
+          icon={Star}
+        />
+        <StatCard
+          label="Shop status"
+          value={statusLabel}
+          icon={Store}
+          accent={stats.status === "active"}
+        />
+      </div>
+
+      <section className="surface p-6">
+        <h2 className="font-display text-lg font-semibold">Needs your attention</h2>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <TodoLink
+            to="/profile-artisan?tab=orders"
+            count={stats.ordersToFulfil}
+            label={`order${stats.ordersToFulfil === 1 ? "" : "s"} to fulfil`}
+          />
+          <TodoLink
+            to="/profile-artisan?tab=bookings"
+            count={stats.bookingsToConfirm}
+            label={`booking${stats.bookingsToConfirm === 1 ? "" : "s"} to confirm`}
+          />
+          <TodoLink
+            to="/profile-artisan?tab=bookings"
+            count={stats.upcomingBookings}
+            label={`upcoming booking${stats.upcomingBookings === 1 ? "" : "s"}`}
+          />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+          <Link to="/profile-artisan?tab=services" className="hover:text-primary">
+            {stats.serviceCount} service{stats.serviceCount === 1 ? "" : "s"}
+          </Link>
+          <Link to="/profile-artisan?tab=products" className="hover:text-primary">
+            {stats.productCount} product{stats.productCount === 1 ? "" : "s"}
+          </Link>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ArtisanDashboardHome() {
   const { data: shop, isLoading } = useMyShop();
 
@@ -153,26 +267,7 @@ function ArtisanDashboardHome() {
         </div>
       )}
 
-      {!isLoading && shop && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard
-            label="Services"
-            value={shop.services?.length ?? 0}
-            icon={Wrench}
-          />
-          <StatCard
-            label="Photos"
-            value={shop.photos?.length ?? 0}
-            icon={Camera}
-          />
-          <StatCard
-            label="Shop status"
-            value={shop.status.charAt(0).toUpperCase() + shop.status.slice(1)}
-            icon={Store}
-            accent={shop.status === "active"}
-          />
-        </div>
-      )}
+      {!isLoading && shop && <ArtisanShopStats />}
 
       <section className="surface p-6">
         <h2 className="font-display text-lg font-semibold">Manage your shop</h2>

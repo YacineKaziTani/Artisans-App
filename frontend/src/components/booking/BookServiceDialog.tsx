@@ -11,10 +11,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateBooking } from "@/hooks/useBookings";
+import { useAbandonBooking, useCreateBooking } from "@/hooks/useBookings";
 import { stripePromise } from "@/lib/stripe";
 import { BookingPaymentForm } from "./BookingPaymentForm";
 import type { Service } from "@/types";
+import { getErrorMessage } from "@/lib/errors";
+
+/** "YYYY-MM-DDTHH:mm" in local time, the format datetime-local expects. */
+function localDateTimeInputValue(date: Date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
 
 export function BookServiceDialog({
   service,
@@ -31,6 +38,7 @@ export function BookServiceDialog({
   const [confirmed, setConfirmed] = useState(false);
 
   const createBooking = useCreateBooking();
+  const abandonBooking = useAbandonBooking();
 
   const reset = () => {
     setScheduledAt("");
@@ -41,7 +49,13 @@ export function BookServiceDialog({
   };
 
   const handleClose = (next: boolean) => {
-    if (!next) reset();
+    if (!next) {
+      // Closing before the card was authorized: the booking is already
+      // holding this time slot, so release it now rather than when it expires.
+      const unpaidBookingId = createBooking.data?.booking.id;
+      if (unpaidBookingId && !confirmed) abandonBooking.mutate(unpaidBookingId);
+      reset();
+    }
     onOpenChange(next);
   };
 
@@ -68,7 +82,8 @@ export function BookServiceDialog({
             <div className="text-5xl">✅</div>
             <DialogTitle>Payment Authorized</DialogTitle>
             <DialogDescription>
-              Your card has been authorized and the artisan has been notified.
+              Your card is on hold — nothing is charged yet. The artisan has been emailed
+              your request, and a confirmation is on its way to your inbox.
               You'll be charged once they confirm the booking — if they can't
               take it, the hold is released and you're never charged.
             </DialogDescription>
@@ -104,7 +119,10 @@ export function BookServiceDialog({
             <form onSubmit={handleRequestBooking} className="space-y-4">
               {createBooking.isError && (
                 <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
-                  Couldn't start the booking. Please try again.
+                  {getErrorMessage(
+                    createBooking.error,
+                    "Couldn't start the booking. Please try again.",
+                  )}
                 </div>
               )}
               <div className="space-y-2">
@@ -112,10 +130,16 @@ export function BookServiceDialog({
                 <Input
                   id="scheduledAt"
                   type="datetime-local"
+                  min={localDateTimeInputValue(new Date())}
                   value={scheduledAt}
                   onChange={(e) => setScheduledAt(e.target.value)}
                   required
                 />
+                {service.durationMinutes ? (
+                  <p className="text-xs text-muted-foreground">
+                    Each appointment takes about {service.durationMinutes} minutes.
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="notes">Notes (optional)</Label>

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { shopApi, type ListShopsParams } from "@/api/shop.api";
+import { authKeys } from "@/hooks/useAuth";
 
 export const shopKeys = {
   all: ["shops"] as const,
@@ -33,13 +34,15 @@ export function useMyShop(options: { enabled?: boolean } = {}) {
   });
 }
 
+// Shop mutations refetch "my shop" rather than writing the response into
+// the cache: the response is the bare shop, and writing it over the cached
+// one dropped its services/photos until the next reload.
+
 export function useUpdateMyShop() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: shopApi.updateMine,
-    onSuccess: (shop) => {
-      qc.setQueryData(shopKeys.mine(), shop);
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopKeys.mine() }),
   });
 }
 
@@ -49,6 +52,10 @@ export function useCreateShop() {
     mutationFn: shopApi.create,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: shopKeys.mine() });
+      // Creating a shop promotes the account to artisan on the server; the
+      // stored session still says "client" until /auth/me is refetched, which
+      // kept the dashboard locked until the next login.
+      qc.invalidateQueries({ queryKey: authKeys.me });
     },
   });
 }
@@ -57,7 +64,7 @@ export function useCloseMyShop() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: shopApi.closeMine,
-    onSuccess: (shop) => qc.setQueryData(shopKeys.mine(), shop),
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopKeys.mine() }),
   });
 }
 
@@ -65,7 +72,7 @@ export function useReopenMyShop() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: shopApi.reopenMine,
-    onSuccess: (shop) => qc.setQueryData(shopKeys.mine(), shop),
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopKeys.mine() }),
   });
 }
 
@@ -73,7 +80,7 @@ export function useRequestVerification() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: shopApi.requestVerification,
-    onSuccess: (shop) => qc.setQueryData(shopKeys.mine(), shop),
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopKeys.mine() }),
   });
 }
 
@@ -106,5 +113,24 @@ export function useStripeStatus(options: { enabled?: boolean } = {}) {
     queryKey: [...shopKeys.mine(), "stripe-status"],
     queryFn: shopApi.getStripeStatus,
     enabled: options.enabled ?? true,
+  });
+}
+
+/** Artisan dashboard numbers (needs a shop — 404s without one). */
+export function useMyShopStats(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: [...shopKeys.mine(), "stats"],
+    queryFn: shopApi.getMyStats,
+    enabled: options.enabled ?? true,
+    retry: false,
+  });
+}
+
+/** Admin preview of any shop, including pending ones. */
+export function useAdminShopPreview(id: string | null) {
+  return useQuery({
+    queryKey: ["admin", "shops", "preview", id ?? ""],
+    queryFn: () => shopApi.getAdminPreview(id!),
+    enabled: Boolean(id),
   });
 }

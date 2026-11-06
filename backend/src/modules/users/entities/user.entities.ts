@@ -7,6 +7,7 @@ import {
   OneToOne,
 } from "typeorm";
 import { Shop } from "../../shop/shop.entities";
+import { publicProfile } from "../user.views";
 
 export enum UserRole {
   ARTISAN = "artisan",
@@ -42,13 +43,13 @@ export class User {
   role!: UserRole;
 
   @Column({ type: "varchar", nullable: true })
-  avatarUrl?: string;
+  avatarUrl?: string | null;
 
   @Column({ type: "varchar", nullable: true, select: false })
-  resetPasswordTokenHash?: string;
+  resetPasswordTokenHash?: string | null;
 
   @Column({ type: "timestamptz", nullable: true, select: false })
-  resetPasswordExpiresAt?: Date;
+  resetPasswordExpiresAt?: Date | null;
 
   @Column({ type: "timestamptz", nullable: true })
   acceptedTermsAt?: Date;
@@ -60,7 +61,13 @@ export class User {
   failedLoginAttempts!: number;
 
   @Column({ type: "timestamptz", nullable: true, select: false })
-  lockedUntil?: Date;
+  lockedUntil?: Date | null;
+
+  // Set when an admin deletes the account. The row stays (orders, bookings
+  // and messages still reference it) but its personal data is scrubbed and
+  // it can no longer sign in.
+  @Column({ type: "timestamptz", nullable: true })
+  deletedAt?: Date | null;
 
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
@@ -70,4 +77,15 @@ export class User {
 
   @OneToOne(() => Shop, (shop) => shop.owner)
   shop!: Shop;
+
+  /**
+   * Private by default: a User in any API response is reduced to its public
+   * profile (name, avatar). Endpoints that legitimately return the full
+   * account — the user's own profile, admin user management — build it
+   * explicitly with accountView(). Before this, conversations, messages and
+   * order lists sent the other party's email and phone number.
+   */
+  toJSON() {
+    return publicProfile(this);
+  }
 }

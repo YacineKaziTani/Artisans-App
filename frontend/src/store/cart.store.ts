@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Product, ProductVariant } from "@/types";
+import { variantLabel, variantUnitPrice } from "@/lib/pricing";
 
 export interface CartItem {
   productId: string;
@@ -58,17 +59,8 @@ export const useCartStore = create<CartState>()(
           return true;
         }
 
-        const variantModifier = variant
-          ? variant.values.reduce((sum, v) => sum + Number(v.priceModifier), 0)
-          : 0;
-        const price =
-          variant?.priceOverride !== undefined &&
-          variant?.priceOverride !== null
-            ? Number(variant.priceOverride)
-            : Number(product.basePrice) + variantModifier;
-        const variantLabel = variant?.values
-          .map((v) => `${v.option?.name}: ${v.value}`)
-          .join(", ");
+        const price = variantUnitPrice(product, variant);
+        const label = variant ? variantLabel(variant) : undefined;
 
         set({
           items: [
@@ -76,7 +68,7 @@ export const useCartStore = create<CartState>()(
             {
               productId: product.id,
               variantId: variant?.id,
-              variantLabel,
+              variantLabel: label,
               title: product.title,
               price,
               shopId,

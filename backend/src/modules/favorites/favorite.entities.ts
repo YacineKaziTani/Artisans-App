@@ -30,6 +30,6 @@ export class Favorite {
   @ManyToOne(() => User)
   user!: User;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

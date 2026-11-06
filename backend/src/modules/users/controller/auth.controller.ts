@@ -3,27 +3,36 @@ import { AppDataSource } from "../../../data-source";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { User, UserRole } from "../entities/user.entities";
+import { User } from "../entities/user.entities";
 import { sendMail } from "../../../config/mail";
 import {
   COOKIE_OPTIONS,
   CLEAR_COOKIE_OPTIONS,
 } from "../../../config/cookie";
+import { disconnectUserSockets } from "../../../realtime/socket";
+import { primaryFrontendUrl } from "../../../lib/urls";
+import { isUniqueViolation } from "../../../lib/db";
+import { escapeHtml } from "../../../lib/html";
+
+// Request bodies are validated and normalized by the zod schemas in
+// user.schemas.ts (emails arrive trimmed and lowercased).
 
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
-const MIN_PASSWORD_LENGTH = 8;
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+// Compared against when the email doesn't exist, so a failed login takes
+// about as long either way and response time doesn't reveal which emails
+// have accounts.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("not-a-real-password", 12);
+
+const userRepo = AppDataSource.getRepository(User);
 
 function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-const SELF_ASSIGNABLE_ROLES: UserRole[] = [UserRole.CLIENT, UserRole.ARTISAN];
-
-function isValidEmail(email: unknown): email is string {
-  return typeof email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function publicUser(user: User) {
+export function publicUser(user: User) {
   return {
     id: user.id,
     name: user.name,
@@ -43,82 +52,75 @@ function issueToken(user: User) {
   );
 }
 
+/**
+ * Case-insensitive lookup. New accounts are stored lowercased, but older
+ * ones may not be, and "User@x.com" and "user@x.com" must be one account.
+ */
+function byEmail(email: string, extraSelects: string[] = []) {
+  return userRepo
+    .createQueryBuilder("user")
+    .addSelect(extraSelects.map((c) => `user.${c}`))
+    .where("LOWER(user.email) = :email", { email: email.toLowerCase() });
+}
+
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, name, password, phone, role, acceptTerms } = req.body;
-    const userRepo = AppDataSource.getRepository(User);
+    const { email, name, password, phone, role } = req.body;
 
-    if (!email || !name || !password || !phone || !role) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-    if (!isValidEmail(email)) {
-      return res.status(400).json({ message: "Enter a valid email address" });
-    }
-    if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
-      return res.status(400).json({
-        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-      });
-    }
-    if (!SELF_ASSIGNABLE_ROLES.includes(role)) {
-      return res.status(400).json({ message: "Invalid role" });
-    }
-    if (acceptTerms !== true) {
-      return res
-        .status(400)
-        .json({ message: "You must accept the Terms of Service to register" });
-    }
-
-    const existingUser = await userRepo.findOne({
-      where: [{ email }, { phone }],
-    });
-
+    const existingUser = await userRepo
+      .createQueryBuilder("user")
+      .where("LOWER(user.email) = :email", { email })
+      .orWhere("user.phone = :phone", { phone })
+      .getOne();
     if (existingUser) {
-      const field = existingUser.email === email ? "Email" : "Phone number";
-      return res.status(400).json({ message: `${field} already exists` });
+      const field =
+        existingUser.email.toLowerCase() === email ? "Email" : "Phone number";
+      return res.status(409).json({ message: `${field} already exists` });
     }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
 
     const user = userRepo.create({
       name,
       email,
       phone,
-      password: hashedPassword,
+      password: await bcrypt.hash(password, 12),
       role,
       acceptedTermsAt: new Date(),
     });
 
-    await userRepo.save(user);
+    try {
+      await userRepo.save(user);
+    } catch (err) {
+      // Lost a race with a simultaneous sign-up for the same email/phone.
+      if (isUniqueViolation(err)) {
+        return res
+          .status(409)
+          .json({ message: "Email or phone number already exists" });
+      }
+      throw err;
+    }
 
     res.cookie("token", issueToken(user), COOKIE_OPTIONS);
-
     res.status(201).json({
       message: "User created and logged in",
       user: publicUser(user),
     });
   } catch (err) {
-    res.status(500).json({ error: "Server error during registration" });
+    console.error("register failed:", err);
+    res.status(500).json({ message: "Server error during registration" });
   }
 };
-
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
-    const userRepo = AppDataSource.getRepository(User);
-    const user = await userRepo
-      .createQueryBuilder("user")
-      .addSelect([
-        "user.password",
-        "user.failedLoginAttempts",
-        "user.lockedUntil",
-      ])
-      .where("user.email = :email", { email })
-      .getOne();
+    const user = await byEmail(email, [
+      "password",
+      "failedLoginAttempts",
+      "lockedUntil",
+    ]).getOne();
 
     if (!user) {
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
@@ -155,13 +157,14 @@ export const login = async (req: Request, res: Response) => {
 
     if (user.failedLoginAttempts || user.lockedUntil) {
       user.failedLoginAttempts = 0;
-      user.lockedUntil = undefined;
+      user.lockedUntil = null;
       await userRepo.save(user);
     }
 
     res.cookie("token", issueToken(user), COOKIE_OPTIONS);
     res.json({ message: "Logged in successfully", user: publicUser(user) });
   } catch (error) {
+    console.error("login failed:", error);
     res.status(500).json({ message: "Server error during login" });
   }
 };
@@ -171,65 +174,52 @@ export const logout = (_req: Request, res: Response) => {
   res.json({ message: "Logged out" });
 };
 
+// Mounted behind authMiddleware, so the session has already passed the same
+// checks every other protected route applies (active account, not issued
+// before the last password change).
 export const me = async (req: Request, res: Response) => {
-  const token = req.cookies.token;
-  if (!token) return res.status(401).json({ message: "Not authenticated" });
-
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET!) as {
-      sub: string;
-    };
-    const user = await AppDataSource.getRepository(User).findOne({
-      where: { id: payload.sub },
-    });
-    if (!user || !user.isActive) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
+    const user = await userRepo.findOne({ where: { id: req.user!.id } });
+    if (!user) return res.status(401).json({ message: "Not authenticated" });
     res.json(publicUser(user));
-  } catch {
-    res.status(401).json({ message: "Invalid token" });
+  } catch (error) {
+    console.error("me failed:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
 export const forgotPassword = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ message: "Email is required" });
-    }
+    const user = await byEmail(email).getOne();
 
-    const userRepo = AppDataSource.getRepository(User);
-    const user = await userRepo.findOne({ where: { email } });
-
-    if (user) {
+    if (user && user.isActive) {
       const rawToken = crypto.randomBytes(32).toString("hex");
       user.resetPasswordTokenHash = hashToken(rawToken);
       user.resetPasswordExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
       await userRepo.save(user);
 
-      const resetUrl = `${process.env.FRONTEND_URL ?? "http://localhost:5173"}/reset-password?token=${rawToken}&email=${encodeURIComponent(email)}`;
+      const resetUrl = `${primaryFrontendUrl()}/reset-password?token=${rawToken}&email=${encodeURIComponent(user.email)}`;
 
-      try {
-        await sendMail(
-          user.email,
-          "Reset your password",
-          `<p>Hi ${user.name},</p>
-           <p>Click the link below to reset your password. This link expires in 30 minutes.</p>
-           <p><a href="${resetUrl}">${resetUrl}</a></p>
-           <p>If you didn't request this, you can ignore this email.</p>`,
-        );
-      } catch (mailError) {
-        console.error(
-          "[forgot-password] Failed to send reset email:",
-          mailError,
-        );
-      }
+      // Not awaited: sending takes long enough that awaiting it would let
+      // response time reveal whether the email has an account.
+      sendMail(
+        user.email,
+        "Reset your password",
+        `<p>Hi ${escapeHtml(user.name)},</p>
+         <p>Click the link below to reset your password. This link expires in 30 minutes.</p>
+         <p><a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a></p>
+         <p>If you didn't request this, you can ignore this email.</p>`,
+      ).catch((mailError) =>
+        console.error("[forgot-password] Failed to send reset email:", mailError),
+      );
     }
 
     return res.json({
       message: "If that email exists, a reset link has been sent",
     });
   } catch (error) {
+    console.error("forgotPassword failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -237,31 +227,20 @@ export const forgotPassword = async (req: Request, res: Response) => {
 export const resetPassword = async (req: Request, res: Response) => {
   try {
     const { email, token, newPassword } = req.body;
-    if (!email || !token || !newPassword) {
-      return res
-        .status(400)
-        .json({ message: "email, token, and newPassword are required" });
-    }
-    if (
-      typeof newPassword !== "string" ||
-      newPassword.length < MIN_PASSWORD_LENGTH
-    ) {
-      return res.status(400).json({
-        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-      });
-    }
 
-    const userRepo = AppDataSource.getRepository(User);
-    const user = await userRepo
-      .createQueryBuilder("user")
-      .addSelect(["user.resetPasswordTokenHash", "user.resetPasswordExpiresAt"])
-      .where("user.email = :email", { email })
-      .getOne();
+    const user = await byEmail(email, [
+      "resetPasswordTokenHash",
+      "resetPasswordExpiresAt",
+    ]).getOne();
 
     const tokenHash = hashToken(token);
     const valid =
-      user?.resetPasswordTokenHash === tokenHash &&
-      user?.resetPasswordExpiresAt &&
+      user?.resetPasswordTokenHash &&
+      crypto.timingSafeEqual(
+        Buffer.from(user.resetPasswordTokenHash),
+        Buffer.from(tokenHash),
+      ) &&
+      user.resetPasswordExpiresAt &&
       user.resetPasswordExpiresAt.getTime() > Date.now();
 
     if (!user || !valid) {
@@ -269,15 +248,20 @@ export const resetPassword = async (req: Request, res: Response) => {
     }
 
     user.password = await bcrypt.hash(newPassword, 12);
-    user.resetPasswordTokenHash = undefined;
-    user.resetPasswordExpiresAt = undefined;
+    // null, not undefined: save() skips undefined properties, so the old
+    // code never actually cleared the token — the same reset link kept
+    // working until it expired.
+    user.resetPasswordTokenHash = null;
+    user.resetPasswordExpiresAt = null;
     user.passwordChangedAt = new Date();
     user.failedLoginAttempts = 0;
-    user.lockedUntil = undefined;
+    user.lockedUntil = null;
     await userRepo.save(user);
+    disconnectUserSockets(user.id);
 
     return res.json({ message: "Password reset successfully" });
   } catch (error) {
+    console.error("resetPassword failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };

@@ -16,11 +16,25 @@ import {
   useUpdateCategory,
 } from "@/hooks/useAdminCategories";
 import type { Category } from "@/types";
+import { useConfirm } from "@/hooks/useConfirm";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function AdminCategoriesPage() {
   const { data: categories, isLoading, isError } = useAdminCategories();
   const createCategory = useCreateCategory();
   const deleteCategory = useDeleteCategory();
+  const confirm = useConfirm();
+
+  const handleDelete = async (category: Category) => {
+    const ok = await confirm({
+      title: `Delete the “${category.name}” category?`,
+      description:
+        "Only categories no shop uses can be deleted. To hide one that's in use, deactivate it instead.",
+      confirmLabel: "Delete category",
+      destructive: true,
+    });
+    if (ok) deleteCategory.mutate(category.id);
+  };
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -49,7 +63,10 @@ export default function AdminCategoriesPage() {
           <form onSubmit={handleCreate} className="space-y-4">
             {createCategory.isError && (
               <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
-                Couldn't create the category. Please try again.
+                {getErrorMessage(
+                  createCategory.error,
+                  "Couldn't create the category. Please try again.",
+                )}
               </div>
             )}
             <div className="space-y-2">
@@ -95,6 +112,11 @@ export default function AdminCategoriesPage() {
               Couldn't load categories.
             </p>
           )}
+          {deleteCategory.isError && (
+            <p className="alert-error">
+              {getErrorMessage(deleteCategory.error, "Couldn't delete that category.")}
+            </p>
+          )}
           {!isLoading && !isError && (categories ?? []).length === 0 && (
             <p className="text-muted-foreground text-sm">No categories yet.</p>
           )}
@@ -104,7 +126,7 @@ export default function AdminCategoriesPage() {
               <CategoryRow
                 key={category.id}
                 category={category}
-                onDelete={() => deleteCategory.mutate(category.id)}
+                onDelete={() => handleDelete(category)}
                 deleting={
                   deleteCategory.isPending &&
                   deleteCategory.variables === category.id

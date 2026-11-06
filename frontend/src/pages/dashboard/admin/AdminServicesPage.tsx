@@ -9,6 +9,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { serviceApi } from "@/api/service.api";
 import { useDeleteService } from "@/hooks/useServices";
+import { useConfirm } from "@/hooks/useConfirm";
+import { getErrorMessage } from "@/lib/errors";
+import type { Service } from "@/types";
 
 export default function AdminServicesPage() {
   const { data: services, isLoading, isError } = useQuery({
@@ -16,6 +19,18 @@ export default function AdminServicesPage() {
     queryFn: serviceApi.listAll,
   });
   const deleteService = useDeleteService();
+  const confirm = useConfirm();
+
+  const handleRemove = async (service: Service) => {
+    const ok = await confirm({
+      title: `Remove “${service.name}”?`,
+      description:
+        "It disappears from the shop and can't be booked. If it has bookings it's archived, so their history stays intact.",
+      confirmLabel: "Remove service",
+      destructive: true,
+    });
+    if (ok) deleteService.mutate(service.id);
+  };
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -44,6 +59,12 @@ export default function AdminServicesPage() {
             </p>
           )}
 
+          {deleteService.isError && (
+            <p className="alert-error">
+              {getErrorMessage(deleteService.error, "Couldn't remove that service.")}
+            </p>
+          )}
+
           {!isLoading && !isError && (services ?? []).length === 0 && (
             <p className="text-muted-foreground text-sm">No services yet.</p>
           )}
@@ -68,7 +89,7 @@ export default function AdminServicesPage() {
                     size="sm"
                     variant="destructive"
                     disabled={isDeleting}
-                    onClick={() => deleteService.mutate(service.id)}
+                    onClick={() => handleRemove(service)}
                   >
                     {isDeleting ? "…" : "Remove"}
                   </Button>

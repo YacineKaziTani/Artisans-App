@@ -1,26 +1,22 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useShopBookings, useUpdateBookingStatus } from "@/hooks/useBookings";
-import type { BookingStatus } from "@/types";
+import { Pagination } from "@/components/Pagination";
+import { useConfirm } from "@/hooks/useConfirm";
+import { getErrorMessage } from "@/lib/errors";
+import { StatusBadge } from "@/components/StatusBadge";
 
-const STATUS_STYLES: Record<BookingStatus, string> = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  confirmed: "bg-jade-50 text-jade-600 border-jade-500/25",
-  cancelled: "bg-destructive/10 text-destructive border-destructive/25",
-  completed: "bg-sky-100 text-sky-800 border-sky-200",
-};
 
-const PAYMENT_STYLES: Record<string, string> = {
-  unpaid: "bg-muted text-foreground/80 border-border",
-  authorized: "bg-sky-100 text-sky-800 border-sky-200",
-  paid: "bg-jade-50 text-jade-600 border-jade-500/25",
-  refunded: "bg-brand-100 text-primary border-border",
-  failed: "bg-destructive/10 text-destructive border-destructive/25",
-};
 
 export function ShopBookingsTab() {
-  const { data: bookings, isLoading, isError } = useShopBookings();
+  const [page, setPage] = useState(1);
+  const { data: bookingsPage, isLoading, isError, isFetching } = useShopBookings({ page });
+  const bookings = bookingsPage?.data;
   const updateStatus = useUpdateBookingStatus();
+  const confirm = useConfirm();
+  // Captured once per mount (render must stay pure); refetches re-render the list anyway.
+  const [now] = useState(Date.now);
 
   return (
     <Card>
@@ -53,6 +49,12 @@ export function ShopBookingsTab() {
               const isUpdating =
                 updateStatus.isPending &&
                 updateStatus.variables?.id === booking.id;
+              // Mirrors the API: confirm needs an authorized/paid card, and
+              // "completed" only makes sense once the appointment has happened.
+              const payable =
+                booking.paymentStatus === "authorized" || booking.paymentStatus === "paid";
+              const appointmentPassed =
+                new Date(booking.scheduledAt).getTime() <= now;
 
               return (
                 <div
@@ -75,31 +77,39 @@ export function ShopBookingsTab() {
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <span
-                        className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_STYLES[booking.status]}`}
-                      >
-                        {booking.status}
-                      </span>
-                      <span
-                        className={`text-xs font-semibold px-2 py-1 rounded-full border ${PAYMENT_STYLES[booking.paymentStatus]}`}
-                      >
-                        {booking.paymentStatus}
-                      </span>
+                      <StatusBadge status={booking.status} />
+                      <StatusBadge status={booking.paymentStatus} />
                     </div>
                   </div>
 
                   {(booking.status === "pending" || booking.status === "confirmed") && (
                     <div className="space-y-1">
+                      {/* Errors used to be swallowed here — a failed capture
+                          (expired hold) looked like the button did nothing. */}
+                      {updateStatus.isError &&
+                        updateStatus.variables?.id === booking.id && (
+                          <p className="p-2 bg-destructive/10 border border-destructive/25 rounded text-destructive text-xs">
+                            {getErrorMessage(
+                              updateStatus.error,
+                              "Couldn't update this booking. Please try again.",
+                            )}
+                          </p>
+                        )}
                       {booking.status === "pending" && booking.paymentStatus === "authorized" && (
                         <p className="text-xs text-muted-foreground">
                           Confirming will charge the client's card. Cancelling releases the hold instead.
+                        </p>
+                      )}
+                      {booking.status === "pending" && booking.paymentStatus === "failed" && (
+                        <p className="text-xs text-destructive">
+                          The client's card was declined — wait for them to complete payment before confirming.
                         </p>
                       )}
                       <div className="flex gap-2">
                         {booking.status === "pending" && (
                           <Button
                             size="sm"
-                            disabled={isUpdating}
+                            disabled={isUpdating || !payable}
                             onClick={() =>
                               updateStatus.mutate({ id: booking.id, status: "confirmed" })
                             }
@@ -110,7 +120,12 @@ export function ShopBookingsTab() {
                         {booking.status === "confirmed" && (
                           <Button
                             size="sm"
-                            disabled={isUpdating}
+                            disabled={isUpdating || !appointmentPassed}
+                            title={
+                              appointmentPassed
+                                ? undefined
+                                : "Available once the appointment time has passed"
+                            }
                             onClick={() =>
                               updateStatus.mutate({ id: booking.id, status: "completed" })
                             }
@@ -122,9 +137,21 @@ export function ShopBookingsTab() {
                           size="sm"
                           variant="destructive"
                           disabled={isUpdating}
-                          onClick={() =>
-                            updateStatus.mutate({ id: booking.id, status: "cancelled" })
-                          }
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: "Cancel this booking?",
+                              description:
+                                booking.paymentStatus === "paid"
+                                  ? "The client is refunded in full."
+                                  : "The hold on the client's card is released and they aren't charged.",
+                              confirmLabel: "Cancel booking",
+                              cancelLabel: "Keep it",
+                              destructive: true,
+                            });
+                            if (ok) {
+                              updateStatus.mutate({ id: booking.id, status: "cancelled" });
+                            }
+                          }}
                         >
                           Cancel
                         </Button>
@@ -136,6 +163,8 @@ export function ShopBookingsTab() {
             })}
           </div>
         )}
+
+        <Pagination meta={bookingsPage?.meta} onPageChange={setPage} disabled={isFetching} />
       </CardContent>
     </Card>
   );

@@ -34,6 +34,7 @@ export const uploadPhoto = async (req: Request, res: Response) => {
 
     return res.status(201).json(saved);
   } catch (error) {
+    console.error("uploadPhoto failed:", error);
     return res.status(500).json({ message: "Failed to upload photo" });
   }
 };
@@ -50,6 +51,7 @@ export const getMyPhotos = async (req: Request, res: Response) => {
     });
     return res.json(photos);
   } catch (error) {
+    console.error("getMyPhotos failed:", error);
     return res.status(500).json({ message: "Error fetching photos" });
   }
 };
@@ -77,6 +79,7 @@ export const deletePhoto = async (req: Request, res: Response) => {
     await photoRepo.remove(photo);
     return res.status(204).send();
   } catch (error) {
+    console.error("deletePhoto failed:", error);
     return res.status(500).json({ message: "Error deleting photo" });
   }
 };

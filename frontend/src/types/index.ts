@@ -41,6 +41,18 @@ export interface PageMeta {
   lastPage: number;
 }
 
+/** The `{ data, meta }` shape every paginated endpoint returns. */
+export interface Page<T> {
+  data: T[];
+  meta: PageMeta;
+}
+
+/** Common query params for paginated lists. */
+export interface PageParams {
+  page?: number;
+  limit?: number;
+}
+
 export interface ApiError {
   message: string;
   statusCode: number;
@@ -67,6 +79,8 @@ export interface Service {
   description?: string;
   price: string | number;
   duration?: string;
+  /** Appointment length; bookings that overlap it are refused. */
+  durationMinutes?: number | null;
   isAvailable: boolean;
   shop?: Shop;
 }
@@ -82,8 +96,11 @@ export interface Shop {
   status: "active" | "suspended" | "pending" | "closed";
   averageRating: number;
   verificationStatus?: "none" | "pending" | "verified" | "rejected";
-  verificationNote?: string;
+  /** Only sent to the shop's owner and admins. */
+  verificationNote?: string | null;
   stripeOnboardingComplete?: boolean;
+  /** Computed by the API: whether the shop can take bookings/orders. */
+  acceptsPayments?: boolean;
   category?: Category;
   owner?: User;
   services?: Service[];
@@ -98,6 +115,7 @@ export type PaymentStatus = "unpaid" | "authorized" | "paid" | "partially_refund
 export interface Booking {
   id: string;
   scheduledAt: string;
+  endsAt?: string | null;
   notes?: string;
   status: BookingStatus;
   totalAmount: string | number;
@@ -107,6 +125,9 @@ export interface Booking {
   service?: Service;
   client?: User;
   createdAt: string;
+  /** Only on the client's own bookings: whether they may cancel it themselves. */
+  canCancel?: boolean;
+  cancelBlockedReason?: string | null;
 }
 
 export interface Product {
@@ -114,6 +135,8 @@ export interface Product {
   title: string;
   description?: string;
   basePrice: string | number;
+  /** For products sold without variants: units left, or null if not tracked. */
+  stockQuantity?: number | null;
   imageUrl?: string;
   images?: ProductImage[];
   variantOptions?: VariantOption[];
@@ -156,6 +179,12 @@ export interface Review {
   createdAt: string;
 }
 
+export interface ReviewEligibility {
+  canReview: boolean;
+  reason: "own_shop" | "already_reviewed" | "no_completed_purchase" | null;
+  message: string | null;
+}
+
 export type OrderStatus = "pending" | "fulfilled" | "cancelled";
 export type OrderPaymentStatus =
   | "unpaid"
@@ -175,6 +204,8 @@ export interface Order {
   deliveryMethod?: DeliveryMethod;
   shippingAddress?: string;
   trackingInfo?: string;
+  /** Set when the order is one line of a multi-item cart checkout. */
+  checkoutGroupId?: string | null;
   shop?: Shop;
   product?: Product;
   variant?: ProductVariant;
@@ -222,6 +253,21 @@ export type DisputeStatus =
   | "resolved_denied"
   | "resolved_other";
 
+/** Admin-only summary of the order/booking a dispute is about. */
+export interface DisputeTarget {
+  id: string;
+  title: string;
+  status: string;
+  paymentStatus: PaymentStatus;
+  totalAmount: string | number;
+  createdAt: string;
+  scheduledAt?: string;
+  deliveryMethod?: DeliveryMethod;
+  partOfCart?: boolean;
+  shop: { id: string; shopName: string; owner: User | null };
+  client: User | null;
+}
+
 export interface Dispute {
   id: string;
   targetType: DisputeTargetType;
@@ -231,6 +277,22 @@ export interface Dispute {
   resolutionNote?: string;
   raisedBy?: User;
   createdAt: string;
+  /** Present in the admin list. */
+  target?: DisputeTarget | null;
+}
+
+/** GET /shops/mine/stats — the artisan dashboard numbers. */
+export interface ShopStats {
+  ordersToFulfil: number;
+  bookingsToConfirm: number;
+  upcomingBookings: number;
+  last30Days: { revenue: number; paidOrders: number; paidBookings: number };
+  averageRating: number;
+  reviewCount: number;
+  productCount: number;
+  serviceCount: number;
+  status: Shop["status"];
+  acceptsPayments: boolean;
 }
 
 export interface PaginatedMeta {

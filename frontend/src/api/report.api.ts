@@ -1,10 +1,9 @@
 import { api } from "@/lib/axios";
-import type { Report, ReportStatus, ReportTargetType } from "@/types";
+import type { Page, Report, ReportStatus, ReportTargetType } from "@/types";
 
 export interface CreateReportPayload {
   targetType: ReportTargetType;
   targetId: string;
-  targetLabel?: string;
   reason: string;
 }
 
@@ -14,9 +13,11 @@ export const reportApi = {
 
   mine: () => api.get<Report[]>("/reports/mine").then((r) => r.data),
 
-  listAllAdmin: (status?: ReportStatus) =>
+  listAllAdmin: (status?: ReportStatus, page = 1) =>
     api
-      .get<Report[]>("/reports/admin/all", { params: status ? { status } : {} })
+      .get<Page<Report>>("/reports/admin/all", {
+        params: { page, ...(status ? { status } : {}) },
+      })
       .then((r) => r.data),
 
   resolve: (id: string, status: ReportStatus, adminNote?: string) =>

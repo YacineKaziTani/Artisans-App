@@ -1,8 +1,10 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from "typeorm";
@@ -32,6 +34,13 @@ export enum OrderPaymentStatus {
 }
 
 @Entity("orders")
+// Artisan and client order lists, cart settlement, webhook lookups.
+@Index(["shop", "createdAt"])
+@Index(["client", "createdAt"])
+@Index(["checkoutGroupId"])
+@Index(["stripePaymentIntentId"])
+// The unpaid-checkout expiry sweep only ever looks at this sliver of rows.
+@Index("IDX_orders_unpaid_checkouts", ["createdAt"], { where: `"status" = 'pending' AND "paymentStatus" IN ('unpaid', 'failed')` })
 export class Order {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -83,7 +92,13 @@ export class Order {
   @ManyToOne(() => Shop)
   shop!: Shop;
 
+  // The same column as the `product` relation, exposed directly so stock can
+  // be restored without loading the product.
+  @Column({ type: "uuid", nullable: true })
+  productId?: string | null;
+
   @ManyToOne(() => Product)
+  @JoinColumn({ name: "productId" })
   product!: Product;
 
   // Which specific variant (e.g. Size=M, Color=Red) was ordered, if the
@@ -97,9 +112,9 @@ export class Order {
   @Column({ nullable: true })
   variantLabel?: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }

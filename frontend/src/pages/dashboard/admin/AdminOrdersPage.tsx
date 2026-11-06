@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Pagination } from "@/components/Pagination";
 import {
   Card,
   CardContent,
@@ -6,24 +8,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAdminOrders } from "@/hooks/useOrders";
-import type { OrderStatus } from "@/types";
+import { StatusBadge } from "@/components/StatusBadge";
 
-const STATUS_STYLES: Record<OrderStatus, string> = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  fulfilled: "bg-jade-50 text-jade-600 border-jade-500/25",
-  cancelled: "bg-destructive/10 text-destructive border-destructive/25",
-};
 
-const PAYMENT_STYLES: Record<string, string> = {
-  unpaid: "bg-muted text-foreground/80 border-border",
-  authorized: "bg-sky-100 text-sky-800 border-sky-200",
-  paid: "bg-jade-50 text-jade-600 border-jade-500/25",
-  refunded: "bg-brand-100 text-primary border-border",
-  failed: "bg-destructive/10 text-destructive border-destructive/25",
-};
 
 export default function AdminOrdersPage() {
-  const { data: orders, isLoading, isError } = useAdminOrders();
+  const [page, setPage] = useState(1);
+  const { data: ordersPage, isLoading, isError, isFetching } = useAdminOrders({ page });
+  const orders = ordersPage?.data;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -35,7 +27,7 @@ export default function AdminOrdersPage() {
       <Card>
         <CardHeader>
           <CardTitle>All Orders</CardTitle>
-          <CardDescription>{orders?.length ?? 0} total</CardDescription>
+          <CardDescription>{ordersPage?.meta.total ?? 0} total</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {isLoading && (
@@ -76,19 +68,12 @@ export default function AdminOrdersPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <span
-                    className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_STYLES[order.status]}`}
-                  >
-                    {order.status}
-                  </span>
-                  <span
-                    className={`text-xs font-semibold px-2 py-1 rounded-full border ${PAYMENT_STYLES[order.paymentStatus]}`}
-                  >
-                    {order.paymentStatus}
-                  </span>
+                  <StatusBadge status={order.status} />
+                  <StatusBadge status={order.paymentStatus} />
                 </div>
               </div>
             ))}
+        <Pagination meta={ordersPage?.meta} onPageChange={setPage} disabled={isFetching} />
         </CardContent>
       </Card>
     </div>

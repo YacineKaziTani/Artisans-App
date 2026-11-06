@@ -12,20 +12,15 @@ import { useMyProfile, useUpdateMyProfile } from "@/hooks/useProfile";
 import { useMyBookings, useCancelMyBooking } from "@/hooks/useBookings";
 import { useMyOrders, useCancelMyOrder } from "@/hooks/useOrders";
 import { DisputeDialog } from "@/components/DisputeDialog";
-import type { User, BookingStatus, OrderStatus } from "@/types";
+import { useConfirm } from "@/hooks/useConfirm";
+import { Pagination } from "@/components/Pagination";
+import { getErrorMessage } from "@/lib/errors";
+import { AvatarPicker } from "./account/AvatarPicker";
+import { ChangePasswordCard } from "./account/ChangePasswordCard";
+import type { User } from "@/types";
+import { StatusBadge } from "@/components/StatusBadge";
 
-const ORDER_STATUS_STYLES: Record<OrderStatus, string> = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  fulfilled: "bg-jade-50 text-jade-600 border-jade-500/25",
-  cancelled: "bg-destructive/10 text-destructive border-destructive/25",
-};
 
-const STATUS_STYLES: Record<BookingStatus, string> = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  confirmed: "bg-jade-50 text-jade-600 border-jade-500/25",
-  cancelled: "bg-destructive/10 text-destructive border-destructive/25",
-  completed: "bg-sky-100 text-sky-800 border-sky-200",
-};
 
 function ProfileEditForm({
   profile,
@@ -48,7 +43,10 @@ function ProfileEditForm({
       <form onSubmit={handleSaveProfile} className="space-y-4">
         {updateProfile.isError && (
           <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
-            Couldn't save your changes. Please try again.
+            {getErrorMessage(
+              updateProfile.error,
+              "Couldn't save your changes. Please try again.",
+            )}
           </div>
         )}
 
@@ -123,7 +121,8 @@ export default function ClientProfilePage() {
           )}
 
           {!isLoading && !editMode && profile && (
-            <CardContent>
+            <CardContent className="space-y-6">
+              <AvatarPicker profile={profile} />
               <div className="space-y-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Full Name</p>
@@ -142,6 +141,7 @@ export default function ClientProfilePage() {
           )}
         </Card>
 
+        <ChangePasswordCard />
         <MyBookingsCard />
         <MyOrdersCard />
       </div>
@@ -150,8 +150,11 @@ export default function ClientProfilePage() {
 }
 
 function MyBookingsCard() {
-  const { data: bookings, isLoading, isError } = useMyBookings();
+  const [page, setPage] = useState(1);
+  const { data: bookingsPage, isLoading, isError, isFetching } = useMyBookings({ page });
+  const bookings = bookingsPage?.data;
   const cancelBooking = useCancelMyBooking();
+  const confirm = useConfirm();
   const [disputingBookingId, setDisputingBookingId] = useState<string | null>(null);
 
   return (
@@ -184,8 +187,8 @@ function MyBookingsCard() {
         {!isLoading && !isError && (bookings ?? []).length > 0 && (
           <div className="space-y-3">
             {bookings!.map((booking) => {
-              const cancellable =
-                booking.status === "pending" || booking.status === "confirmed";
+              // The server decides (free-cancellation window); it also says why not.
+              const cancellable = Boolean(booking.canCancel);
               const isCancelling =
                 cancelBooking.isPending && cancelBooking.variables === booking.id;
 
@@ -202,19 +205,38 @@ function MyBookingsCard() {
                       {booking.shop?.shopName} ·{" "}
                       {new Date(booking.scheduledAt).toLocaleString()}
                     </p>
+                    {booking.cancelBlockedReason && (
+                      <p className="text-xs text-muted-foreground mt-1 max-w-md">
+                        {booking.cancelBlockedReason}
+                      </p>
+                    )}
+                    {cancelBooking.isError &&
+                      cancelBooking.variables === booking.id && (
+                        <p className="text-xs text-destructive mt-1">
+                          {getErrorMessage(cancelBooking.error)}
+                        </p>
+                      )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_STYLES[booking.status]}`}
-                    >
-                      {booking.status}
-                    </span>
+                    <StatusBadge status={booking.status} />
                     {cancellable && (
                       <Button
                         size="sm"
                         variant="destructive"
                         disabled={isCancelling}
-                        onClick={() => cancelBooking.mutate(booking.id)}
+                        onClick={async () => {
+                          const paid = booking.paymentStatus === "paid";
+                          const ok = await confirm({
+                            title: "Cancel this booking?",
+                            description: paid
+                              ? "You'll get a full refund to your card."
+                              : "The hold on your card will be released.",
+                            confirmLabel: "Cancel booking",
+                            cancelLabel: "Keep it",
+                            destructive: true,
+                          });
+                          if (ok) cancelBooking.mutate(booking.id);
+                        }}
                       >
                         {isCancelling ? "…" : "Cancel"}
                       </Button>
@@ -234,6 +256,12 @@ function MyBookingsCard() {
             })}
           </div>
         )}
+
+        <Pagination
+          meta={bookingsPage?.meta}
+          onPageChange={setPage}
+          disabled={isFetching}
+        />
       </CardContent>
 
       {disputingBookingId && (
@@ -251,8 +279,11 @@ function MyBookingsCard() {
 }
 
 function MyOrdersCard() {
-  const { data: orders, isLoading, isError } = useMyOrders();
+  const [page, setPage] = useState(1);
+  const { data: ordersPage, isLoading, isError, isFetching } = useMyOrders({ page });
+  const orders = ordersPage?.data;
   const cancelOrder = useCancelMyOrder();
+  const confirm = useConfirm();
   const [disputingOrderId, setDisputingOrderId] = useState<string | null>(null);
 
   return (
@@ -288,6 +319,11 @@ function MyOrdersCard() {
               const cancellable = order.status === "pending";
               const isCancelling =
                 cancelOrder.isPending && cancelOrder.variables === order.id;
+              // A checkout that was never paid for is released automatically;
+              // say so rather than showing it as a normal pending order.
+              const unpaid =
+                order.status === "pending" &&
+                (order.paymentStatus === "unpaid" || order.paymentStatus === "failed");
 
               return (
                 <div
@@ -311,19 +347,42 @@ function MyOrdersCard() {
                     {order.trackingInfo && (
                       <p className="text-xs text-muted-foreground">Tracking: {order.trackingInfo}</p>
                     )}
+                    {unpaid && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Payment wasn't completed — this checkout is released
+                        automatically, and you haven't been charged.
+                      </p>
+                    )}
+                    {cancelOrder.isError && cancelOrder.variables === order.id && (
+                      <p className="text-xs text-destructive mt-1">
+                        {getErrorMessage(cancelOrder.error)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`text-xs font-semibold px-2 py-1 rounded-full border ${ORDER_STATUS_STYLES[order.status]}`}
-                    >
-                      {order.status}
-                    </span>
+                    {unpaid ? (
+                      <StatusBadge status="unpaid" label="payment not completed" />
+                    ) : (
+                      <StatusBadge status={order.status} />
+                    )}
                     {cancellable && (
                       <Button
                         size="sm"
                         variant="destructive"
                         disabled={isCancelling}
-                        onClick={() => cancelOrder.mutate(order.id)}
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: "Cancel this order?",
+                            description:
+                              order.paymentStatus === "paid"
+                                ? "You'll get a full refund to your card."
+                                : "You won't be charged for it.",
+                            confirmLabel: "Cancel order",
+                            cancelLabel: "Keep it",
+                            destructive: true,
+                          });
+                          if (ok) cancelOrder.mutate(order.id);
+                        }}
                       >
                         {isCancelling ? "…" : "Cancel"}
                       </Button>
@@ -343,6 +402,12 @@ function MyOrdersCard() {
             })}
           </div>
         )}
+
+        <Pagination
+          meta={ordersPage?.meta}
+          onPageChange={setPage}
+          disabled={isFetching}
+        />
       </CardContent>
 
       {disputingOrderId && (

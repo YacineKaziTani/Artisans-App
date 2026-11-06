@@ -13,10 +13,12 @@ import {
   Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LoginLink } from "@/components/LoginLink";
+import { getErrorMessage } from "@/lib/errors";
 import { Textarea } from "@/components/ui/textarea";
 import { useCartStore } from "@/store/cart.store";
 import { useAuthStore } from "@/store/auth.store";
-import { useCartCheckout } from "@/hooks/useOrders";
+import { useAbandonCheckout, useCartCheckout } from "@/hooks/useOrders";
 import { stripePromise } from "@/lib/stripe";
 import { BookingPaymentForm } from "@/components/booking/BookingPaymentForm";
 import type { DeliveryMethod } from "@/types";
@@ -30,12 +32,14 @@ export default function CartPage() {
   const navigate = useNavigate();
 
   const checkout = useCartCheckout();
+  const abandonCheckout = useAbandonCheckout();
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("pickup");
   const [shippingAddress, setShippingAddress] = useState("");
 
-  const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  // Summed in cents so the total matches what the API charges.
+  const total = items.reduce((sum, i) => sum + Math.round(i.price * 100) * i.quantity, 0) / 100;
 
   const handleCheckout = () => {
     if (deliveryMethod === "delivery" && !shippingAddress.trim()) return;
@@ -68,10 +72,10 @@ export default function CartPage() {
             Payment authorized
           </h1>
           <p className="mt-3 leading-relaxed text-muted-foreground">
-            Your card has been authorized and the artisans have been notified.
-            You'll be charged once each order is fulfilled — if an artisan
-            can't fulfill theirs, that hold is released and you're not charged
-            for it.
+            Your card is on hold — nothing is charged yet. The artisan has been
+            emailed your order, and a confirmation is on its way to your inbox.
+            You'll be charged for each item once it's fulfilled — anything the
+            artisan can't fulfill is released and you're not charged for it.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Button onClick={() => navigate("/profile-client")}>
@@ -132,7 +136,15 @@ export default function CartPage() {
                   clear();
                   setConfirmed(true);
                 }}
-                onCancel={() => setClientSecret(null)}
+                onCancel={() => {
+                  // Backing out of payment: the checkout already reserved
+                  // this stock, so release it before the user can retry —
+                  // otherwise every cancel-and-retry reserved it again.
+                  const orderIds = checkout.data?.orders.map((o) => o.id);
+                  if (orderIds?.length) abandonCheckout.mutate(orderIds);
+                  checkout.reset();
+                  setClientSecret(null);
+                }}
               />
             </Elements>
           </div>
@@ -286,7 +298,8 @@ export default function CartPage() {
 
             {checkout.isError && (
               <p className="alert-error">
-                Couldn't start checkout. Please try again.
+                {/* e.g. "Only 2 left of that variant", "This product is no longer available" */}
+                {getErrorMessage(checkout.error, "Couldn't start checkout. Please try again.")}
               </p>
             )}
 
@@ -295,14 +308,16 @@ export default function CartPage() {
                 variant="gradient"
                 size="lg"
                 className="w-full"
-                disabled={checkout.isPending}
+                disabled={checkout.isPending || abandonCheckout.isPending}
                 onClick={handleCheckout}
               >
-                {checkout.isPending ? "Starting…" : "Proceed to payment"}
+                {checkout.isPending || abandonCheckout.isPending
+                  ? "Starting…"
+                  : "Proceed to payment"}
               </Button>
             ) : (
               <Button asChild variant="outline" size="lg" className="w-full">
-                <Link to="/login">Log in to check out</Link>
+                <LoginLink>Log in to check out</LoginLink>
               </Button>
             )}
 
