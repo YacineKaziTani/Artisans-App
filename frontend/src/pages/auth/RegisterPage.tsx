@@ -25,6 +25,8 @@ const ROLES = [
 export default function RegisterPage() {
   const [searchParams] = useSearchParams();
   const initialType = searchParams.get("type");
+  // From an invite link (/register?ref=CODE).
+  const ref = searchParams.get("ref") ?? undefined;
   const location = useLocation();
 
   const [name, setName] = useState("");
@@ -40,7 +42,7 @@ export default function RegisterPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    register({ name, email, password, phone, role: userType, acceptTerms });
+    register({ name, email, password, phone, role: userType, acceptTerms, ref });
   };
 
   return (

@@ -10,11 +10,13 @@ import {
 import { UserRole } from "../modules/users/entities/user.entities";
 import { resolveSession } from "../middleware/auth.middleware";
 import { isUuid } from "../middleware/validate.middleware";
-import { allowedOrigins } from "../lib/urls";
+import { allowedOrigins, isAllowedOrigin } from "../lib/urls";
+import { emailVerificationRequired } from "../config/email-verification";
 
 interface AuthedSocket extends Socket {
   userId?: string;
   userRole?: UserRole;
+  emailVerified?: boolean;
 }
 
 type Ack = (res: { ok: boolean; message?: string }) => void;
@@ -61,6 +63,13 @@ export function initSocketServer(httpServer: HttpServer) {
       origin: allowedOrigins(),
       credentials: true,
     },
+    // CORS only covers the HTTP long-polling transport; browsers don't
+    // apply it to WebSockets. Without this, any website a signed-in user
+    // visited could open a socket with their cookie and read or send their
+    // messages (cross-site WebSocket hijacking).
+    allowRequest: (req, callback) => {
+      callback(null, isAllowedOrigin(req.headers.origin));
+    },
   });
 
   // Same session rules as the HTTP API: suspended users, deleted accounts
@@ -75,6 +84,7 @@ export function initSocketServer(httpServer: HttpServer) {
 
       socket.userId = session.user.id;
       socket.userRole = session.user.role;
+      socket.emailVerified = session.user.emailVerified;
       next();
     } catch (err) {
       console.error("[socket] handshake failed:", err);
@@ -114,6 +124,9 @@ export function initSocketServer(httpServer: HttpServer) {
 
       if (!isPlainObject(payload) || !isUuid(payload.conversationId)) {
         return ack({ ok: false, message: "Conversation not found" });
+      }
+      if (emailVerificationRequired && !socket.emailVerified) {
+        return ack({ ok: false, message: "Please confirm your email address before sending messages" });
       }
       const { conversationId, content } = payload;
       if (typeof content !== "string" || !content.trim()) {
@@ -202,4 +215,9 @@ export function closeSocketServer(): Promise<void> {
  */
 export function disconnectUserSockets(userId: string) {
   io?.in(userRoom(userId)).disconnectSockets(true);
+}
+
+/** Pushes an event to every open tab of one user (no-op without a socket server, e.g. in tests). */
+export function emitToUser(userId: string, event: string, payload: unknown) {
+  io?.to(userRoom(userId)).emit(event, payload);
 }

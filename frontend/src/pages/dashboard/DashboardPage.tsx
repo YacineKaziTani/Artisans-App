@@ -18,17 +18,26 @@ import { useAdminUsers } from "@/hooks/useAdminUsers";
 import { useAdminShops } from "@/hooks/useAdminShops";
 import { useMyShop, useMyShopStats } from "@/hooks/useShops";
 import { formatMoney } from "@/lib/pricing";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/axios";
+import { EmailDeliveryCard } from "./admin/EmailDeliveryCard";
+import { ShopSetupChecklist } from "./ShopSetupChecklist";
+import { NewsletterCard } from "./admin/NewsletterCard";
+import { ReferralCard } from "@/components/growth/ReferralCard";
 
 function StatCard({
   label,
   value,
   icon: Icon,
   accent,
+  hint,
 }: {
   label: string;
   value: string | number;
   icon: LucideIcon;
   accent?: boolean;
+  /** A short line under the number, e.g. the change vs the previous period. */
+  hint?: string;
 }) {
   return (
     <div className="surface p-5">
@@ -47,8 +56,66 @@ function StatCard({
       <p className="mt-3 font-display text-3xl font-semibold tabular-nums">
         {value}
       </p>
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
+}
+
+/** "+12% vs previous 30 days" (or "new" when the previous period was empty). */
+function changeHint(current: number, previous: number, days: number) {
+  if (previous === 0) return current > 0 ? `New in the last ${days} days` : `None in the previous ${days} days either`;
+  const pct = Math.round(((current - previous) / previous) * 100);
+  return `${pct >= 0 ? "+" : ""}${pct}% vs previous ${days} days`;
+}
+
+/** How the marketplace is doing: the last 30 days next to the 30 before. */
+function AdminMetrics() {
+  const { data, isError } = useQuery({
+    queryKey: ["admin", "metrics", 30],
+    queryFn: () => api.get<AdminMetricsData>("/metrics/admin", { params: { days: 30 } }).then((r) => r.data),
+  });
+  if (isError) return <p className="alert-error">Couldn't load marketplace metrics.</p>;
+  if (!data) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="skeleton h-28" />
+        ))}
+      </div>
+    );
+  }
+  const { current: c, previous: p, days } = data;
+  return (
+    <section className="space-y-3" aria-labelledby="metrics-title">
+      <h2 id="metrics-title" className="font-display text-lg font-semibold">Last {days} days</h2>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Sales volume" value={formatMoney(c.volume)} icon={DollarSign} accent={c.volume > 0} hint={changeHint(c.volume, p.volume, days)} />
+        <StatCard label={`Commission (${data.commissionPercent}%)`} value={formatMoney(c.commission)} icon={DollarSign} hint={changeHint(c.commission, p.commission, days)} />
+        <StatCard label="Paid orders & bookings" value={c.sales} icon={ShoppingBag} hint={changeHint(c.sales, p.sales, days)} />
+        <StatCard
+          label="New sign-ups"
+          value={c.newClients + c.newArtisans}
+          icon={Users}
+          hint={`${c.newClients} client${c.newClients === 1 ? "" : "s"}, ${c.newArtisans} artisan${c.newArtisans === 1 ? "" : "s"}`}
+        />
+      </div>
+    </section>
+  );
+}
+
+interface AdminMetricsWindow {
+  sales: number;
+  volume: number;
+  commission: number;
+  newClients: number;
+  newArtisans: number;
+}
+interface AdminMetricsData {
+  days: number;
+  commissionPercent: number;
+  current: AdminMetricsWindow;
+  previous: AdminMetricsWindow;
+  shops: Record<string, number>;
 }
 
 function QuickLink({
@@ -102,6 +169,11 @@ function AdminDashboardHome() {
           accent={pendingShops > 0}
         />
       </div>
+
+      <AdminMetrics />
+
+      <EmailDeliveryCard />
+      <NewsletterCard />
 
       <section className="surface p-6">
         <h2 className="font-display text-lg font-semibold">Quick links</h2>
@@ -267,7 +339,9 @@ function ArtisanDashboardHome() {
         </div>
       )}
 
+      {!isLoading && shop && <ShopSetupChecklist shop={shop} />}
       {!isLoading && shop && <ArtisanShopStats />}
+      {!isLoading && shop && <ReferralCard audience="artisans" />}
 
       <section className="surface p-6">
         <h2 className="font-display text-lg font-semibold">Manage your shop</h2>

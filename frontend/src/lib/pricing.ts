@@ -38,3 +38,24 @@ export function lineTotal(unitPrice: number, quantity: number): number {
 export function formatMoney(amount: string | number): string {
   return `$${Number(amount).toFixed(2)}`;
 }
+
+/**
+ * The delivery charge for an order (a cart counts as one), mirroring the
+ * API: the shop's flat fee, waived once the items reach its free-delivery
+ * threshold. Pickup is always free.
+ */
+export function deliveryFeeFor(
+  shop: { deliveryFee?: string | number; freeDeliveryOver?: string | number | null } | null | undefined,
+  itemsSubtotal: number,
+  method: "pickup" | "delivery",
+) {
+  if (method !== "delivery" || !shop) return 0;
+  const threshold = shop.freeDeliveryOver;
+  if (threshold != null && threshold !== "" && itemsSubtotal >= Number(threshold)) return 0;
+  return Number(shop.deliveryFee ?? 0);
+}
+
+/** The method a shop allows first: pickup when offered, else delivery. */
+export function defaultDeliveryMethod(shop: { pickupEnabled?: boolean } | null | undefined): "pickup" | "delivery" {
+  return shop?.pickupEnabled === false ? "delivery" : "pickup";
+}

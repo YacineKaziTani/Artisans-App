@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useCategories } from "@/hooks/useCategories";
+import { img } from "@/lib/images";
 
 export interface ShopFieldValues {
   shopName: string;
@@ -90,7 +91,7 @@ export function ShopFields({
         <div className="flex items-center gap-4">
           {shownLogo ? (
             <img
-              src={shownLogo}
+              {...img(shownLogo, 64)}
               alt="Shop logo"
               className="size-16 rounded-xl border border-border object-cover"
             />

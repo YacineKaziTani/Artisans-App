@@ -9,6 +9,7 @@ import {
 import { useAdminShopPreview } from "@/hooks/useShops";
 import { getErrorMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/pricing";
+import { img } from "@/lib/images";
 
 /**
  * What a shop actually looks like before an admin approves it. Pending
@@ -48,7 +49,7 @@ export function ShopPreviewDialog({
             <DialogHeader>
               <div className="flex items-center gap-3">
                 {shop.logoUrl && (
-                  <img src={shop.logoUrl} alt="" className="size-12 rounded-xl border border-border object-cover" />
+                  <img {...img(shop.logoUrl, 48)} alt="" className="size-12 rounded-xl border border-border object-cover" />
                 )}
                 <div className="min-w-0">
                   <DialogTitle>{shop.shopName}</DialogTitle>
@@ -133,7 +134,7 @@ export function ShopPreviewDialog({
                   {shop.products!.map((product) => (
                     <li key={product.id} className="overflow-hidden rounded-lg border border-border text-sm">
                       {product.imageUrl ? (
-                        <img src={product.imageUrl} alt="" className="h-24 w-full object-cover" />
+                        <img {...img(product.imageUrl, 200)} alt="" className="h-24 w-full object-cover" />
                       ) : (
                         <div className="flex h-24 items-center justify-center bg-brand-50 text-brand-500">
                           <Package className="size-6" />
@@ -156,7 +157,7 @@ export function ShopPreviewDialog({
                   {shop.photos!.map((photo) => (
                     <img
                       key={photo.id}
-                      src={photo.url}
+                      {...img(photo.url, 200)}
                       alt={photo.caption ?? ""}
                       className="aspect-square w-full rounded-lg object-cover"
                     />

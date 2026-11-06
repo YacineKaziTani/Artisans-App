@@ -10,6 +10,7 @@ import { CLEAR_COOKIE_OPTIONS } from "../../../config/cookie";
 import { disconnectUserSockets } from "../../../realtime/socket";
 import { isUniqueViolation } from "../../../lib/db";
 import { accountView } from "../user.views";
+import { newReferralCode } from "../../../lib/codes";
 import {
   pageResult,
   parsePagination,
@@ -28,6 +29,10 @@ const PROFILE_FIELDS = {
   role: true,
   isActive: true,
   avatarUrl: true,
+  // accountView reports these — leaving them out made every account look
+  // unconfirmed with activity emails on.
+  emailVerifiedAt: true,
+  emailNotifications: true,
   createdAt: true,
 } as const;
 
@@ -105,10 +110,11 @@ export const getMe = async (req: Request, res: Response) => {
 export const updateMe = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { name, phone, avatarUrl } = req.body as {
+    const { name, phone, avatarUrl, emailNotifications } = req.body as {
       name?: string;
       phone?: string;
       avatarUrl?: string | null;
+      emailNotifications?: boolean;
     };
 
     if (phone !== undefined) {
@@ -126,6 +132,7 @@ export const updateMe = async (req: Request, res: Response) => {
     if (name !== undefined) changes.name = name;
     if (phone !== undefined) changes.phone = phone;
     if (avatarUrl !== undefined) changes.avatarUrl = avatarUrl;
+    if (emailNotifications !== undefined) changes.emailNotifications = emailNotifications;
 
     try {
       if (Object.keys(changes).length) await userRepo.update(userId, changes);
@@ -308,5 +315,31 @@ export const uploadMyAvatar = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("uploadMyAvatar failed:", error);
     res.status(500).json({ message: "Couldn't update your photo" });
+  }
+};
+
+/**
+ * GET /users/mine/referrals — the user's invite code and how many people
+ * signed up with it (accounts made before invite codes get one now).
+ */
+export const getMyReferrals = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const user = await userRepo.findOne({ where: { id: userId }, select: { id: true, referralCode: true } });
+    if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+    let code = user.referralCode;
+    if (!code) {
+      code = newReferralCode();
+      await userRepo.update(userId, { referralCode: code });
+    }
+    const [joined, artisans] = await Promise.all([
+      userRepo.count({ where: { referredBy: { id: userId } } }),
+      userRepo.count({ where: { referredBy: { id: userId }, role: UserRole.ARTISAN } }),
+    ]);
+    return res.json({ code, joined, artisans });
+  } catch (error) {
+    console.error("getMyReferrals failed:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };

@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Hammer } from "lucide-react";
+import { NewsletterSignup } from "@/components/growth/NewsletterSignup";
 
 const COLUMNS = [
   {
@@ -7,6 +8,7 @@ const COLUMNS = [
     links: [
       { to: "/categories", label: "Categories" },
       { to: "/products", label: "Products" },
+      { to: "/sell", label: "Sell on Artisan Market" },
       { to: "/cart", label: "Cart" },
     ],
   },
@@ -21,6 +23,7 @@ const COLUMNS = [
   {
     title: "Legal",
     links: [
+      { to: "/help", label: "Help & contact" },
       { to: "/terms", label: "Terms of Service" },
       { to: "/privacy", label: "Privacy Policy" },
       { to: "/refund-policy", label: "Refund Policy" },
@@ -46,6 +49,9 @@ export function MarketplaceFooter() {
               A marketplace for independent makers — handmade goods, skilled
               services, and payments that only settle once the work is done.
             </p>
+            <div className="mt-6">
+              <NewsletterSignup />
+            </div>
           </div>
 
           {COLUMNS.map((column) => (

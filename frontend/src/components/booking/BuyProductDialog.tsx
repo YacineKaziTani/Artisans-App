@@ -14,25 +14,32 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAbandonCheckout, useCreateOrder } from "@/hooks/useOrders";
 import { stripePromise } from "@/lib/stripe";
 import { BookingPaymentForm } from "@/components/booking/BookingPaymentForm";
-import type { DeliveryMethod, Product, ProductVariant } from "@/types";
-import { lineTotal, variantLabel, variantUnitPrice } from "@/lib/pricing";
+import type { DeliveryMethod, Product, ProductVariant, Shop } from "@/types";
+import { defaultDeliveryMethod, deliveryFeeFor, formatMoney, lineTotal, variantLabel, variantUnitPrice } from "@/lib/pricing";
+import { DeliveryChoice } from "./DeliveryChoice";
 import { getErrorMessage } from "@/lib/errors";
+import { track } from "@/lib/analytics";
 
 export function BuyProductDialog({
   product,
+  shop,
   open,
   onOpenChange,
 }: {
   product: Product;
+  /** Delivery options come from the shop; defaults to product.shop. */
+  shop?: Shop;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const seller = shop ?? product.shop;
   const [quantity, setQuantity] = useState(1);
   const [selectedValues, setSelectedValues] = useState<Record<string, string>>(
     {},
   );
-  const [deliveryMethod, setDeliveryMethod] =
-    useState<DeliveryMethod>("pickup");
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(() =>
+    defaultDeliveryMethod(seller),
+  );
   const [shippingAddress, setShippingAddress] = useState("");
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -71,7 +78,7 @@ export function BuyProductDialog({
   const reset = () => {
     setQuantity(1);
     setSelectedValues({});
-    setDeliveryMethod("pickup");
+    setDeliveryMethod(defaultDeliveryMethod(seller));
     setShippingAddress("");
     setClientSecret(null);
     setConfirmed(false);
@@ -107,7 +114,9 @@ export function BuyProductDialog({
     );
   };
 
-  const total = lineTotal(unitPrice, quantity);
+  const itemsTotal = lineTotal(unitPrice, quantity);
+  const deliveryFee = deliveryFeeFor(seller, itemsTotal, deliveryMethod);
+  const total = itemsTotal + deliveryFee;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -131,13 +140,17 @@ export function BuyProductDialog({
             <DialogHeader>
               <DialogTitle>Authorize Payment for {product.title}</DialogTitle>
               <DialogDescription>
-                {quantity} × ${unitPrice.toFixed(2)} = ${total.toFixed(2)} —
-                charged only once the artisan fulfills it.
+                {quantity} × {formatMoney(unitPrice)}
+                {deliveryFee > 0 ? ` + ${formatMoney(deliveryFee)} delivery` : ""} ={" "}
+                {formatMoney(total)} — charged only once the artisan fulfills it.
               </DialogDescription>
             </DialogHeader>
             <Elements stripe={stripePromise} options={{ clientSecret }}>
               <BookingPaymentForm
-                onSuccess={() => setConfirmed(true)}
+                onSuccess={() => {
+                  track("Payment authorized", { kind: "order" });
+                  setConfirmed(true);
+                }}
                 onCancel={() => handleClose(false)}
               />
             </Elements>
@@ -244,33 +257,12 @@ export function BuyProductDialog({
                   </p>
                 )}
               </div>
-              <div className="space-y-2">
-                <Label>Delivery</Label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDeliveryMethod("pickup")}
-                    className={`flex-1 text-sm py-2 rounded-md border ${
-                      deliveryMethod === "pickup"
-                        ? "border-primary bg-brand-50 text-primary"
-                        : "border-border text-muted-foreground"
-                    }`}
-                  >
-                    Pickup
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeliveryMethod("delivery")}
-                    className={`flex-1 text-sm py-2 rounded-md border ${
-                      deliveryMethod === "delivery"
-                        ? "border-primary bg-brand-50 text-primary"
-                        : "border-border text-muted-foreground"
-                    }`}
-                  >
-                    Delivery
-                  </button>
-                </div>
-              </div>
+              <DeliveryChoice
+                shop={seller}
+                value={deliveryMethod}
+                onChange={setDeliveryMethod}
+                itemsSubtotal={itemsTotal}
+              />
               {deliveryMethod === "delivery" && (
                 <div className="space-y-2">
                   <Label htmlFor="shippingAddress">Shipping Address</Label>
@@ -286,7 +278,8 @@ export function BuyProductDialog({
               )}
               <p className="text-sm text-muted-foreground">
                 Total:{" "}
-                <span className="font-semibold">${total.toFixed(2)}</span>
+                <span className="font-semibold">{formatMoney(total)}</span>
+                {deliveryFee > 0 && <span> (incl. {formatMoney(deliveryFee)} delivery)</span>}
               </p>
               <Button
                 type="submit"

@@ -7,6 +7,8 @@ import { LoginLink } from "@/components/LoginLink";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { ReportDialog } from "@/components/ReportDialog";
 import { BuyProductDialog } from "@/components/booking/BuyProductDialog";
+import { ProductReviews } from "@/components/reviews/ProductReviews";
+import { PageMeta } from "@/components/PageMeta";
 import { useProduct } from "@/hooks/useProducts";
 import { useFavoriteIds } from "@/hooks/useFavorites";
 import { useAuthStore } from "@/store/auth.store";
@@ -14,6 +16,7 @@ import { useCartStore } from "@/store/cart.store";
 import { shopCanAcceptPayments } from "@/lib/stripe";
 import { getErrorMessage } from "@/lib/errors";
 import { formatMoney, variantUnitPrice } from "@/lib/pricing";
+import { img } from "@/lib/images";
 
 /**
  * A product's own page, so products can be linked to and shared — every
@@ -87,6 +90,24 @@ export default function ProductDetailPage() {
 
   return (
     <main className="page-shell py-12">
+      <PageMeta
+        title={shop ? `${product.title} by ${shop.shopName}` : product.title}
+        description={product.description || `${product.title} — handmade${shop ? ` by ${shop.shopName}` : ""}.`}
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: product.title,
+          description: product.description || undefined,
+          image: images.length ? images : undefined,
+          brand: shop ? { "@type": "Brand", name: shop.shopName } : undefined,
+          offers: {
+            "@type": "Offer",
+            price: minPrice.toFixed(2),
+            priceCurrency: "USD",
+            availability: soldOut ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+          },
+        }}
+      />
       {shop && (
         <Link
           to={`/artisan/${shop.id}`}
@@ -101,7 +122,7 @@ export default function ProductDetailPage() {
         <div className="space-y-3">
           {mainImage ? (
             <img
-              src={mainImage}
+              {...img(mainImage, 720)}
               alt={product.title}
               className="aspect-square w-full rounded-2xl border border-border object-cover"
             />
@@ -123,7 +144,7 @@ export default function ProductDetailPage() {
                     url === mainImage ? "border-primary" : "border-transparent"
                   }`}
                 >
-                  <img src={url} alt="" className="size-full object-cover" />
+                  <img {...img(url, 64)} alt="" className="size-full object-cover" />
                 </button>
               ))}
             </div>
@@ -234,6 +255,8 @@ export default function ProductDetailPage() {
           )}
         </div>
       </div>
+
+      <ProductReviews productId={product.id} shopName={shop?.shopName} />
 
       {buying && (
         <BuyProductDialog

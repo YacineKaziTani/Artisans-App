@@ -1,10 +1,13 @@
 import { api } from "@/lib/axios";
-import type { PaginatedShops, Shop, ShopStats } from "@/types";
+import type { OpeningHours, PaginatedShops, Shop, ShopEarnings, ShopStats } from "@/types";
 
 export interface ListShopsParams {
   category?: string;
   city?: string;
   search?: string;
+  /** Only shops rated at least this. */
+  minRating?: number;
+  sort?: "rating" | "newest" | "name";
   page?: number;
   limit?: number;
 }
@@ -101,6 +104,24 @@ export const shopApi = {
 
   /** Artisan dashboard numbers. */
   getMyStats: () => api.get<ShopStats>("/shops/mine/stats").then((r) => r.data),
+
+  updateHours: (payload: { timezone: string; openingHours: OpeningHours | null }) =>
+    api.put<{ shop: Shop }>("/shops/mine/hours", payload).then((r) => r.data.shop),
+
+  updateDelivery: (payload: {
+    pickupEnabled: boolean;
+    deliveryEnabled: boolean;
+    deliveryFee: number;
+    freeDeliveryOver: number | null;
+    deliveryArea: string;
+  }) => api.put<{ shop: Shop }>("/shops/mine/delivery", payload).then((r) => r.data.shop),
+
+  getMyEarnings: (page = 1) =>
+    api.get<ShopEarnings>("/shops/mine/earnings", { params: { page } }).then((r) => r.data),
+
+  /** A one-time sign-in link to the artisan's Stripe Express dashboard. */
+  getStripeDashboardLink: () =>
+    api.post<{ url: string }>("/shops/mine/stripe-dashboard").then((r) => r.data),
 
   /** Admin preview of a shop in any status (pending shops aren't public). */
   getAdminPreview: (id: string) =>

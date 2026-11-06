@@ -4,6 +4,7 @@ import { useAddProductImage, useRemoveProductImage } from "@/hooks/useProducts";
 import { useConfirm } from "@/hooks/useConfirm";
 import { getErrorMessage } from "@/lib/errors";
 import type { Product, ProductImage } from "@/types";
+import { img } from "@/lib/images";
 
 
 export function ProductImagesManager({ product }: { product: Product }) {
@@ -29,7 +30,7 @@ export function ProductImagesManager({ product }: { product: Product }) {
         {(product.images ?? []).map((image) => (
           <div key={image.id} className="relative flex-shrink-0">
             <img
-              src={image.url}
+              {...img(image.url, 64)}
               alt=""
               className="w-16 h-16 object-cover rounded-md border border-border"
             />

@@ -86,3 +86,6 @@ jobs:
 
       - name: Type-check and build
         run: npm run build
+
+      - name: Type-check the Vercel functions (SEO)
+        run: npm run typecheck:api

@@ -22,6 +22,9 @@ import { useAbandonCheckout, useCartCheckout } from "@/hooks/useOrders";
 import { stripePromise } from "@/lib/stripe";
 import { BookingPaymentForm } from "@/components/booking/BookingPaymentForm";
 import type { DeliveryMethod } from "@/types";
+import { useShop } from "@/hooks/useShops";
+import { deliveryFeeFor, formatMoney } from "@/lib/pricing";
+import { track } from "@/lib/analytics";
 
 export default function CartPage() {
   const items = useCartStore((s) => s.items);
@@ -39,10 +42,20 @@ export default function CartPage() {
   const [shippingAddress, setShippingAddress] = useState("");
 
   // Summed in cents so the total matches what the API charges.
-  const total = items.reduce((sum, i) => sum + Math.round(i.price * 100) * i.quantity, 0) / 100;
+  const subtotal = items.reduce((sum, i) => sum + Math.round(i.price * 100) * i.quantity, 0) / 100;
+
+  // A cart is always from one shop; its settings decide pickup/delivery
+  // and the fee (charged once per checkout, as the API does).
+  const { data: shop } = useShop(items[0]?.shopId);
+  const pickupOk = shop?.pickupEnabled !== false;
+  const deliveryOk = shop?.deliveryEnabled !== false;
+  const method: DeliveryMethod =
+    deliveryMethod === "pickup" && !pickupOk ? "delivery" : deliveryMethod === "delivery" && !deliveryOk ? "pickup" : deliveryMethod;
+  const deliveryFee = deliveryFeeFor(shop, subtotal, method);
+  const total = subtotal + deliveryFee;
 
   const handleCheckout = () => {
-    if (deliveryMethod === "delivery" && !shippingAddress.trim()) return;
+    if (method === "delivery" && !shippingAddress.trim()) return;
     checkout.mutate(
       {
         items: items.map((i) => ({
@@ -51,9 +64,9 @@ export default function CartPage() {
           quantity: i.quantity,
         })),
         delivery: {
-          deliveryMethod,
+          deliveryMethod: method,
           shippingAddress:
-            deliveryMethod === "delivery" ? shippingAddress : undefined,
+            method === "delivery" ? shippingAddress : undefined,
         },
       },
       { onSuccess: (result) => setClientSecret(result.clientSecret) },
@@ -127,13 +140,14 @@ export default function CartPage() {
         <div className="surface mx-auto max-w-lg p-7">
           <h2 className="flex items-center gap-2 font-display text-xl font-semibold">
             <Lock className="size-4 text-muted-foreground" />
-            Authorize ${total.toFixed(2)}
+            Authorize {formatMoney(total)}
           </h2>
           <div className="mt-5">
             <Elements stripe={stripePromise} options={{ clientSecret }}>
               <BookingPaymentForm
                 onSuccess={() => {
                   clear();
+                  track("Payment authorized", { kind: "cart" });
                   setConfirmed(true);
                 }}
                 onCancel={() => {
@@ -248,14 +262,17 @@ export default function CartPage() {
                     { value: "delivery", label: "Delivery", icon: Truck },
                   ] as const
                 ).map(({ value, label, icon: Icon }) => {
-                  const active = deliveryMethod === value;
+                  const active = method === value;
+                  const offered = value === "pickup" ? pickupOk : deliveryOk;
                   return (
                     <button
                       key={value}
                       type="button"
+                      disabled={!offered}
+                      title={offered ? undefined : `This shop doesn't offer ${value}`}
                       onClick={() => setDeliveryMethod(value)}
                       aria-pressed={active}
-                      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                         active
                           ? "border-primary bg-brand-50 text-brand-700"
                           : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -267,9 +284,12 @@ export default function CartPage() {
                   );
                 })}
               </div>
+              {deliveryOk && shop?.deliveryArea && (
+                <p className="mt-2 text-xs text-muted-foreground">Delivers to: {shop.deliveryArea}</p>
+              )}
             </div>
 
-            {deliveryMethod === "delivery" && (
+            {method === "delivery" && (
               <div>
                 <label htmlFor="shipping-address" className="field-label">
                   Shipping address
@@ -288,11 +308,17 @@ export default function CartPage() {
             <div className="space-y-2 border-t border-border/70 pt-5">
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>Subtotal</span>
-                <span className="tabular-nums">${total.toFixed(2)}</span>
+                <span className="tabular-nums">{formatMoney(subtotal)}</span>
               </div>
+              {method === "delivery" && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Delivery</span>
+                  <span className="tabular-nums">{deliveryFee > 0 ? formatMoney(deliveryFee) : "Free"}</span>
+                </div>
+              )}
               <div className="flex justify-between font-display text-xl font-semibold">
                 <span>Total</span>
-                <span className="tabular-nums">${total.toFixed(2)}</span>
+                <span className="tabular-nums">{formatMoney(total)}</span>
               </div>
             </div>
 

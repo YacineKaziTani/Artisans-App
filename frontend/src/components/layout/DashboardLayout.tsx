@@ -20,6 +20,7 @@ import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLogout } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/auth.store";
+import { NotificationBell } from "@/components/NotificationBell";
 
 type NavItem = { to: string; label: string; icon: LucideIcon };
 type NavGroup = { heading: string; items: NavItem[] };
@@ -192,18 +193,20 @@ export function DashboardLayout() {
 
       {/* ── Main ─────────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border/70 bg-card px-4 lg:hidden">
+        <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border/70 bg-card px-4 lg:h-14 lg:px-8">
           <Button
             variant="ghost"
             size="icon"
             aria-label="Open menu"
             onClick={() => setSidebarOpen(true)}
+            className="lg:hidden"
           >
             <Menu className="size-[18px]" />
           </Button>
-          <span className="font-display text-base font-semibold">
+          <span className="font-display text-base font-semibold lg:hidden">
             Dashboard
           </span>
+          <NotificationBell className="ml-auto" />
         </header>
 
         <main className="flex-1 overflow-y-auto p-5 sm:p-8">

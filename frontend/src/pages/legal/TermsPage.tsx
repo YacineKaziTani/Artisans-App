@@ -1,6 +1,8 @@
+import { PageMeta } from "@/components/PageMeta";
 export default function TermsPage() {
   return (
     <main className="page-narrow py-16">
+      <PageMeta title="Terms of Service" />
       <div className="surface p-8 sm:p-12">
         <h1 className="font-display text-4xl font-semibold">Terms of Service</h1>
         <p className="mt-2 mb-10 text-sm text-muted-foreground">Last updated: [date]</p>

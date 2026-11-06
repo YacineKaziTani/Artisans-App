@@ -17,8 +17,14 @@ import conversationRoutes from "./modules/messaging/conversation.routes";
 import reportRoutes from "./modules/reports/report.routes";
 import disputeRoutes from "./modules/disputes/dispute.routes";
 import favoriteRoutes from "./modules/favorites/favorite.routes";
+import notificationRoutes from "./modules/notifications/notification.routes";
+import supportRoutes from "./modules/support/support.routes";
+import seoRoutes from "./modules/seo/seo.routes";
+import newsletterRoutes from "./modules/newsletter/newsletter.routes";
+import metricsRoutes from "./modules/metrics/metrics.routes";
 import { stripeWebhook } from "./modules/booking/booking.controller";
 import { generalLimiter } from "./middleware/rate-limit.middleware";
+import { requireTrustedOrigin } from "./middleware/origin.middleware";
 import { allowedOrigins } from "./lib/urls";
 
 const HEALTH_DB_TIMEOUT_MS = 2000;
@@ -81,6 +87,7 @@ export function createApp() {
     res.status(db ? 200 : 503).json({ status: db ? "ok" : "degraded", db });
   });
 
+  app.use("/api", requireTrustedOrigin);
   app.use("/api", generalLimiter);
 
   app.use("/api/shops", shopRoutes);
@@ -97,6 +104,11 @@ export function createApp() {
   app.use("/api/reports", reportRoutes);
   app.use("/api/disputes", disputeRoutes);
   app.use("/api/favorites", favoriteRoutes);
+  app.use("/api/notifications", notificationRoutes);
+  app.use("/api/support", supportRoutes);
+  app.use("/api/seo", seoRoutes);
+  app.use("/api/newsletter", newsletterRoutes);
+  app.use("/api/metrics", metricsRoutes);
 
   app.use("/api", (_req, res) => {
     res.status(404).json({ message: "Not found" });

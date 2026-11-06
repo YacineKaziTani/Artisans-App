@@ -19,6 +19,7 @@ import { Booking } from "../booking/booking.entities";
 import { Product } from "../products/product.entities";
 import { User } from "../users/entities/user.entities";
 import { shopCanAcceptPayments } from "../../config/connect";
+import type { OpeningHours } from "../../lib/schedule";
 
 export enum ShopStatus {
   ACTIVE = "active",
@@ -91,6 +92,37 @@ export class Shop {
   // webhook endpoint yet, so it isn't updated in the background.
   @Column({ type: "boolean", default: false })
   stripeOnboardingComplete!: boolean;
+
+  // ── Bookings ──
+  // The shop's own IANA time zone: opening hours, appointment slots and
+  // the times in booking emails are all in it.
+  @Column({ type: "varchar", default: "UTC" })
+  timezone!: string;
+
+  // Weekly hours, e.g. { mon: [{ open: "09:00", close: "17:00" }] }. Null or
+  // empty = no fixed hours: clients request any time and the artisan
+  // confirms or declines.
+  @Column({ type: "jsonb", nullable: true })
+  openingHours?: OpeningHours | null;
+
+  // ── Orders ──
+  @Column({ type: "boolean", default: true })
+  pickupEnabled!: boolean;
+
+  @Column({ type: "boolean", default: true })
+  deliveryEnabled!: boolean;
+
+  // Flat fee per order (a cart counts as one order) when delivered.
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  deliveryFee!: number;
+
+  // Orders whose items come to at least this much are delivered free.
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  freeDeliveryOver?: number | null;
+
+  // Where the artisan delivers, in their words ("Paris and suburbs").
+  @Column({ type: "varchar", length: 300, nullable: true })
+  deliveryArea?: string | null;
 
   @OneToOne(() => User, (user) => user.shop)
   @JoinColumn()

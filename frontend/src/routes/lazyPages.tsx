@@ -8,6 +8,10 @@ export const CategoryDetailPage = lazy(
   () => import("@/pages/marketplace/CategoryDetailPage"),
 );
 export const ProductsPage = lazy(() => import("@/pages/marketplace/ProductsPage"));
+export const VerifyEmailPage = lazy(() => import("@/pages/auth/VerifyEmailPage"));
+export const HelpPage = lazy(() => import("@/pages/marketplace/HelpPage"));
+export const SellPage = lazy(() => import("@/pages/marketplace/SellPage"));
+export const NewsletterPage = lazy(() => import("@/pages/marketplace/NewsletterPage"));
 export const ProductDetailPage = lazy(
   () => import("@/pages/marketplace/ProductDetailPage"),
 );

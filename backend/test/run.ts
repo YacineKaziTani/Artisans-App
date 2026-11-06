@@ -6,16 +6,27 @@
 import "./env"; // first: fixes the environment before src/ is loaded
 import { after, before, describe } from "node:test";
 import { AppDataSource } from "../src/data-source";
-import { installFakeStripe } from "./helpers";
-import { authTests } from "./auth.test";
+import { installFakeCloudinary, installFakeStripe } from "./helpers";
+import { notificationsSettled } from "../src/notifications/deliver";
+import { adminBootstrapTests, authTests } from "./auth.test";
 import { privacyTests } from "./privacy.test";
 import { orderTests } from "./orders.test";
 import { bookingTests } from "./bookings.test";
 import { reviewTests } from "./reviews.test";
+import { securityTests } from "./security.test";
+import { verificationTests } from "./verification.test";
+import { scheduleTests } from "./schedule.test";
+import { shopSettingsTests } from "./shop-settings.test";
+import { searchTests } from "./search.test";
+import { reviewExtrasTests } from "./review-extras.test";
+import { notificationTests } from "./notifications.test";
+import { supportTests } from "./support.test";
+import { growthTests, metricsTests } from "./growth.test";
 
 describe("Artisans API", () => {
   before(async () => {
     installFakeStripe();
+    installFakeCloudinary();
     // migrationsRun: true — this applies every migration to the empty
     // database, so a broken migration fails the run.
     await AppDataSource.initialize();
@@ -23,13 +34,24 @@ describe("Artisans API", () => {
 
   after(async () => {
     // Let any background notification finish before the pool closes.
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await notificationsSettled();
     if (AppDataSource.isInitialized) await AppDataSource.destroy();
   });
 
   authTests();
+  adminBootstrapTests();
   privacyTests();
   orderTests();
   bookingTests();
   reviewTests();
+  securityTests();
+  verificationTests();
+  scheduleTests();
+  shopSettingsTests();
+  searchTests();
+  reviewExtrasTests();
+  notificationTests();
+  supportTests();
+  growthTests();
+  metricsTests();
 });

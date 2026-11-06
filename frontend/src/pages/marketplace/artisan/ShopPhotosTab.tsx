@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useDeletePhoto, useMyPhotos, useUploadPhoto } from "@/hooks/usePhotos";
 import { useConfirm } from "@/hooks/useConfirm";
 import { getErrorMessage } from "@/lib/errors";
+import { img } from "@/lib/images";
 
 
 export function ShopPhotosTab() {
@@ -100,7 +101,7 @@ export function ShopPhotosTab() {
             {photos!.map((photo) => (
               <div key={photo.id} className="relative group">
                 <img
-                  src={photo.url}
+                  {...img(photo.url, 300)}
                   alt={photo.caption ?? ""}
                   className="w-full aspect-square object-cover rounded-lg border border-border"
                 />

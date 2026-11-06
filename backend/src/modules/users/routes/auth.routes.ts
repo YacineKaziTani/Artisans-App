@@ -7,6 +7,8 @@ import {
   me,
   forgotPassword,
   resetPassword,
+  verifyEmail,
+  resendEmailVerification,
 } from "../controller/auth.controller";
 import { authLimiter } from "../../../middleware/rate-limit.middleware";
 import { authMiddleware } from "../../../middleware/auth.middleware";
@@ -16,6 +18,7 @@ import {
   loginSchema,
   registerSchema,
   resetPasswordSchema,
+  verifyEmailSchema,
 } from "../user.schemas";
 
 const router = Router();
@@ -35,6 +38,18 @@ router.post(
   authLimiter,
   validateBody(resetPasswordSchema),
   resetPassword,
+);
+router.post(
+  "/verify-email",
+  authLimiter,
+  validateBody(verifyEmailSchema),
+  verifyEmail,
+);
+router.post(
+  "/resend-verification",
+  authMiddleware,
+  authLimiter,
+  resendEmailVerification,
 );
 
 export default router;

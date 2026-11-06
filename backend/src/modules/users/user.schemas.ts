@@ -16,6 +16,11 @@ export const registerSchema = z.object({
   role: z.enum([UserRole.CLIENT, UserRole.ARTISAN], {
     error: "Choose whether you're joining as a client or an artisan",
   }),
+  // Invite code from a referral link (/register?ref=CODE). Unknown codes are ignored.
+  ref: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() ? v.trim().toUpperCase() : undefined),
+    z.string().max(12).optional(),
+  ),
   acceptTerms: z.literal(true, {
     error: "You must accept the Terms of Service to register",
   }),
@@ -39,10 +44,17 @@ export const resetPasswordSchema = z.object({
   newPassword: newPassword("New password"),
 });
 
+export const verifyEmailSchema = z.object({
+  token: z
+    .string({ error: "This confirmation link is invalid" })
+    .regex(/^[0-9a-f]{64}$/i, "This confirmation link is invalid"),
+});
+
 export const updateMeSchema = z.object({
   name: requiredText("Name", 100).optional(),
   phone: phone().optional(),
   avatarUrl: cloudinaryImageUrl("Avatar").nullable().optional(),
+  emailNotifications: z.boolean({ error: "emailNotifications must be true or false" }).optional(),
 });
 
 export const changePasswordSchema = z

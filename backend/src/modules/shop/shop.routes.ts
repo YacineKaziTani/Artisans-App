@@ -2,6 +2,10 @@ import { Router } from "express";
 import {
   createShop,
   updateMyShop,
+  updateMyHours,
+  updateMyDelivery,
+  getMyEarnings,
+  getMyStripeDashboardLink,
   getMyShop,
   getAllShops,
   getShopById,
@@ -17,12 +21,14 @@ import {
   getShopAdmin,
 } from "./shop.controller";
 import { authorize } from "../../middleware/authorize.middleware";
-import { authMiddleware } from "../../middleware/auth.middleware";
+import { authMiddleware, requireVerifiedEmail } from "../../middleware/auth.middleware";
 import { UserRole } from "../users/entities/user.entities";
 import { parser } from "../../config/cloudinary";
 import { uuidParam, validateBody } from "../../middleware/validate.middleware";
 import {
   createShopSchema,
+  shopDeliverySchema,
+  shopHoursSchema,
   resolveVerificationSchema,
   shopStatusSchema,
   updateShopSchema,
@@ -35,6 +41,32 @@ router.param("id", uuidParam);
 
 router.get("/", getAllShops);
 router.get("/mine", authMiddleware, getMyShop);
+router.get(
+  "/mine/earnings",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  getMyEarnings,
+);
+router.post(
+  "/mine/stripe-dashboard",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  getMyStripeDashboardLink,
+);
+router.put(
+  "/mine/hours",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  validateBody(shopHoursSchema),
+  updateMyHours,
+);
+router.put(
+  "/mine/delivery",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  validateBody(shopDeliverySchema),
+  updateMyDelivery,
+);
 router.put(
   "/mine",
   authMiddleware,
@@ -48,6 +80,7 @@ router.post(
   "/create",
   authMiddleware,
   authorize(UserRole.CLIENT, UserRole.ARTISAN),
+  requireVerifiedEmail,
   parser.single("image"),
   validateBody(createShopSchema),
   createShop,

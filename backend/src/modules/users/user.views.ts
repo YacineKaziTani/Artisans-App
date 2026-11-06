@@ -23,5 +23,7 @@ export function accountView(user: User) {
     email: user.email,
     phone: user.phone,
     isActive: user.isActive,
+    emailVerified: Boolean(user.emailVerifiedAt),
+    emailNotifications: user.emailNotifications !== false,
   };
 }

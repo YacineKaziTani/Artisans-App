@@ -5,7 +5,31 @@ import { Booking, BookingStatus, PaymentStatus } from "../modules/booking/bookin
 import { Shop, ShopStatus, VerificationStatus } from "../modules/shop/shop.entities";
 import { Dispute, DisputeStatus, DisputeTargetType } from "../modules/disputes/dispute.entities";
 import { User, UserRole } from "../modules/users/entities/user.entities";
-import { deliver, formatMoney, formatWhen } from "./deliver";
+import { Review } from "../modules/reviews/review.entities";
+import { deliver, formatMoney, formatWhen, type EmailContent } from "./deliver";
+import { Notification } from "../modules/notifications/notification.entities";
+import { emitToUser } from "../realtime/socket";
+
+/**
+ * Tells one person about something on their account: an in-app
+ * notification (pushed live to their open tabs) and — unless they turned
+ * activity emails off — the email.
+ */
+async function inform(
+  user: Pick<User, "id" | "email"> & { emailNotifications?: boolean } | null | undefined,
+  content: EmailContent,
+) {
+  if (!user) return;
+  const saved = await AppDataSource.getRepository(Notification).save({
+    user: { id: user.id } as User,
+    title: content.subject.slice(0, 200),
+    body: content.paragraphs[0]?.slice(0, 500) ?? null,
+    link: content.cta?.path ?? null,
+  });
+  emitToUser(user.id, "notification", { id: saved.id, title: saved.title });
+  if (user.emailNotifications === false) return;
+  await deliver(user.email, content);
+}
 
 // Each notification loads what it needs by id, so callers can fire it with
 // notifyInBackground() and move on. Emails go to the account's address on
@@ -41,7 +65,7 @@ export async function notifyOrdersAuthorized(orderIds: string[]) {
       ? `Deliver to: ${orders[0].shippingAddress}`
       : "The client will pick it up.";
 
-  await deliver(shop.owner?.email, {
+  await inform(shop.owner, {
     subject: `New order from ${client.name}`,
     heading: `You have a new order on ${shop.shopName}`,
     paragraphs: [
@@ -51,7 +75,7 @@ export async function notifyOrdersAuthorized(orderIds: string[]) {
     ],
     cta: { label: "View orders", path: ARTISAN_ORDERS },
   });
-  await deliver(client.email, {
+  await inform(client, {
     subject: `Your order with ${shop.shopName}`,
     heading: "Order placed",
     paragraphs: [
@@ -71,7 +95,7 @@ export async function notifyOrderUpdatedByShop(orderId: string) {
   if (!order) return;
 
   if (order.status === OrderStatus.FULFILLED) {
-    await deliver(order.client.email, {
+    await inform(order.client, {
       subject: `Your order from ${order.shop.shopName} is ready`,
       heading: "Order fulfilled",
       paragraphs: [
@@ -86,7 +110,7 @@ export async function notifyOrderUpdatedByShop(orderId: string) {
       order.paymentStatus === OrderPaymentStatus.REFUNDED
         ? "You've been refunded in full."
         : "You haven't been charged for it.";
-    await deliver(order.client.email, {
+    await inform(order.client, {
       subject: `Your order from ${order.shop.shopName} was cancelled`,
       heading: "Order cancelled",
       paragraphs: [describeLine(order), `${order.shop.shopName} cancelled this order. ${money}`],
@@ -102,7 +126,7 @@ export async function notifyOrderCancelledByClient(orderId: string) {
     relations: ["product", "client", "shop", "shop.owner"],
   });
   if (!order) return;
-  await deliver(order.shop.owner?.email, {
+  await inform(order.shop.owner, {
     subject: `Order cancelled by ${order.client.name}`,
     heading: "An order was cancelled",
     paragraphs: [describeLine(order), "The client cancelled this order — there's nothing to fulfil."],
@@ -119,9 +143,9 @@ export async function notifyBookingAuthorized(bookingId: string) {
     relations: ["service", "client", "shop", "shop.owner"],
   });
   if (!booking) return;
-  const when = formatWhen(booking.scheduledAt);
+  const when = formatWhen(booking.scheduledAt, booking.shop.timezone);
 
-  await deliver(booking.shop.owner?.email, {
+  await inform(booking.shop.owner, {
     subject: `New booking request: ${booking.service.name}`,
     heading: `${booking.client.name} wants to book ${booking.service.name}`,
     paragraphs: [
@@ -131,7 +155,7 @@ export async function notifyBookingAuthorized(bookingId: string) {
     ].filter(Boolean),
     cta: { label: "Review the booking", path: ARTISAN_BOOKINGS },
   });
-  await deliver(booking.client.email, {
+  await inform(booking.client, {
     subject: `Booking requested with ${booking.shop.shopName}`,
     heading: "Booking requested",
     paragraphs: [
@@ -149,7 +173,7 @@ export async function notifyBookingUpdatedByShop(bookingId: string) {
     relations: ["service", "client", "shop"],
   });
   if (!booking) return;
-  const what = `${booking.service.name} on ${formatWhen(booking.scheduledAt)}`;
+  const what = `${booking.service.name} on ${formatWhen(booking.scheduledAt, booking.shop.timezone)}`;
 
   const content =
     booking.status === BookingStatus.CONFIRMED
@@ -180,7 +204,7 @@ export async function notifyBookingUpdatedByShop(bookingId: string) {
           : null;
   if (!content) return;
 
-  await deliver(booking.client.email, {
+  await inform(booking.client, {
     ...content,
     cta:
       booking.status === BookingStatus.COMPLETED
@@ -196,11 +220,11 @@ export async function notifyBookingCancelledByClient(bookingId: string) {
     relations: ["service", "client", "shop", "shop.owner"],
   });
   if (!booking) return;
-  await deliver(booking.shop.owner?.email, {
+  await inform(booking.shop.owner, {
     subject: `Booking cancelled by ${booking.client.name}`,
     heading: "A booking was cancelled",
     paragraphs: [
-      `${booking.client.name} cancelled ${booking.service.name} on ${formatWhen(booking.scheduledAt)}. The time slot is free again.`,
+      `${booking.client.name} cancelled ${booking.service.name} on ${formatWhen(booking.scheduledAt, booking.shop.timezone)}. The time slot is free again.`,
     ],
     cta: { label: "View bookings", path: ARTISAN_BOOKINGS },
   });
@@ -216,7 +240,7 @@ export async function notifyShopStatusChanged(shopId: string) {
   if (!shop) return;
 
   if (shop.status === ShopStatus.ACTIVE) {
-    await deliver(shop.owner?.email, {
+    await inform(shop.owner, {
       subject: `${shop.shopName} is live`,
       heading: "Your shop has been approved",
       paragraphs: [
@@ -228,7 +252,7 @@ export async function notifyShopStatusChanged(shopId: string) {
       cta: { label: "Go to your shop", path: "/profile-artisan" },
     });
   } else if (shop.status === ShopStatus.SUSPENDED) {
-    await deliver(shop.owner?.email, {
+    await inform(shop.owner, {
       subject: `${shop.shopName} has been suspended`,
       heading: "Your shop has been suspended",
       paragraphs: [
@@ -245,7 +269,7 @@ export async function notifyVerificationResolved(shopId: string) {
   });
   if (!shop) return;
   const verified = shop.verificationStatus === VerificationStatus.VERIFIED;
-  await deliver(shop.owner?.email, {
+  await inform(shop.owner, {
     subject: verified ? `${shop.shopName} is verified` : "Your verification request",
     heading: verified ? "Your shop is verified" : "Verification not approved",
     paragraphs: verified
@@ -291,7 +315,7 @@ export async function notifyDisputeOpened(disputeId: string) {
     where: { role: UserRole.SUPER_ADMIN, isActive: true },
   });
   for (const admin of admins) {
-    await deliver(admin.email, {
+    await inform(admin, {
       subject: `New dispute on a ${dispute.targetType}`,
       heading: "A dispute needs review",
       paragraphs: [
@@ -306,7 +330,7 @@ export async function notifyDisputeOpened(disputeId: string) {
   const other =
     parties &&
     (parties.client.id === dispute.raisedBy.id ? parties.owner : parties.client);
-  await deliver(other?.email, {
+  await inform(other, {
     subject: `A dispute was opened about your ${dispute.targetType}`,
     heading: "A dispute was opened",
     paragraphs: [
@@ -331,7 +355,7 @@ export async function notifyDisputeResolved(disputeId: string) {
         ? "It was reviewed and no refund was issued."
         : "It has been resolved.";
   for (const person of [parties.client, parties.owner]) {
-    await deliver(person?.email, {
+    await inform(person, {
       subject: `Dispute resolved — ${parties.shopName}`,
       heading: "Your dispute has been resolved",
       paragraphs: [
@@ -340,4 +364,42 @@ export async function notifyDisputeResolved(disputeId: string) {
       ].filter(Boolean),
     });
   }
+}
+
+// ── Account ────────────────────────────────────────────────────────────────
+
+/**
+ * The confirm-your-email link. Takes the raw token directly (it's never
+ * stored), so it's sent from the request that created it.
+ */
+export async function sendEmailVerification(
+  user: { email: string; name: string },
+  rawToken: string,
+) {
+  await deliver(user.email, {
+    subject: "Confirm your email address",
+    heading: `Welcome to Artisan Market, ${user.name}`,
+    paragraphs: [
+      "Please confirm this is your email address. Until you do, you can browse and sign in, but not buy, book or message artisans.",
+      "The link works once and expires in 48 hours. If you didn't create an account, you can ignore this email.",
+    ],
+    cta: { label: "Confirm my email", path: `/verify-email?token=${rawToken}` },
+  });
+}
+
+// ── Reviews ────────────────────────────────────────────────────────────────
+
+/** The artisan answered a client's review. */
+export async function notifyReviewReplied(reviewId: string) {
+  const review = await AppDataSource.getRepository(Review).findOne({
+    where: { id: reviewId },
+    relations: ["author", "shop"],
+  });
+  if (!review?.reply) return;
+  await inform(review.author, {
+    subject: `${review.shop.shopName} replied to your review`,
+    heading: `${review.shop.shopName} replied to your review`,
+    paragraphs: [`"${review.reply}"`],
+    cta: { label: "See the reply", path: `/artisan/${review.shop.id}` },
+  });
 }

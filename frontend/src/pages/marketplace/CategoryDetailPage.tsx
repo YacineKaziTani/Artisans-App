@@ -2,9 +2,12 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, ArrowRight, MapPin, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useCategories } from "@/hooks/useCategories";
 import { useShops } from "@/hooks/useShops";
 import { themeForCategory } from "@/lib/categoryTheme";
+import { img } from "@/lib/images";
+import { PageMeta } from "@/components/PageMeta";
 
 const PAGE_SIZE = 12;
 
@@ -14,13 +17,24 @@ export default function CategoryDetailPage() {
   const category = categories?.find((c) => c.id === id);
   const theme = themeForCategory(id ?? "");
   const [page, setPage] = useState(1);
+  const [cityInput, setCityInput] = useState("");
+  const [city, setCity] = useState("");
+  const [minRating, setMinRating] = useState("");
+  const [sort, setSort] = useState<"rating" | "newest" | "name">("rating");
 
   const {
     data: shopsPage,
     isLoading: shopsLoading,
     isError: shopsError,
   } = useShops(
-    { category: category?.name, limit: PAGE_SIZE, page },
+    {
+      category: category?.name,
+      city: city || undefined,
+      minRating: minRating ? Number(minRating) : undefined,
+      sort,
+      limit: PAGE_SIZE,
+      page,
+    },
     { enabled: Boolean(category) },
   );
 
@@ -28,6 +42,7 @@ export default function CategoryDetailPage() {
 
   return (
     <main>
+      <PageMeta title={category?.name ?? "Category"} description={category?.description ?? (category ? `Artisans and handmade goods in ${category.name}.` : undefined)} />
       {/* ── Category hero ────────────────────────────────────────── */}
       <section
         className={`border-b bg-gradient-to-br ${theme.wash} ${theme.ring}`}
@@ -55,7 +70,7 @@ export default function CategoryDetailPage() {
               >
                 {category.iconUrl?.startsWith("http") ? (
                   <img
-                    src={category.iconUrl}
+                    {...img(category.iconUrl, 36)}
                     alt=""
                     className="size-9 object-contain"
                   />
@@ -82,7 +97,7 @@ export default function CategoryDetailPage() {
 
       {/* ── Shops in this category ───────────────────────────────── */}
       <div className="page-shell py-12">
-        <div className="mb-8 flex items-end justify-between gap-4">
+        <div className="mb-6 flex items-end justify-between gap-4">
           <h2 className="section-title">Available artisans</h2>
           {shopsPage && shopsPage.meta.total > 0 && (
             <p className="text-sm text-muted-foreground">
@@ -91,6 +106,45 @@ export default function CategoryDetailPage() {
             </p>
           )}
         </div>
+
+        {category && (
+          <form
+            className="surface mb-8 flex flex-wrap items-end gap-3 p-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setCity(cityInput.trim());
+              setPage(1);
+            }}
+          >
+            <div>
+              <label htmlFor="shop-city" className="field-label">City</label>
+              <Input id="shop-city" value={cityInput} onChange={(e) => setCityInput(e.target.value)} placeholder="Any" className="h-10 w-40" />
+            </div>
+            <div>
+              <label htmlFor="shop-rating" className="field-label">Rating</label>
+              <select id="shop-rating" value={minRating} onChange={(e) => { setMinRating(e.target.value); setPage(1); }} className="h-10 rounded-xl border border-input bg-card px-3 text-sm">
+                <option value="">Any</option>
+                <option value="4">4★ and up</option>
+                <option value="3">3★ and up</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="shop-sort" className="field-label">Sort</label>
+              <select id="shop-sort" value={sort} onChange={(e) => { setSort(e.target.value as typeof sort); setPage(1); }} className="h-10 rounded-xl border border-input bg-card px-3 text-sm">
+                <option value="rating">Top rated</option>
+                <option value="newest">Newest</option>
+                <option value="name">Name</option>
+              </select>
+            </div>
+            <Button type="submit" size="sm" className="h-10">Search</Button>
+            <Link
+              to={`/products?category=${encodeURIComponent(category.name)}`}
+              className="ml-auto inline-flex h-10 items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            >
+              Browse {category.name} products <ArrowRight className="size-4" />
+            </Link>
+          </form>
+        )}
 
         {shopsLoading && (
           <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">

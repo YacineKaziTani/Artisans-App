@@ -5,6 +5,7 @@ export interface UpdateMePayload {
   name?: string;
   phone?: string;
   avatarUrl?: string | null;
+  emailNotifications?: boolean;
 }
 
 export interface AdminUserListParams extends PageParams {
@@ -38,4 +39,24 @@ export const userApi = {
     form.append("image", file);
     return api.post<User>("/users/mine/avatar", form).then((r) => r.data);
   },
+
+  /** Your invite code and how many people joined with it. */
+  referrals: () =>
+    api.get<{ code: string; joined: number; artisans: number }>("/users/mine/referrals").then((r) => r.data),
+
+  /** Admin: which email provider is set up, and whether it reaches real users. */
+  emailStatus: () =>
+    api.get<EmailStatus>("/users/admin/email-status").then((r) => r.data),
+
+  /** Admin: sends a test email to yourself; rejects with the provider's error. */
+  sendTestEmail: () =>
+    api
+      .post<EmailStatus & { sentTo: string; sent: boolean }>("/users/admin/test-email")
+      .then((r) => r.data),
 };
+
+export interface EmailStatus {
+  provider: "resend" | "smtp" | "none";
+  from: string;
+  problem: string | null;
+}

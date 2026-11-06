@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { AppDataSource } from "../src/data-source";
 import { User, UserRole } from "../src/modules/users/entities/user.entities";
 import { api, authCookie, createUser, resetDatabase, TEST_PASSWORD } from "./helpers";
+import { promoteToAdmin } from "../src/modules/users/admin-bootstrap";
 
 const validSignup = {
   name: "Ada Lovelace",
@@ -100,6 +101,32 @@ export function authTests() {
 
       const res = await api().get("/api/orders/admin/all").set("Cookie", cookie);
       assert.equal(res.status, 403);
+    });
+  });
+}
+
+export function adminBootstrapTests() {
+  describe("make-admin command", () => {
+    beforeEach(resetDatabase);
+
+    it("promotes an existing account, which then passes admin-only routes", async () => {
+      const user = await createUser(UserRole.CLIENT, { emailVerifiedAt: null });
+      const before = await api().get("/api/orders/admin/all").set("Cookie", authCookie(user));
+      assert.equal(before.status, 403);
+
+      const result = await promoteToAdmin(user.email.toUpperCase());
+      assert.equal(result.ok, true);
+      const after = await api().get("/api/orders/admin/all").set("Cookie", authCookie(user));
+      assert.equal(after.status, 200);
+
+      const reloaded = await AppDataSource.getRepository(User).findOneByOrFail({ id: user.id });
+      assert.ok(reloaded.emailVerifiedAt, "promoting confirms the email");
+    });
+
+    it("refuses unknown and suspended accounts", async () => {
+      assert.equal((await promoteToAdmin("nobody@example.test")).ok, false);
+      const suspended = await createUser(UserRole.CLIENT, { isActive: false });
+      assert.equal((await promoteToAdmin(suspended.email)).ok, false);
     });
   });
 }

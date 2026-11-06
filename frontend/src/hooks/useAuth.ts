@@ -5,6 +5,7 @@ import { authApi } from "@/api/auth.api";
 import { useAuthStore } from "@/store/auth.store";
 import type { LoginPayload, RegisterPayload } from "@/types";
 import { useEffect } from "react";
+import { track } from "@/lib/analytics";
 
 export const authKeys = {
   me: ["auth", "me"] as const,
@@ -61,7 +62,8 @@ export function useRegister() {
 
   return useMutation({
     mutationFn: (payload: RegisterPayload) => authApi.register(payload),
-    onSuccess: ({ user }) => {
+    onSuccess: ({ user }, payload) => {
+      track("Sign up", { role: user.role, invited: Boolean(payload.ref) });
       setAuth(user);
       qc.setQueryData(authKeys.me, user);
       // A new artisan's first job is creating their shop.
@@ -82,6 +84,40 @@ export function useLogout() {
       logout();
       qc.clear();
       navigate("/login");
+    },
+  });
+}
+
+/**
+ * Confirms the email from the link's token. A query, not a mutation, so
+ * React's development double-mount sends it once — the token is single-use.
+ */
+export function useVerifyEmail(token: string | null) {
+  const qc = useQueryClient();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  return useQuery({
+    queryKey: ["auth", "verify-email", token ?? ""],
+    queryFn: async () => {
+      const result = await authApi.verifyEmail(token!);
+      // Signed in here too? Refresh the session so the banner goes away.
+      if (isAuthenticated) await qc.invalidateQueries({ queryKey: authKeys.me });
+      return result;
+    },
+    enabled: Boolean(token),
+    retry: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
+export function useResendVerification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: authApi.resendVerification,
+    onSuccess: (result) => {
+      // Confirmed in another tab or device meanwhile — pick that up.
+      if (result.alreadyVerified) qc.invalidateQueries({ queryKey: authKeys.me });
     },
   });
 }

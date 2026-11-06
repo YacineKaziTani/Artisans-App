@@ -14,6 +14,7 @@ import { FeaturedProductsSection } from "@/components/FeaturedProductsSection";
 import { Button } from "@/components/ui/button";
 import { useCategories } from "@/hooks/useCategories";
 import { themeForCategory } from "@/lib/categoryTheme";
+import { img } from "@/lib/images";
 
 const STEPS = [
   {
@@ -108,7 +109,7 @@ function CategoryStrip() {
                   >
                     {category.iconUrl?.startsWith("http") ? (
                       <img
-                        src={category.iconUrl}
+                        {...img(category.iconUrl, 24)}
                         alt=""
                         className="size-6 object-contain"
                       />

@@ -17,6 +17,9 @@ import { Pagination } from "@/components/Pagination";
 import { getErrorMessage } from "@/lib/errors";
 import { AvatarPicker } from "./account/AvatarPicker";
 import { ChangePasswordCard } from "./account/ChangePasswordCard";
+import { EmailPreferencesCard } from "./account/EmailPreferencesCard";
+import { MyDisputesCard } from "./account/MyDisputesCard";
+import { ReferralCard } from "@/components/growth/ReferralCard";
 import type { User } from "@/types";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -142,8 +145,11 @@ export default function ClientProfilePage() {
         </Card>
 
         <ChangePasswordCard />
+        {profile && <EmailPreferencesCard profile={profile} />}
         <MyBookingsCard />
         <MyOrdersCard />
+        <MyDisputesCard />
+        <ReferralCard />
       </div>
     </div>
   );

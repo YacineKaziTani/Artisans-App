@@ -32,6 +32,13 @@ import {
   handleOrderIntentCanceled,
 } from "../orders/order.controller";
 import { ProcessedWebhookEvent } from "../webhook-events/webhook-event.entities";
+import {
+  dayWindow,
+  hasOpeningHours,
+  slotsForDate,
+  withinOpeningHours,
+  type Interval,
+} from "../../lib/schedule";
 import { notifyInBackground } from "../../notifications/deliver";
 import {
   notifyBookingAuthorized,
@@ -151,6 +158,18 @@ export const createBooking = async (req: Request, res: Response) => {
       scheduledAt.getTime() +
         (service.durationMinutes ?? DEFAULT_SLOT_MINUTES) * 60 * 1000,
     );
+
+    // Shops with opening hours only take appointments inside them (read in
+    // the shop's time zone). Shops without fixed hours take requests for
+    // any time and confirm or decline each one.
+    if (
+      hasOpeningHours(service.shop.openingHours) &&
+      !withinOpeningHours(service.shop.openingHours, service.shop.timezone, scheduledAt, endsAt)
+    ) {
+      return res.status(400).json({
+        message: "That time is outside this shop's opening hours — please pick one of the available times.",
+      });
+    }
 
     const booking = await AppDataSource.transaction(async (manager) => {
       // One booking at a time per shop: without this lock, two requests
@@ -755,5 +774,87 @@ export const stripeWebhook = async (req: Request, res: Response) => {
     await processedEventRepo.delete({ id: event.id }).catch(() => undefined);
     console.error("Stripe webhook processing failed:", event.id, error);
     return res.status(500).json({ message: "Error handling webhook" });
+  }
+};
+
+/**
+ * Live bookings at a shop that overlap [from, to) — the same rule the
+ * clash check in createBooking applies (abandoned unpaid ones don't count).
+ */
+async function busyIntervals(shopId: string, from: Date, to: Date): Promise<Interval[]> {
+  const rows = await bookingRepo
+    .createQueryBuilder("booking")
+    .select(["booking.id", "booking.scheduledAt", "booking.endsAt"])
+    .where("booking.shopId = :shopId", { shopId })
+    .andWhere("booking.status IN (:...live)", { live: LIVE_STATUSES })
+    .andWhere("booking.scheduledAt < :to", { to })
+    .andWhere(
+      `COALESCE(booking.endsAt, booking.scheduledAt + interval '${DEFAULT_SLOT_MINUTES} minute') > :from`,
+      { from },
+    )
+    .andWhere(
+      `(booking.paymentStatus NOT IN (:...unpaid) OR ${withinCheckoutTtlSql("booking.createdAt")})`,
+      { unpaid: UNPAID_STATES },
+    )
+    .getMany();
+  return rows.map((b) => ({
+    start: b.scheduledAt,
+    end: b.endsAt ?? new Date(b.scheduledAt.getTime() + DEFAULT_SLOT_MINUTES * 60_000),
+  }));
+}
+
+/** Slot length offered for services without an appointment length. */
+const UNTIMED_SLOT_MINUTES = 30;
+
+/**
+ * GET /services/:id/availability?date=YYYY-MM-DD — the free start times on
+ * that day (in the shop's time zone), for shops with opening hours.
+ */
+export const getServiceAvailability = async (req: Request, res: Response) => {
+  try {
+    const date = String(req.query.date ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
+      return res.status(400).json({ message: "Choose a date", field: "date" });
+    }
+
+    const service = await serviceRepo.findOne({
+      where: { id: String(req.params.id), archivedAt: IsNull() },
+      relations: ["shop"],
+    });
+    if (!service || !service.isAvailable || service.shop.status !== ShopStatus.ACTIVE) {
+      return res.status(404).json({ message: "Service not found" });
+    }
+
+    const { shop } = service;
+    const timezone = shop.timezone || "UTC";
+    if (!hasOpeningHours(shop.openingHours)) {
+      return res.json({ date, timezone, hasOpeningHours: false, slots: [] });
+    }
+
+    const durationMinutes = service.durationMinutes ?? UNTIMED_SLOT_MINUTES;
+    const window = dayWindow(date, timezone);
+    const tooFar = window.start.getTime() > Date.now() + MAX_BOOKING_AHEAD_MS;
+    const slots = tooFar
+      ? []
+      : slotsForDate({
+          hours: shop.openingHours,
+          tz: timezone,
+          date,
+          durationMinutes,
+          stepMinutes: Math.min(30, durationMinutes),
+          busy: await busyIntervals(shop.id, window.start, window.end),
+          notBefore: new Date(),
+        });
+
+    return res.json({
+      date,
+      timezone,
+      hasOpeningHours: true,
+      durationMinutes,
+      slots: slots.map((slot) => slot.toISOString()),
+    });
+  } catch (error) {
+    console.error("getServiceAvailability failed:", error);
+    return res.status(500).json({ message: "Couldn't load available times" });
   }
 };

@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { AppDataSource } from "../data-source";
 import { User, UserRole } from "../modules/users/entities/user.entities";
 import { CLEAR_COOKIE_OPTIONS } from "../config/cookie";
+import { emailVerificationRequired } from "../config/email-verification";
 
 export interface JwtPayload {
   sub: string;
@@ -18,6 +19,7 @@ export interface SessionUser {
   name: string;
   email: string;
   role: UserRole;
+  emailVerified: boolean;
 }
 
 declare global {
@@ -69,7 +71,7 @@ export async function resolveSession(
 
   const user = await AppDataSource.getRepository(User).findOne({
     where: { id: payload.sub },
-    select: ["id", "name", "email", "role", "isActive", "passwordChangedAt"],
+    select: ["id", "name", "email", "role", "isActive", "passwordChangedAt", "emailVerifiedAt"],
   });
 
   if (!user) {
@@ -92,7 +94,13 @@ export async function resolveSession(
 
   return {
     ok: true,
-    user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      emailVerified: Boolean(user.emailVerifiedAt),
+    },
   };
 }
 
@@ -115,7 +123,41 @@ export const authMiddleware = async (
 
     req.user = session.user;
     next();
-  } catch {
+  } catch (error) {
+    console.error("authMiddleware failed:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
+};
+
+/**
+ * For actions that reach other people or move money — ordering, booking,
+ * messaging, reviewing, reporting, disputes, opening a shop. Goes after
+ * authMiddleware (and before any upload parser, so a refused request never
+ * reaches Cloudinary). Browsing, profile edits and cancellations stay open.
+ */
+export const requireVerifiedEmail = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  if (!emailVerificationRequired || req.user?.emailVerified) return next();
+  return res.status(403).json({
+    code: "EMAIL_NOT_VERIFIED",
+    message:
+      "Please confirm your email address first — use the link we emailed you, or send a new one from the banner at the top of the page.",
+  });
+};
+
+/**
+ * Attaches the signed-in user when there's a valid session, and carries on
+ * as a guest otherwise (no 401) — for pages anyone may use, like contact.
+ */
+export const optionalAuth = async (req: Request, _res: Response, next: NextFunction) => {
+  try {
+    const session = await resolveSession(req.cookies.token);
+    if (session.ok) req.user = session.user;
+  } catch (error) {
+    console.error("optionalAuth failed:", error);
+  }
+  next();
 };

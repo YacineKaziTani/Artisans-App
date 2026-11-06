@@ -17,14 +17,14 @@ const transporter = smtpConfigured
     })
   : null;
 
-async function sendViaResend(to: string, subject: string, html: string) {
+async function sendViaResend(to: string, subject: string, html: string, replyTo?: string) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${RESEND_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from: MAIL_FROM, to, subject, html }),
+    body: JSON.stringify({ from: MAIL_FROM, to, subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
   });
 
   if (!response.ok) {
@@ -33,14 +33,36 @@ async function sendViaResend(to: string, subject: string, html: string) {
   }
 }
 
-export async function sendMail(to: string, subject: string, html: string) {
+export interface MailStatus {
+  provider: "resend" | "smtp" | "none";
+  from: string;
+  /** What's stopping mail from reaching real users, if anything. */
+  problem: string | null;
+}
+
+/** Which provider is in use, and whether real users will get the mail. */
+export function mailStatus(): MailStatus {
+  const provider = RESEND_API_KEY ? "resend" : smtpConfigured ? "smtp" : "none";
+  let problem: string | null = null;
+  if (provider === "none") {
+    problem =
+      "No email provider is configured (RESEND_API_KEY or SMTP_*), so emails are only printed to the server log.";
+  } else if (provider === "resend" && /@resend\.dev$/i.test(MAIL_FROM)) {
+    problem =
+      "MAIL_FROM is Resend's test address, which only delivers to the inbox that owns the Resend account. Verify your domain in Resend and set MAIL_FROM to an address on it.";
+  }
+  return { provider, from: MAIL_FROM, problem };
+}
+
+/** `replyTo`: where a reply goes (e.g. the visitor who used the contact form). */
+export async function sendMail(to: string, subject: string, html: string, replyTo?: string) {
   if (RESEND_API_KEY) {
-    await sendViaResend(to, subject, html);
+    await sendViaResend(to, subject, html, replyTo);
     return;
   }
 
   if (transporter) {
-    await transporter.sendMail({ from: MAIL_FROM, to, subject, html });
+    await transporter.sendMail({ from: MAIL_FROM, to, subject, html, replyTo });
     return;
   }
 

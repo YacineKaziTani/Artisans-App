@@ -40,20 +40,52 @@ export async function deliver(to: string | null | undefined, content: EmailConte
  * looks up whatever it needs itself, and any failure is only logged.
  */
 export function notifyInBackground(task: () => Promise<unknown>) {
-  setImmediate(() => {
-    task().catch((err) => console.error("[notify] notification failed:", err));
+  const run = new Promise<void>((resolve) => {
+    setImmediate(() => {
+      task()
+        .catch((err) => console.error("[notify] notification failed:", err))
+        .finally(resolve);
+    });
   });
+  pending.add(run);
+  void run.finally(() => pending.delete(run));
 }
 
-const dateTime = new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "UTC",
-});
+const pending = new Set<Promise<void>>();
 
-/** Appointment times in emails (the client's time zone isn't known server-side). */
-export function formatWhen(date: Date | string) {
-  return `${dateTime.format(new Date(date))} UTC`;
+/**
+ * Resolves once every background notification started so far has finished
+ * (including any they start in turn). Used on shutdown, so a deploy doesn't
+ * cut off emails mid-send, and by the tests between cases.
+ */
+export async function notificationsSettled(timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (pending.size && Date.now() < deadline) {
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([
+      Promise.allSettled([...pending]),
+      new Promise((r) => {
+        timer = setTimeout(r, Math.max(0, deadline - Date.now()));
+      }),
+    ]);
+    clearTimeout(timer);
+  }
+}
+
+const dateTimeFormats = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * Appointment times in emails, in the shop's time zone — where the
+ * appointment happens — and labelled with it ("Dec 1, 2026, 3:00 PM
+ * (Europe/Paris)"). They used to always be UTC.
+ */
+export function formatWhen(date: Date | string, timeZone = "UTC") {
+  let format = dateTimeFormats.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone });
+    dateTimeFormats.set(timeZone, format);
+  }
+  return `${format.format(new Date(date))} (${timeZone.replace(/_/g, " ")})`;
 }
 
 export function formatMoney(amount: number | string) {

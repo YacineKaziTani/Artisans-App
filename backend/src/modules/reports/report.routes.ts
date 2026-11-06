@@ -5,7 +5,7 @@ import {
   getAllReportsAdmin,
   resolveReport,
 } from "./report.controller";
-import { authMiddleware } from "../../middleware/auth.middleware";
+import { authMiddleware, requireVerifiedEmail } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { moderationLimiter } from "../../middleware/rate-limit.middleware";
 import { UserRole } from "../users/entities/user.entities";
@@ -19,6 +19,7 @@ router.param("id", uuidParam);
 router.post(
   "/",
   authMiddleware,
+  requireVerifiedEmail,
   moderationLimiter,
   validateBody(createReportSchema),
   createReport,

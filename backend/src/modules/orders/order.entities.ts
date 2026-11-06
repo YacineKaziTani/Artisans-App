@@ -81,6 +81,12 @@ export class Order {
   @Column({ type: "text", nullable: true })
   shippingAddress?: string;
 
+  // The delivery charge included in totalAmount (0 for pickup). In a cart
+  // it's charged once, on the first line, so the existing per-line capture
+  // and refund maths cover it unchanged.
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  deliveryFee!: number;
+
   // Free-text carrier tracking reference, set by the artisan when fulfilling
   // a delivery order. No carrier API integration — just a reference field.
   @Column({ nullable: true })

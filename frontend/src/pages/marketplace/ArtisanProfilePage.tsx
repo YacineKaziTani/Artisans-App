@@ -10,6 +10,10 @@ import { ShopProductsTab } from "./artisan/ShopProductsTab";
 import { ShopPhotosTab } from "./artisan/ShopPhotosTab";
 import { ShopBookingsTab } from "./artisan/ShopBookingsTab";
 import { ShopOrdersTab } from "./artisan/ShopOrdersTab";
+import { ShopHoursCard } from "./artisan/ShopHoursCard";
+import { ShopDeliveryCard } from "./artisan/ShopDeliveryCard";
+import { ShopEarningsTab } from "./artisan/ShopEarningsTab";
+import { MyDisputesCard } from "./account/MyDisputesCard";
 
 const TABS = [
   { id: "profile", label: "Profile" },
@@ -18,6 +22,7 @@ const TABS = [
   { id: "photos", label: "Photos" },
   { id: "bookings", label: "Bookings" },
   { id: "orders", label: "Orders" },
+  { id: "earnings", label: "Earnings" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -121,11 +126,27 @@ export default function ArtisanProfilePage() {
 
         <div role="tabpanel" id={`panel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
           {activeTab === "profile" && <ShopProfileForm key={shop.id} shop={shop} />}
-          {activeTab === "services" && <ShopServicesTab services={shop.services ?? []} />}
-          {activeTab === "products" && <ShopProductsTab />}
+          {activeTab === "services" && (
+            <div className="space-y-8">
+              <ShopHoursCard key={`hours-${shop.id}`} shop={shop} />
+              <ShopServicesTab services={shop.services ?? []} />
+            </div>
+          )}
+          {activeTab === "products" && (
+            <div className="space-y-8">
+              <ShopDeliveryCard key={`delivery-${shop.id}`} shop={shop} />
+              <ShopProductsTab />
+            </div>
+          )}
           {activeTab === "photos" && <ShopPhotosTab />}
           {activeTab === "bookings" && <ShopBookingsTab />}
-          {activeTab === "orders" && <ShopOrdersTab />}
+          {activeTab === "orders" && (
+            <div className="space-y-8">
+              <ShopOrdersTab />
+              <MyDisputesCard />
+            </div>
+          )}
+          {activeTab === "earnings" && <ShopEarningsTab shop={shop} />}
         </div>
       </div>
     </main>

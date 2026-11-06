@@ -10,6 +10,7 @@ import {
   type OrderListParams,
 } from "@/api/order.api";
 import type { OrderStatus } from "@/types";
+import { track } from "@/lib/analytics";
 
 export const orderKeys = {
   all: ["orders"] as const,
@@ -23,6 +24,7 @@ export function useCreateOrder() {
   return useMutation({
     mutationFn: orderApi.create,
     onSuccess: () => {
+      track("Checkout started", { kind: "order" });
       qc.invalidateQueries({ queryKey: orderKeys.mine() });
     },
   });
@@ -39,6 +41,7 @@ export function useCartCheckout() {
       delivery: DeliveryInfo;
     }) => orderApi.checkout(items, delivery),
     onSuccess: () => {
+      track("Checkout started", { kind: "cart" });
       qc.invalidateQueries({ queryKey: orderKeys.mine() });
     },
   });

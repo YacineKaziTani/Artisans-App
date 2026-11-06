@@ -25,4 +25,15 @@ export const authApi = {
     api
       .post<{ message: string }>("/auth/reset-password", payload)
       .then((r) => r.data),
+
+  /** The link from the confirmation email. */
+  verifyEmail: (token: string) =>
+    api
+      .post<{ message: string }>("/auth/verify-email", { token })
+      .then((r) => r.data),
+
+  resendVerification: () =>
+    api
+      .post<{ message: string; alreadyVerified?: boolean }>("/auth/resend-verification")
+      .then((r) => r.data),
 };

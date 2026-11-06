@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { connectSocket, disconnectSocket, getSocket } from "@/lib/socket";
 import { useAuthStore } from "@/store/auth.store";
 import { appendMessage, conversationKeys } from "@/hooks/useConversations";
+import { notificationKeys } from "@/hooks/useNotifications";
 import type { MessagePage } from "@/api/conversation.api";
 import type { ChatMessage } from "@/types";
 
@@ -46,12 +47,16 @@ export function useSocketConnection() {
       if (reason === "io server disconnect") socket.connect();
     };
 
+    const handleNotification = () => qc.invalidateQueries({ queryKey: notificationKeys.all });
+
     socket.on("new_message", handleNewMessage);
+    socket.on("notification", handleNotification);
     socket.on("conversation_updated", handleConversationUpdated);
     socket.on("disconnect", handleDisconnect);
 
     return () => {
       socket.off("new_message", handleNewMessage);
+      socket.off("notification", handleNotification);
       socket.off("conversation_updated", handleConversationUpdated);
       socket.off("disconnect", handleDisconnect);
     };

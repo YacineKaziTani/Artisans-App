@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Link, NavLink } from "react-router";
 import {
   Hammer,
@@ -31,6 +32,7 @@ const LINKS = [
   { to: "/", label: "Home", end: true },
   { to: "/categories", label: "Categories", end: false },
   { to: "/products", label: "Products", end: false },
+  { to: "/sell", label: "Sell", end: false },
 ];
 
 function initialsOf(name: string) {
@@ -105,6 +107,8 @@ export function MarketplaceNavbar() {
 
           {/* ── Actions ───────────────────────────────────────────── */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {isAuthenticated && <NotificationBell />}
+
             {isAuthenticated && (
               <Button
                 asChild

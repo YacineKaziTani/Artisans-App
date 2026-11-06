@@ -4,6 +4,7 @@ import { useUploadAvatar } from "@/hooks/useProfile";
 import { getErrorMessage } from "@/lib/errors";
 import { IMAGE_ACCEPT, IMAGE_TOO_LARGE_MESSAGE, isImageTooLarge } from "@/lib/uploads";
 import type { User } from "@/types";
+import { img } from "@/lib/images";
 
 function initialsOf(name: string) {
   return name
@@ -24,7 +25,7 @@ export function AvatarPicker({ profile }: { profile: User }) {
     <div className="flex items-center gap-4">
       {profile.avatarUrl ? (
         <img
-          src={profile.avatarUrl}
+          {...img(profile.avatarUrl, 64)}
           alt=""
           className="size-16 rounded-full border border-border object-cover"
         />

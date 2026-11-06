@@ -13,6 +13,10 @@ import {
   ArtisanShopPage,
   ProductsPage,
   ProductDetailPage,
+  VerifyEmailPage,
+  HelpPage,
+  SellPage,
+  NewsletterPage,
   CartPage,
   MessagesLayout,
   MessagesEmptyPage,
@@ -60,8 +64,15 @@ export const router = createBrowserRouter([
           { path: "terms", element: withSuspense(TermsPage) },
           { path: "privacy", element: withSuspense(PrivacyPage) },
           { path: "refund-policy", element: withSuspense(RefundPolicyPage) },
+          { path: "help", element: withSuspense(HelpPage) },
+          { path: "sell", element: withSuspense(SellPage) },
+          { path: "newsletter", element: withSuspense(NewsletterPage) },
         ],
       },
+
+      // Opened from the confirmation email — signed in or not, so outside
+      // GuestGuard (which would bounce a signed-in user away).
+      { path: "verify-email", element: withSuspense(VerifyEmailPage) },
 
       // ── Public routes ──────────────────────────────────────────
       {

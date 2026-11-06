@@ -10,6 +10,18 @@ export function allowedOrigins(): string[] {
 }
 
 /**
+ * Whether a browser request's Origin header is one of our frontends. A
+ * missing Origin is allowed: browsers always send one on cross-site
+ * requests (and on every POST/PUT/PATCH/DELETE), so its absence means a
+ * non-browser client — which has no ambient cookies to abuse. The literal
+ * "null" origin (sandboxed iframes, some redirects) is refused.
+ */
+export function isAllowedOrigin(origin: string | undefined): boolean {
+  if (origin === undefined) return true;
+  return allowedOrigins().includes(origin.replace(/\/+$/, ""));
+}
+
+/**
  * The origin to put in links we generate (password reset emails, Stripe
  * return URLs, notifications) — the first FRONTEND_URL entry. Using the raw
  * variable produced broken links like "https://a.com,https://b.com/reset…".

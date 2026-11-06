@@ -7,6 +7,10 @@ export interface User {
   phone?: string;
   avatarUrl?: string;
   isActive?: boolean;
+  /** Sent for your own account (and to admins). Undefined on older cached sessions. */
+  emailVerified?: boolean;
+  /** Activity emails on/off (in-app notifications always). */
+  emailNotifications?: boolean;
   createdAt: string;
 }
 
@@ -25,6 +29,8 @@ export interface RegisterPayload extends LoginPayload {
   phone: string;
   role: "client" | "artisan";
   acceptTerms: boolean;
+  /** Invite code from a referral link. */
+  ref?: string;
 }
 
 // ── API Helpers ───────────────────────────────────────────────────────────────
@@ -101,12 +107,63 @@ export interface Shop {
   stripeOnboardingComplete?: boolean;
   /** Computed by the API: whether the shop can take bookings/orders. */
   acceptsPayments?: boolean;
+  /** IANA zone the shop's hours and appointment times are in. */
+  timezone?: string;
+  /** Null/empty = no fixed hours: clients request any time. */
+  openingHours?: OpeningHours | null;
+  pickupEnabled?: boolean;
+  deliveryEnabled?: boolean;
+  deliveryFee?: string | number;
+  freeDeliveryOver?: string | number | null;
+  deliveryArea?: string | null;
   category?: Category;
   owner?: User;
   services?: Service[];
   products?: Product[];
   photos?: Photo[];
   createdAt?: string;
+}
+
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export interface TimeRange {
+  open: string;
+  close: string;
+}
+export type OpeningHours = Partial<Record<Weekday, TimeRange[]>>;
+
+/** GET /services/:id/availability */
+export interface ServiceAvailability {
+  date: string;
+  timezone: string;
+  hasOpeningHours: boolean;
+  durationMinutes?: number;
+  /** ISO start times. */
+  slots: string[];
+}
+
+/** GET /shops/mine/earnings */
+export interface ShopEarnings {
+  commissionPercent: number;
+  totals: {
+    paidGross: number;
+    paidNet: number;
+    thisMonthGross: number;
+    thisMonthNet: number;
+    onHold: number;
+    refunded: number;
+  };
+  data: {
+    kind: "order" | "booking";
+    id: string;
+    date: string;
+    title: string;
+    status: string;
+    paymentStatus: string;
+    amount: number;
+    deliveryFee: number;
+    net: number | null;
+  }[];
+  meta: { total: number; page: number; lastPage: number };
 }
 
 export type BookingStatus = "pending" | "confirmed" | "cancelled" | "completed";
@@ -176,6 +233,12 @@ export interface Review {
   rating: number;
   comment?: string;
   author?: User;
+  /** The product the review is about, if the client tagged one. */
+  product?: { id: string; title: string } | null;
+  photos?: { url: string; publicId: string }[] | null;
+  /** The artisan's public reply. */
+  reply?: string | null;
+  repliedAt?: string | null;
   createdAt: string;
 }
 
@@ -183,6 +246,8 @@ export interface ReviewEligibility {
   canReview: boolean;
   reason: "own_shop" | "already_reviewed" | "no_completed_purchase" | null;
   message: string | null;
+  /** Products the client received from this shop — what a review can be about. */
+  products?: { id: string; title: string }[];
 }
 
 export type OrderStatus = "pending" | "fulfilled" | "cancelled";
@@ -199,6 +264,8 @@ export interface Order {
   id: string;
   quantity: number;
   totalAmount: string | number;
+  /** Included in totalAmount. In a cart it sits on one line only. */
+  deliveryFee?: string | number;
   status: OrderStatus;
   paymentStatus: OrderPaymentStatus;
   deliveryMethod?: DeliveryMethod;
@@ -311,4 +378,14 @@ export type FavoriteTargetType = "shop" | "product";
 export interface MyFavorites {
   shops: Shop[];
   products: Product[];
+}
+
+/** An in-app notification (the bell). */
+export interface AppNotification {
+  id: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  readAt?: string | null;
+  createdAt: string;
 }

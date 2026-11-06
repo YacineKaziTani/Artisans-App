@@ -13,6 +13,10 @@ import { disconnectUserSockets } from "../../../realtime/socket";
 import { primaryFrontendUrl } from "../../../lib/urls";
 import { isUniqueViolation } from "../../../lib/db";
 import { escapeHtml } from "../../../lib/html";
+import { EMAIL_VERIFICATION_TTL_MS } from "../../../config/email-verification";
+import { sendEmailVerification } from "../../../notifications";
+import { notifyInBackground } from "../../../notifications/deliver";
+import { newReferralCode } from "../../../lib/codes";
 
 // Request bodies are validated and normalized by the zod schemas in
 // user.schemas.ts (emails arrive trimmed and lowercased).
@@ -40,7 +44,19 @@ export function publicUser(user: User) {
     role: user.role,
     phone: user.phone,
     avatarUrl: user.avatarUrl,
+    emailVerified: Boolean(user.emailVerifiedAt),
+    emailNotifications: user.emailNotifications !== false,
     createdAt: user.createdAt,
+  };
+}
+
+/** A fresh single-use confirmation token: the raw value for the email, the hash for the row. */
+function newEmailVerificationToken() {
+  const raw = crypto.randomBytes(32).toString("hex");
+  return {
+    raw,
+    hash: hashToken(raw),
+    expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
   };
 }
 
@@ -65,7 +81,7 @@ function byEmail(email: string, extraSelects: string[] = []) {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, name, password, phone, role } = req.body;
+    const { email, name, password, phone, role, ref } = req.body;
 
     const existingUser = await userRepo
       .createQueryBuilder("user")
@@ -78,6 +94,9 @@ export const register = async (req: Request, res: Response) => {
       return res.status(409).json({ message: `${field} already exists` });
     }
 
+    const referrer = ref ? await userRepo.findOne({ where: { referralCode: ref } }) : null;
+
+    const verification = newEmailVerificationToken();
     const user = userRepo.create({
       name,
       email,
@@ -85,6 +104,10 @@ export const register = async (req: Request, res: Response) => {
       password: await bcrypt.hash(password, 12),
       role,
       acceptedTermsAt: new Date(),
+      emailVerificationTokenHash: verification.hash,
+      emailVerificationExpiresAt: verification.expiresAt,
+      referralCode: newReferralCode(),
+      referredBy: referrer ?? null,
     });
 
     try {
@@ -98,6 +121,8 @@ export const register = async (req: Request, res: Response) => {
       }
       throw err;
     }
+
+    notifyInBackground(() => sendEmailVerification(user, verification.raw));
 
     res.cookie("token", issueToken(user), COOKIE_OPTIONS);
     res.status(201).json({
@@ -256,12 +281,84 @@ export const resetPassword = async (req: Request, res: Response) => {
     user.passwordChangedAt = new Date();
     user.failedLoginAttempts = 0;
     user.lockedUntil = null;
+    // The reset link arrived in their inbox, which proves they own it.
+    if (!user.emailVerifiedAt) {
+      user.emailVerifiedAt = new Date();
+      user.emailVerificationTokenHash = null;
+      user.emailVerificationExpiresAt = null;
+    }
     await userRepo.save(user);
     disconnectUserSockets(user.id);
 
     return res.json({ message: "Password reset successfully" });
   } catch (error) {
     console.error("resetPassword failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * The link from the confirmation email. Public — it may be opened in a
+ * browser where the user isn't signed in.
+ */
+export const verifyEmail = async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body as { token: string };
+    const user = await userRepo
+      .createQueryBuilder("user")
+      .addSelect(["user.emailVerificationExpiresAt"])
+      .where("user.emailVerificationTokenHash = :hash", { hash: hashToken(token) })
+      .getOne();
+
+    if (!user) {
+      return res.status(400).json({
+        message:
+          "This link is invalid or has already been used. If your email isn't confirmed yet, sign in and send a new link.",
+      });
+    }
+    if (
+      !user.emailVerificationExpiresAt ||
+      user.emailVerificationExpiresAt.getTime() < Date.now()
+    ) {
+      return res.status(400).json({
+        message:
+          "This link has expired. Sign in and send a new one from the banner at the top of the page.",
+      });
+    }
+
+    user.emailVerifiedAt = user.emailVerifiedAt ?? new Date();
+    user.emailVerificationTokenHash = null;
+    user.emailVerificationExpiresAt = null;
+    await userRepo.save(user);
+    // Open sockets were authorized as unverified — make them reconnect.
+    disconnectUserSockets(user.id);
+
+    return res.json({ message: "Email confirmed" });
+  } catch (error) {
+    console.error("verifyEmail failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** Sends a new confirmation link (the previous one stops working). */
+export const resendEmailVerification = async (req: Request, res: Response) => {
+  try {
+    const user = await userRepo.findOne({ where: { id: req.user!.id } });
+    if (!user) return res.status(401).json({ message: "Not authenticated" });
+    if (user.emailVerifiedAt) {
+      return res.json({ message: "Your email is already confirmed", alreadyVerified: true });
+    }
+
+    const verification = newEmailVerificationToken();
+    await userRepo.update(user.id, {
+      emailVerificationTokenHash: verification.hash,
+      emailVerificationExpiresAt: verification.expiresAt,
+    });
+    notifyInBackground(() => sendEmailVerification(user, verification.raw));
+
+    return res.json({ message: `We sent a new link to ${user.email}` });
+  } catch (error) {
+    console.error("resendEmailVerification failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };

@@ -11,11 +11,14 @@ import { BookServiceDialog } from "@/components/booking/BookServiceDialog";
 import { BuyProductDialog } from "@/components/booking/BuyProductDialog";
 import { ReviewsSection } from "@/components/ReviewsSection";
 import { ReportDialog } from "@/components/ReportDialog";
+import { ShopPracticalInfo } from "@/components/ShopPracticalInfo";
 import { shopCanAcceptPayments } from "@/lib/stripe";
 import { LoginLink } from "@/components/LoginLink";
 import { getErrorMessage } from "@/lib/errors";
 import { isAxiosError } from "axios";
 import type { Product, Service } from "@/types";
+import { img } from "@/lib/images";
+import { PageMeta } from "@/components/PageMeta";
 
 function digitsOnly(phone: string) {
   return phone.replace(/\D/g, "");
@@ -94,6 +97,7 @@ export default function ArtisanShopPage() {
 
   return (
     <main className="page-shell py-12">
+      <PageMeta title={shop.city ? `${shop.shopName} — artisan in ${shop.city}` : shop.shopName} description={shop.description ?? `Handmade work by ${shop.shopName}.`} />
       <div className="max-w-4xl mx-auto">
         {/* Shop Header */}
         <div className="mb-8">
@@ -172,6 +176,14 @@ export default function ArtisanShopPage() {
                 </div>
               )}
 
+              {((shop.services?.length ?? 0) > 0 || (shop.products?.length ?? 0) > 0) && (
+                <ShopPracticalInfo
+                  shop={shop}
+                  showHours={(shop.services?.length ?? 0) > 0}
+                  showDelivery={(shop.products?.length ?? 0) > 0}
+                />
+              )}
+
               {(whatsappLink || phoneLink) && (
                 <div className="flex gap-3 pt-4 flex-wrap">
                   {/* Button asChild renders the <a> itself — a <button> nested
@@ -229,7 +241,7 @@ export default function ArtisanShopPage() {
               {shop.photos!.map((photo) => (
                 <img
                   key={photo.id}
-                  src={photo.url}
+                  {...img(photo.url, 400)}
                   alt={photo.caption ?? shop.shopName}
                   className="w-full aspect-square object-cover rounded-xl border border-border"
                 />
@@ -318,7 +330,7 @@ export default function ArtisanShopPage() {
                   {product.imageUrl && (
                     <Link to={`/product/${product.id}`} className="block">
                       <img
-                        src={product.imageUrl}
+                        {...img(product.imageUrl, 480)}
                         alt={product.title}
                         className="w-full h-40 object-cover"
                       />
@@ -397,7 +409,7 @@ export default function ArtisanShopPage() {
           </div>
         )}
 
-        <ReviewsSection shopId={shop.id} />
+        <ReviewsSection shopId={shop.id} shopName={shop.shopName} ownerId={shop.owner?.id} />
 
         {/* CTA */}
         {whatsappLink && (
@@ -420,6 +432,7 @@ export default function ArtisanShopPage() {
       {bookingService && (
         <BookServiceDialog
           service={bookingService}
+          shop={shop}
           open={Boolean(bookingService)}
           onOpenChange={(open) => {
             if (!open) setBookingService(null);
@@ -430,6 +443,7 @@ export default function ArtisanShopPage() {
       {buyingProduct && (
         <BuyProductDialog
           product={buyingProduct}
+          shop={shop}
           open={Boolean(buyingProduct)}
           onOpenChange={(open) => {
             if (!open) setBuyingProduct(null);

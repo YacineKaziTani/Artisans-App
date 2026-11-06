@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { shopApi, type ListShopsParams } from "@/api/shop.api";
 import { authKeys } from "@/hooks/useAuth";
+import { track } from "@/lib/analytics";
 
 export const shopKeys = {
   all: ["shops"] as const,
@@ -51,6 +52,7 @@ export function useCreateShop() {
   return useMutation({
     mutationFn: shopApi.create,
     onSuccess: () => {
+      track("Shop created");
       qc.invalidateQueries({ queryKey: shopKeys.mine() });
       // Creating a shop promotes the account to artisan on the server; the
       // stored session still says "client" until /auth/me is refetched, which
@@ -127,6 +129,38 @@ export function useMyShopStats(options: { enabled?: boolean } = {}) {
 }
 
 /** Admin preview of any shop, including pending ones. */
+export function useUpdateShopHours() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: shopApi.updateHours,
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopKeys.mine() }),
+  });
+}
+
+export function useUpdateShopDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: shopApi.updateDelivery,
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopKeys.mine() }),
+  });
+}
+
+export function useMyEarnings(page: number) {
+  return useQuery({
+    queryKey: [...shopKeys.mine(), "earnings", page],
+    queryFn: () => shopApi.getMyEarnings(page),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Opens the artisan's Stripe dashboard in a new tab (links are single-use). */
+export function useOpenStripeDashboard() {
+  return useMutation({
+    mutationFn: shopApi.getStripeDashboardLink,
+    onSuccess: ({ url }) => window.open(url, "_blank", "noopener"),
+  });
+}
+
 export function useAdminShopPreview(id: string | null) {
   return useQuery({
     queryKey: ["admin", "shops", "preview", id ?? ""],

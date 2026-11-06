@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { serviceApi, type UpdateServicePayload } from "@/api/service.api";
 import { shopKeys } from "@/hooks/useShops";
 
@@ -33,5 +33,16 @@ export function useDeleteService() {
   return useMutation({
     mutationFn: (id: string) => serviceApi.remove(id),
     onSuccess: invalidate,
+  });
+}
+
+/** Free appointment times on a day — only for shops with opening hours. */
+export function useServiceAvailability(serviceId: string, date: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["services", serviceId, "availability", date],
+    queryFn: () => serviceApi.availability(serviceId, date),
+    enabled: enabled && Boolean(date),
+    // Slots get taken — don't show a stale list for long.
+    staleTime: 30_000,
   });
 }

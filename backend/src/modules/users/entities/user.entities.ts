@@ -5,6 +5,8 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToOne,
+  Index,
+  ManyToOne,
 } from "typeorm";
 import { Shop } from "../../shop/shop.entities";
 import { publicProfile } from "../user.views";
@@ -50,6 +52,35 @@ export class User {
 
   @Column({ type: "timestamptz", nullable: true, select: false })
   resetPasswordExpiresAt?: Date | null;
+
+  // When the user proved they own `email` (clicked the link we sent, or
+  // completed a password reset). Until then they can browse and sign in,
+  // but not buy, book, message or post.
+  @Column({ type: "timestamptz", nullable: true })
+  emailVerifiedAt?: Date | null;
+
+  // sha256 of the single-use link token; the raw token only ever exists in
+  // the email.
+  @Index()
+  @Column({ type: "varchar", nullable: true, select: false })
+  emailVerificationTokenHash?: string | null;
+
+  @Column({ type: "timestamptz", nullable: true, select: false })
+  emailVerificationExpiresAt?: Date | null;
+
+  // Activity emails (orders, bookings, disputes, review replies). They're
+  // also in the in-app bell either way. Security emails (confirmation,
+  // password reset) always go out.
+  @Column({ type: "boolean", default: true })
+  emailNotifications!: boolean;
+
+  // Their invite code (/register?ref=CODE) and who invited them, if anyone.
+  @Column({ type: "varchar", length: 12, unique: true, nullable: true })
+  referralCode?: string | null;
+
+  @Index()
+  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  referredBy?: User | null;
 
   @Column({ type: "timestamptz", nullable: true })
   acceptedTermsAt?: Date;

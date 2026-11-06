@@ -91,6 +91,28 @@ function deliveryFields(body: {
   };
 }
 
+/**
+ * Checks the shop offers the chosen method and works out the delivery
+ * charge, in cents, for an order whose items come to `itemsCents`.
+ * Thrown inside the checkout transaction, so a refusal rolls back the
+ * stock already reserved.
+ */
+function deliveryChargeCents(shop: Shop, method: DeliveryMethod, itemsCents: number) {
+  if (method === DeliveryMethod.PICKUP) {
+    if (shop.pickupEnabled === false) {
+      throw new CheckoutError(400, "This shop doesn't offer pickup — please choose delivery.");
+    }
+    return 0;
+  }
+  if (shop.deliveryEnabled === false) {
+    throw new CheckoutError(400, "This shop doesn't deliver — please choose pickup.");
+  }
+  if (shop.freeDeliveryOver != null && itemsCents >= toCents(shop.freeDeliveryOver)) {
+    return 0;
+  }
+  return toCents(shop.deliveryFee);
+}
+
 function assertChargeable(totalCents: number) {
   if (totalCents < MIN_CHARGE_CENTS) {
     throw new CheckoutError(
@@ -296,7 +318,9 @@ export const createOrder = async (req: Request, res: Response) => {
     const reserved = await runCheckout(async (manager) => {
       const { product, variant, unitPriceCents, variantLabel } =
         await reserveLineItem(manager, line, userId);
-      const totalCents = unitPriceCents * line.quantity;
+      const itemsCents = unitPriceCents * line.quantity;
+      const feeCents = deliveryChargeCents(product.shop, delivery.deliveryMethod, itemsCents);
+      const totalCents = itemsCents + feeCents;
       assertChargeable(totalCents);
 
       const order = await manager.save(
@@ -309,6 +333,7 @@ export const createOrder = async (req: Request, res: Response) => {
           variantLabel,
           quantity: line.quantity,
           totalAmount: fromCents(totalCents),
+          deliveryFee: fromCents(feeCents),
           status: OrderStatus.PENDING,
           paymentStatus: OrderPaymentStatus.UNPAID,
           ...delivery,
@@ -378,6 +403,18 @@ export const createCartCheckout = async (req: Request, res: Response) => {
             }),
           ),
         );
+      }
+
+      // Delivery is charged once per checkout, on the first line: its
+      // totalAmount includes the fee, so per-line capture and refunds need
+      // no special case.
+      const feeCents = deliveryChargeCents(shop!, delivery.deliveryMethod, totalCents);
+      if (feeCents > 0) {
+        const first = orders[0];
+        first.totalAmount = fromCents(toCents(first.totalAmount) + feeCents);
+        first.deliveryFee = fromCents(feeCents);
+        await manager.save(first);
+        totalCents += feeCents;
       }
 
       assertChargeable(totalCents);

@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { ArrowRight, Package } from "lucide-react";
 import { useProducts } from "@/hooks/useProducts";
+import { img } from "@/lib/images";
 
 export function FeaturedProductsSection() {
   // Just the 12 newest — this used to download the entire catalogue.
@@ -60,7 +61,7 @@ export function FeaturedProductsSection() {
                 >
                   {product.imageUrl ? (
                     <img
-                      src={product.imageUrl}
+                      {...img(product.imageUrl, 320)}
                       alt={product.title}
                       loading="lazy"
                       className="h-40 w-full object-cover"

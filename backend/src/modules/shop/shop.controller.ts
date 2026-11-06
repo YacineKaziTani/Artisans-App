@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { hasOpeningHours, type OpeningHours } from "../../lib/schedule";
 import { In, IsNull, MoreThan } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import {
@@ -18,7 +19,7 @@ import { Review } from "../reviews/review.entities";
 import { shopCanAcceptPayments } from "../../config/connect";
 import { fromCents, toCents } from "../../lib/money";
 import { stripe } from "../../config/stripe";
-import { parsePagination } from "../../middleware/validate.middleware";
+import { pageResult, parsePagination } from "../../middleware/validate.middleware";
 import { primaryFrontendUrl } from "../../lib/urls";
 import { isUniqueViolation } from "../../lib/db";
 import { notifyInBackground } from "../../notifications/deliver";
@@ -171,6 +172,8 @@ export const getMyShop = async (req: Request, res: Response) => {
 export const getAllShops = async (req: Request, res: Response) => {
   try {
     const { category, city, search } = req.query;
+    const minRating = Number(req.query.minRating);
+    const sort = String(req.query.sort ?? "rating");
     const { page, take, skip } = parsePagination(req.query);
 
     const qb = shopRepo
@@ -196,8 +199,15 @@ export const getAllShops = async (req: Request, res: Response) => {
       );
     }
 
+    if (Number.isFinite(minRating) && minRating > 0) {
+      qb.andWhere("shop.averageRating >= :minRating", { minRating });
+    }
+
+    if (sort === "newest") qb.orderBy("shop.createdAt", "DESC");
+    else if (sort === "name") qb.orderBy("shop.shopName", "ASC");
+    else qb.orderBy("shop.averageRating", "DESC");
+
     const [shops, total] = await qb
-      .orderBy("shop.averageRating", "DESC")
       // Tie-break so pages don't shuffle between requests.
       .addOrderBy("shop.id", "ASC")
       .skip(skip)
@@ -615,5 +625,185 @@ export const getShopAdmin = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("getShopAdmin failed:", error);
     return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** PUT /shops/mine/hours — time zone and weekly opening hours. */
+export const updateMyHours = async (req: Request, res: Response) => {
+  try {
+    const shop = await shopRepo.findOne({ where: { owner: { id: req.user!.id } } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+
+    const { timezone, openingHours } = req.body as {
+      timezone: string;
+      openingHours: OpeningHours | null;
+    };
+    shop.timezone = timezone;
+    // Days with no periods are dropped; no periods at all = no fixed hours.
+    const cleaned = openingHours
+      ? (Object.fromEntries(
+          Object.entries(openingHours)
+            .filter(([, ranges]) => ranges && ranges.length)
+            .map(([day, ranges]) => [day, [...ranges!].sort((a, b) => a.open.localeCompare(b.open))]),
+        ) as OpeningHours)
+      : null;
+    shop.openingHours = hasOpeningHours(cleaned) ? cleaned : null;
+
+    const saved = await shopRepo.save(shop);
+    return res.json({ message: "Opening hours saved", shop: ownerShopView(saved) });
+  } catch (error) {
+    console.error("updateMyHours failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** PUT /shops/mine/delivery — pickup/delivery options and the delivery fee. */
+export const updateMyDelivery = async (req: Request, res: Response) => {
+  try {
+    const shop = await shopRepo.findOne({ where: { owner: { id: req.user!.id } } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+
+    const body = req.body as {
+      pickupEnabled: boolean;
+      deliveryEnabled: boolean;
+      deliveryFee: number;
+      freeDeliveryOver?: number | null;
+      deliveryArea?: string;
+    };
+    shop.pickupEnabled = body.pickupEnabled;
+    shop.deliveryEnabled = body.deliveryEnabled;
+    shop.deliveryFee = body.deliveryFee;
+    shop.freeDeliveryOver = body.freeDeliveryOver ?? null;
+    shop.deliveryArea = body.deliveryArea || null;
+
+    const saved = await shopRepo.save(shop);
+    return res.json({ message: "Delivery options saved", shop: ownerShopView(saved) });
+  } catch (error) {
+    console.error("updateMyDelivery failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ── Earnings ───────────────────────────────────────────────────────────────
+
+/** Payments that reached the card: on hold, captured, or (partly) refunded. */
+const EARNING_STATES = ["authorized", "paid", "partially_refunded", "refunded"];
+
+const commissionPercent = () => Number(process.env.PLATFORM_COMMISSION_PERCENT ?? 10);
+
+/** The artisan's orders and bookings as one list (SQL, so it can paginate). */
+const EARNINGS_ROWS = `
+  SELECT 'order' AS kind, o.id, o."createdAt" AS date, o."totalAmount" AS amount,
+         o."deliveryFee" AS "deliveryFee", o."paymentStatus"::text AS "paymentStatus",
+         o.status::text AS status,
+         CONCAT(o.quantity, ' × ', COALESCE(p.title, 'item'),
+                CASE WHEN o."variantLabel" IS NOT NULL THEN ' (' || o."variantLabel" || ')' ELSE '' END) AS title
+    FROM orders o
+    LEFT JOIN products p ON p.id = o."productId"
+   WHERE o."shopId" = $1 AND o."paymentStatus"::text = ANY($2)
+  UNION ALL
+  SELECT 'booking', b.id, b."createdAt", b."totalAmount", 0, b."paymentStatus"::text,
+         b.status::text, COALESCE(s.name, 'Booking')
+    FROM bookings b
+    LEFT JOIN services s ON s.id = b."serviceId"
+   WHERE b."shopId" = $1 AND b."paymentStatus"::text = ANY($2)
+`;
+
+/**
+ * GET /shops/mine/earnings — what clients paid, the platform commission and
+ * what the artisan keeps, overall, this month and per sale. Stripe's own
+ * dashboard (see getMyStripeDashboardLink) remains the record of payouts.
+ */
+export const getMyEarnings = async (req: Request, res: Response) => {
+  try {
+    const shop = await shopRepo.findOne({ where: { owner: { id: req.user!.id } } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+
+    const { page, take, skip } = parsePagination(req.query, { defaultLimit: 20, maxLimit: 50 });
+    const percent = commissionPercent();
+    const net = (cents: number) => cents - Math.round((cents * percent) / 100);
+
+    const [rows, totals, [{ count }]] = await Promise.all([
+      AppDataSource.query(
+        `SELECT * FROM (${EARNINGS_ROWS}) t ORDER BY date DESC, id DESC LIMIT $3 OFFSET $4`,
+        [shop.id, EARNING_STATES, take, skip],
+      ),
+      AppDataSource.query(
+        `SELECT "paymentStatus",
+                SUM(ROUND(amount * 100))::bigint AS cents,
+                SUM(CASE WHEN date >= date_trunc('month', now() AT TIME ZONE $3) AT TIME ZONE $3
+                         THEN ROUND(amount * 100) ELSE 0 END)::bigint AS "monthCents"
+           FROM (${EARNINGS_ROWS}) t GROUP BY "paymentStatus"`,
+        [shop.id, EARNING_STATES, shop.timezone || "UTC"],
+      ),
+      AppDataSource.query(`SELECT COUNT(*)::int AS count FROM (${EARNINGS_ROWS}) t`, [
+        shop.id,
+        EARNING_STATES,
+      ]),
+    ]);
+
+    const byStatus = Object.fromEntries(
+      (totals as { paymentStatus: string; cents: string; monthCents: string }[]).map((t) => [
+        t.paymentStatus,
+        { cents: Number(t.cents), monthCents: Number(t.monthCents) },
+      ]),
+    );
+    const paid = byStatus.paid ?? { cents: 0, monthCents: 0 };
+
+    return res.json({
+      commissionPercent: percent,
+      totals: {
+        paidGross: fromCents(paid.cents),
+        paidNet: fromCents(net(paid.cents)),
+        thisMonthGross: fromCents(paid.monthCents),
+        thisMonthNet: fromCents(net(paid.monthCents)),
+        onHold: fromCents(byStatus.authorized?.cents ?? 0),
+        refunded: fromCents((byStatus.refunded?.cents ?? 0) + (byStatus.partially_refunded?.cents ?? 0)),
+      },
+      ...pageResult(
+        (rows as { kind: string; id: string; date: Date; amount: string; deliveryFee: string; paymentStatus: string; status: string; title: string }[]).map((r) => {
+          const cents = toCents(r.amount);
+          return {
+            kind: r.kind,
+            id: r.id,
+            date: r.date,
+            title: r.title,
+            status: r.status,
+            paymentStatus: r.paymentStatus,
+            amount: fromCents(cents),
+            deliveryFee: Number(r.deliveryFee) || 0,
+            // Only captured payments are actually earned.
+            net: r.paymentStatus === "paid" ? fromCents(net(cents)) : null,
+          };
+        }),
+        count,
+        page,
+        take,
+      ),
+    });
+  } catch (error) {
+    console.error("getMyEarnings failed:", error);
+    return res.status(500).json({ message: "Couldn't load your earnings" });
+  }
+};
+
+/**
+ * POST /shops/mine/stripe-dashboard — a one-time sign-in link to the
+ * artisan's Stripe Express dashboard (payouts, bank details, tax forms).
+ */
+export const getMyStripeDashboardLink = async (req: Request, res: Response) => {
+  try {
+    const shop = await shopRepo.findOne({ where: { owner: { id: req.user!.id } } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+    if (!shop.stripeAccountId) {
+      return res.status(400).json({ message: "Set up payouts first — then your Stripe dashboard is available here." });
+    }
+    const link = await stripe.accounts.createLoginLink(shop.stripeAccountId);
+    return res.json({ url: link.url });
+  } catch (error) {
+    console.error("getMyStripeDashboardLink failed:", error);
+    return res.status(502).json({
+      message: "Stripe couldn't open your dashboard right now. If you haven't finished payout setup, do that first.",
+    });
   }
 };

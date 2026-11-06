@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { bookingApi, type BookingListParams } from "@/api/booking.api";
 import type { BookingStatus } from "@/types";
+import { track } from "@/lib/analytics";
 
 export const bookingKeys = {
   all: ["bookings"] as const,
@@ -18,6 +19,7 @@ export function useCreateBooking() {
   return useMutation({
     mutationFn: bookingApi.create,
     onSuccess: () => {
+      track("Checkout started", { kind: "booking" });
       qc.invalidateQueries({ queryKey: bookingKeys.mine() });
     },
   });

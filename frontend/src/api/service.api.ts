@@ -1,5 +1,5 @@
 import { api } from "@/lib/axios";
-import type { Service } from "@/types";
+import type { Service, ServiceAvailability } from "@/types";
 
 export interface CreateServicePayload {
   name: string;
@@ -16,6 +16,12 @@ export type UpdateServicePayload = Partial<CreateServicePayload> & {
 
 export const serviceApi = {
   listAll: () => api.get<Service[]>("/services").then((r) => r.data),
+
+  /** Free start times on a day (YYYY-MM-DD), for shops with opening hours. */
+  availability: (id: string, date: string) =>
+    api
+      .get<ServiceAvailability>(`/services/${id}/availability`, { params: { date } })
+      .then((r) => r.data),
 
   create: (payload: CreateServicePayload) =>
     api.post<Service>("/services/create", payload).then((r) => r.data),

@@ -11,7 +11,9 @@ import {
   deleteUser,
   updateUserByAdmin,
   uploadMyAvatar,
+  getMyReferrals,
 } from "../controller/user.controller";
+import { getEmailStatus, sendTestEmail } from "../controller/admin-email.controller";
 import { UserRole } from "../entities/user.entities";
 import { parser } from "../../../config/cloudinary";
 import {
@@ -30,7 +32,23 @@ router.param("id", uuidParam);
 
 router.get("/", authMiddleware, authorize(UserRole.SUPER_ADMIN), getUsers);
 
+// Admin dashboard: check that emails actually reach people.
+router.get(
+  "/admin/email-status",
+  authMiddleware,
+  authorize(UserRole.SUPER_ADMIN),
+  getEmailStatus,
+);
+router.post(
+  "/admin/test-email",
+  authMiddleware,
+  authorize(UserRole.SUPER_ADMIN),
+  authLimiter,
+  sendTestEmail,
+);
+
 router.get("/mine", authMiddleware, getMe);
+router.get("/mine/referrals", authMiddleware, getMyReferrals);
 router.patch("/mine", authMiddleware, validateBody(updateMeSchema), updateMe);
 router.post(
   "/mine/avatar",

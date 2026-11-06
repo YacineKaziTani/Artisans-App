@@ -13,6 +13,8 @@ import { useCartStore } from "@/store/cart.store";
 import { shopCanAcceptPayments } from "@/lib/stripe";
 import { Pagination } from "@/components/Pagination";
 import type { ProductSort } from "@/api/product.api";
+import { img } from "@/lib/images";
+import { PageMeta } from "@/components/PageMeta";
 
 const PAGE_SIZE = 12;
 
@@ -20,6 +22,7 @@ const SORT_OPTIONS: { value: ProductSort; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "price_asc", label: "Price: low to high" },
   { value: "price_desc", label: "Price: high to low" },
+  { value: "rating", label: "Top-rated shops" },
 ];
 
 export default function ProductsPage() {
@@ -28,12 +31,16 @@ export default function ProductsPage() {
   const category = searchParams.get("category") ?? "";
   const minPrice = searchParams.get("minPrice") ?? "";
   const maxPrice = searchParams.get("maxPrice") ?? "";
+  const city = searchParams.get("city") ?? "";
+  const minRating = searchParams.get("minRating") ?? "";
+  const inStock = searchParams.get("inStock") === "true";
   const sort = (searchParams.get("sort") as ProductSort | null) ?? "newest";
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
 
   const [searchInput, setSearchInput] = useState(search);
   const [minInput, setMinInput] = useState(minPrice);
   const [maxInput, setMaxInput] = useState(maxPrice);
+  const [cityInput, setCityInput] = useState(city);
 
   const { data: categories } = useCategories();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -55,6 +62,9 @@ export default function ProductsPage() {
     category: category || undefined,
     minPrice: minPrice ? Number(minPrice) : undefined,
     maxPrice: maxPrice ? Number(maxPrice) : undefined,
+    city: city || undefined,
+    minRating: minRating ? Number(minRating) : undefined,
+    inStock: inStock || undefined,
     sort,
     page,
     limit: PAGE_SIZE,
@@ -78,6 +88,7 @@ export default function ProductsPage() {
       search: searchInput.trim() || undefined,
       minPrice: minInput || undefined,
       maxPrice: maxInput || undefined,
+      city: cityInput.trim() || undefined,
     });
   };
 
@@ -88,10 +99,11 @@ export default function ProductsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const hasFilters = Boolean(search || category || minPrice || maxPrice);
+  const hasFilters = Boolean(search || category || minPrice || maxPrice || city || minRating || inStock);
 
   return (
     <main>
+      <PageMeta title="Handmade products" description="Browse handmade goods from independent artisans — filter by category, city, price and rating." />
       {/* ── Page header ──────────────────────────────────────────── */}
       <section className="relative isolate overflow-hidden border-b border-border/70">
         <div className="aurora opacity-60" aria-hidden="true" />
@@ -120,7 +132,20 @@ export default function ProductsPage() {
               id="product-search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search products…"
+              placeholder="Products or shops…"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="product-city" className="field-label">
+              City
+            </label>
+            <Input
+              id="product-city"
+              value={cityInput}
+              onChange={(e) => setCityInput(e.target.value)}
+              placeholder="Any"
+              className="w-36"
             />
           </div>
 
@@ -172,6 +197,31 @@ export default function ProductsPage() {
           </div>
 
           <div>
+            <label htmlFor="product-rating" className="field-label">
+              Shop rating
+            </label>
+            <select
+              id="product-rating"
+              value={minRating}
+              onChange={(e) => updateParams({ minRating: e.target.value || undefined })}
+              className="h-11 rounded-xl border border-input bg-card px-3.5 text-sm shadow-[var(--shadow-xs)] outline-none transition-colors hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25"
+            >
+              <option value="">Any</option>
+              <option value="4">4★ and up</option>
+              <option value="3">3★ and up</option>
+            </select>
+          </div>
+
+          <label className="flex h-11 items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={inStock}
+              onChange={(e) => updateParams({ inStock: e.target.checked ? "true" : undefined })}
+            />
+            In stock only
+          </label>
+
+          <div>
             <label htmlFor="product-sort" className="field-label">
               Sort
             </label>
@@ -205,6 +255,7 @@ export default function ProductsPage() {
                 setSearchInput("");
                 setMinInput("");
                 setMaxInput("");
+                setCityInput("");
                 setSearchParams({});
               }}
             >
@@ -268,7 +319,7 @@ export default function ProductsPage() {
                 >
                   {product.imageUrl ? (
                     <img
-                      src={product.imageUrl}
+                      {...img(product.imageUrl, 480)}
                       alt={product.title}
                       loading="lazy"
                       className="h-48 w-full object-cover transition-transform duration-500 group-hover:scale-105"

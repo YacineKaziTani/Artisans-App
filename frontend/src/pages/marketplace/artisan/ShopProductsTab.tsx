@@ -22,6 +22,7 @@ import type { Product } from "@/types";
 import { ProductEditForm } from "./ProductEditForm";
 import { ProductImagesManager } from "./ProductImagesManager";
 import { ProductVariantsManager } from "./ProductVariantsManager";
+import { img } from "@/lib/images";
 
 function stockLabel(product: Product) {
   if (product.variantOptions?.length) return "Stock set per option";
@@ -236,7 +237,7 @@ export function ShopProductsTab() {
                 <Card key={product.id}>
                   {product.imageUrl && (
                     <img
-                      src={product.imageUrl}
+                      {...img(product.imageUrl, 480)}
                       alt={product.title}
                       className="w-full h-40 object-cover rounded-t-xl"
                     />

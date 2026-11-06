@@ -9,7 +9,7 @@ import {
   getAllOrdersAdmin,
   abandonMyCheckout,
 } from "./order.controller";
-import { authMiddleware } from "../../middleware/auth.middleware";
+import { authMiddleware, requireVerifiedEmail } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { paymentLimiter } from "../../middleware/rate-limit.middleware";
 import { UserRole } from "../users/entities/user.entities";
@@ -28,6 +28,7 @@ router.param("id", uuidParam);
 router.post(
   "/",
   authMiddleware,
+  requireVerifiedEmail,
   paymentLimiter,
   validateBody(createOrderSchema),
   createOrder,
@@ -35,6 +36,7 @@ router.post(
 router.post(
   "/checkout",
   authMiddleware,
+  requireVerifiedEmail,
   paymentLimiter,
   validateBody(cartCheckoutSchema),
   createCartCheckout,

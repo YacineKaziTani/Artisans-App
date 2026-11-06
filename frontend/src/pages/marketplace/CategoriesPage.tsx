@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { useCategories } from "@/hooks/useCategories";
 import { useShops } from "@/hooks/useShops";
 import { themeForCategory } from "@/lib/categoryTheme";
+import { img } from "@/lib/images";
+import { PageMeta } from "@/components/PageMeta";
 
 const PAGE_SIZE = 12;
 
@@ -170,6 +172,7 @@ export default function CategoriesPage() {
 
   return (
     <main>
+      <PageMeta title="Categories" description="Find artisans and handmade goods by craft." />
       {/* ── Page header ──────────────────────────────────────────── */}
       <section className="relative isolate overflow-hidden border-b border-border/70">
         <div className="aurora opacity-60" aria-hidden="true" />
@@ -244,7 +247,7 @@ export default function CategoriesPage() {
                       >
                         {category.iconUrl?.startsWith("http") ? (
                           <img
-                            src={category.iconUrl}
+                            {...img(category.iconUrl, 28)}
                             alt=""
                             className="size-7 object-contain"
                           />

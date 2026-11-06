@@ -7,7 +7,7 @@ import {
   getAllConversationsAdmin,
   getConversationMessagesAdmin,
 } from "./conversation.controller";
-import { authMiddleware } from "../../middleware/auth.middleware";
+import { authMiddleware, requireVerifiedEmail } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
 import { UserRole } from "../users/entities/user.entities";
 import { uuidParam, validateBody } from "../../middleware/validate.middleware";
@@ -23,6 +23,7 @@ router.param("id", uuidParam);
 router.post(
   "/",
   authMiddleware,
+  requireVerifiedEmail,
   validateBody(startConversationSchema),
   startConversation,
 );
@@ -45,6 +46,7 @@ router.get("/:id/messages", authMiddleware, getConversationMessages);
 router.post(
   "/:id/messages",
   authMiddleware,
+  requireVerifiedEmail,
   validateBody(sendMessageSchema),
   sendMessage,
 );

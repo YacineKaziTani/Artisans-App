@@ -41,14 +41,16 @@ Object.assign(process.env, {
   STRIPE_TEST_BYPASS_CONNECT: "true",
   PLATFORM_COMMISSION_PERCENT: "10",
   CHECKOUT_TTL_MINUTES: "30",
+  REQUIRE_EMAIL_VERIFICATION: "true",
   BOOKING_FREE_CANCELLATION_HOURS: "24",
   CLOUDINARY_CLOUD_NAME: "test",
   CLOUDINARY_API_KEY: "test",
   CLOUDINARY_API_SECRET: "test",
   TRUST_PROXY: "",
 });
-// No real email provider — sendMail is also stubbed in the helpers.
-for (const key of ["RESEND_API_KEY", "SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"]) {
+// No real email provider (sendMail is also stubbed in the helpers) and no
+// error monitoring.
+for (const key of ["RESEND_API_KEY", "SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SENTRY_DSN"]) {
   process.env[key] = "";
 }
 // Respect an explicit DB_SSL (CI's Postgres has no TLS).

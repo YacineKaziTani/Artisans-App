@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { v2 as cloudinary } from "cloudinary";
+import { destroyUpload, type CloudinaryFile } from "../../lib/uploads";
 import { IsNull } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { Product } from "./product.entities";
@@ -21,19 +21,6 @@ const productImageRepo = AppDataSource.getRepository(ProductImage);
 const shopRepo = AppDataSource.getRepository(Shop);
 const orderRepo = AppDataSource.getRepository(Order);
 
-interface CloudinaryFile extends Omit<Express.Multer.File, "filename"> {
-  filename?: string;
-}
-
-/** Best-effort removal of an uploaded image we no longer reference. */
-async function destroyUpload(publicId: string | undefined | null) {
-  if (!publicId) return;
-  try {
-    await cloudinary.uploader.destroy(publicId);
-  } catch (err) {
-    console.warn("[cloudinary] couldn't delete", publicId, err);
-  }
-}
 
 function likePattern(value: unknown) {
   return `%${String(value).replace(/[\\%_]/g, "\\$&")}%`;
@@ -43,6 +30,7 @@ const PRODUCT_SORTS = {
   newest: ["product.createdAt", "DESC"],
   price_asc: ["product.basePrice", "ASC"],
   price_desc: ["product.basePrice", "DESC"],
+  rating: ["shop.averageRating", "DESC"],
 } as const;
 
 /**
@@ -59,6 +47,9 @@ export const getAllProducts = async (req: Request, res: Response) => {
     const search = queryString(req.query.search);
     const minPrice = Number(queryString(req.query.minPrice));
     const maxPrice = Number(queryString(req.query.maxPrice));
+    const city = queryString(req.query.city);
+    const minRating = Number(queryString(req.query.minRating));
+    const inStock = queryString(req.query.inStock) === "true";
     const sortKey = queryString(req.query.sort) as keyof typeof PRODUCT_SORTS;
     const [sortColumn, sortDirection] =
       PRODUCT_SORTS[sortKey] ?? PRODUCT_SORTS.newest;
@@ -87,7 +78,7 @@ export const getAllProducts = async (req: Request, res: Response) => {
     }
     if (search) {
       qb.andWhere(
-        "(product.title ILIKE :search OR product.description ILIKE :search)",
+        "(product.title ILIKE :search OR product.description ILIKE :search OR shop.shopName ILIKE :search)",
         { search: likePattern(search) },
       );
     }
@@ -96,6 +87,21 @@ export const getAllProducts = async (req: Request, res: Response) => {
     }
     if (Number.isFinite(maxPrice)) {
       qb.andWhere("product.basePrice <= :maxPrice", { maxPrice });
+    }
+    if (city) {
+      qb.andWhere("shop.city ILIKE :city", { city: likePattern(city) });
+    }
+    if (Number.isFinite(minRating) && minRating > 0) {
+      qb.andWhere("shop.averageRating >= :minRating", { minRating });
+    }
+    if (inStock) {
+      // Simple products: made to order (no count) or some left. Products
+      // with options: at least one option in stock.
+      qb.andWhere(`(
+        (NOT EXISTS (SELECT 1 FROM "variant_options" vo WHERE vo."productId" = product.id)
+          AND (product.stockQuantity IS NULL OR product.stockQuantity > 0))
+        OR EXISTS (SELECT 1 FROM "product_variants" pv WHERE pv."productId" = product.id AND pv."stockQuantity" > 0)
+      )`);
     }
 
     const [products, total] = await qb

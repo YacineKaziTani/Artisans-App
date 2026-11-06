@@ -1,7 +1,7 @@
 import { api } from "@/lib/axios";
 import type { Page, PageParams, Product, ProductImage } from "@/types";
 
-export type ProductSort = "newest" | "price_asc" | "price_desc";
+export type ProductSort = "newest" | "price_asc" | "price_desc" | "rating";
 
 export type ProductUpdatePayload = Partial<{
   title: string;
@@ -17,6 +17,10 @@ export interface ListProductsParams extends PageParams {
   search?: string;
   minPrice?: number;
   maxPrice?: number;
+  city?: string;
+  /** Only shops rated at least this. */
+  minRating?: number;
+  inStock?: boolean;
   sort?: ProductSort;
 }
 

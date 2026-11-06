@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import request from "supertest";
 import { AppDataSource } from "../src/data-source";
 import { createApp } from "../src/app";
+import { notificationsSettled } from "../src/notifications/deliver";
 import { stripe } from "../src/config/stripe";
 import { User, UserRole } from "../src/modules/users/entities/user.entities";
 import { Shop, ShopStatus } from "../src/modules/shop/shop.entities";
@@ -23,13 +24,15 @@ export const api = () => request(app);
 
 /** Empties every table (the schema itself comes from the migrations). */
 export async function resetDatabase() {
-  // Let background notifications from the previous test settle first.
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  // Let background notifications from the previous test finish first —
+  // truncating under them caused foreign-key errors and deadlocks.
+  await notificationsSettled();
   const tables = AppDataSource.entityMetadatas
     .map((meta) => `"${meta.tableName}"`)
     .join(", ");
   await AppDataSource.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
   fakeStripe.reset();
+  sentEmails.length = 0;
 }
 
 // ── Seeding ────────────────────────────────────────────────────────────────
@@ -54,6 +57,8 @@ export async function createUser(
       password: passwordHash,
       role,
       acceptedTermsAt: new Date(),
+      // Accounts made here count as confirmed; sign-ups through the API don't.
+      emailVerifiedAt: new Date(),
       ...overrides,
     }),
   );
@@ -241,8 +246,10 @@ export function installFakeStripe() {
     },
   ) as never;
 
-  // No email leaves the test run.
-  mock.method(mail, "sendMail", async () => undefined);
+  // No email leaves the test run — each one is recorded instead.
+  mock.method(mail, "sendMail", async (to: string, subject: string, html: string, replyTo?: string) => {
+    sentEmails.push({ to, subject, html, replyTo });
+  });
 }
 
 /** Posts a Stripe webhook event for a fake intent, as Stripe would. */
@@ -262,4 +269,36 @@ export function sendWebhook(
     .set("stripe-signature", options.signature ?? "valid")
     .set("content-type", "application/json")
     .send(JSON.stringify(event));
+}
+
+// ── Email ──────────────────────────────────────────────────────────────────
+
+export const sentEmails: { to: string; subject: string; html: string; replyTo?: string }[] = [];
+
+/**
+ * Waits for an email to `to` (most are sent in the background after the
+ * response) and returns the 64-hex-char token from the link in it.
+ */
+export async function tokenFromEmail(to: string, subject: RegExp) {
+  for (let i = 0; i < 100; i++) {
+    const email = [...sentEmails].reverse().find((e) => e.to === to && subject.test(e.subject));
+    const token = email?.html.match(/token=([0-9a-f]{64})/)?.[1];
+    if (token) return token;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`No "${subject}" email with a link was sent to ${to}`);
+}
+
+// ── Cloudinary ─────────────────────────────────────────────────────────────
+
+/** Public ids the app asked Cloudinary to delete. */
+export const destroyedUploads: string[] = [];
+
+export function installFakeCloudinary() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { v2: cloudinary } = require("cloudinary") as typeof import("cloudinary");
+  mock.method(cloudinary.uploader, "destroy", async (publicId: string) => {
+    destroyedUploads.push(publicId);
+    return { result: "ok" };
+  });
 }

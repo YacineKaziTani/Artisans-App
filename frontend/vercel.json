@@ -1,5 +1,29 @@
 {
   "rewrites": [
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/robots.txt", "destination": "/api/robots" },
+    {
+      "source": "/product/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|Slackbot|WhatsApp|LinkedInBot|Discordbot|TelegramBot|Pinterest|SkypeUriPreview|redditbot|Embedly).*"
+        }
+      ],
+      "destination": "/api/share?type=product&id=:id"
+    },
+    {
+      "source": "/artisan/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|Slackbot|WhatsApp|LinkedInBot|Discordbot|TelegramBot|Pinterest|SkypeUriPreview|redditbot|Embedly).*"
+        }
+      ],
+      "destination": "/api/share?type=shop&id=:id"
+    },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
