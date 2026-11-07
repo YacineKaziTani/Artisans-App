@@ -105,6 +105,13 @@ export class Shop {
   @Column({ type: "jsonb", nullable: true })
   openingHours?: OpeningHours | null;
 
+  // How much notice a booking needs, and how far ahead clients may book.
+  @Column({ type: "int", default: 2 })
+  bookingMinNoticeHours!: number;
+
+  @Column({ type: "int", default: 365 })
+  bookingMaxDaysAhead!: number;
+
   // ── Orders ──
   @Column({ type: "boolean", default: true })
   pickupEnabled!: boolean;

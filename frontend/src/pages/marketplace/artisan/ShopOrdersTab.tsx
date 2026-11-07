@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { HoldDeadline } from "@/components/HoldDeadline";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 
 export function ShopOrdersTab() {
   const [page, setPage] = useState(1);
+  // Read once: deadlines don't need to tick, and render must stay pure.
+  const [now] = useState(Date.now);
   const { data: ordersPage, isLoading, isError, isFetching } = useShopOrders({ page });
   const orders = ordersPage?.data;
   const updateStatus = useUpdateOrderStatus();
@@ -70,6 +73,13 @@ export function ShopOrdersTab() {
                         {order.deliveryMethod === "delivery" ? "🚚 Delivery" : "🏬 Pickup"}
                         {order.shippingAddress && ` · ${order.shippingAddress}`}
                       </p>
+                      {order.deliveryMethod === "delivery" && order.status === "fulfilled" && (
+                        <p className="text-xs mt-1 font-medium text-jade-600">
+                          {order.deliveredAt
+                            ? `✓ Client confirmed delivery ${new Date(order.deliveredAt).toLocaleDateString()}`
+                            : "Shipped — waiting for the client to confirm it arrived"}
+                        </p>
+                      )}
                       {order.trackingInfo && (
                         <p className="text-xs text-muted-foreground">Tracking: {order.trackingInfo}</p>
                       )}
@@ -77,6 +87,9 @@ export function ShopOrdersTab() {
                     <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={order.status} />
                       <StatusBadge status={order.paymentStatus} />
+                      {order.status === "pending" && order.paymentStatus === "authorized" && (
+                        <HoldDeadline since={order.authorizedAt ?? order.createdAt} verb="Fulfil" now={now} />
+                      )}
                     </div>
                   </div>
 
@@ -130,7 +143,7 @@ export function ShopOrdersTab() {
                             })
                           }
                         >
-                          Mark Fulfilled
+                          {order.deliveryMethod === "delivery" ? "Mark Shipped" : "Mark Fulfilled"}
                         </Button>
                         <Button
                           size="sm"

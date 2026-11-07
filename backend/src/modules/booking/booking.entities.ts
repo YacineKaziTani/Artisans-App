@@ -45,6 +45,19 @@ export class Booking {
   @Column({ type: "timestamptz", nullable: true })
   endsAt?: Date | null;
 
+  // The day-before reminder went out (so it's sent once).
+  @Column({ type: "timestamptz", nullable: true })
+  reminderSentAt?: Date | null;
+
+  // When the card hold was placed (authorization webhook), and when the
+  // artisan was reminded that it's about to lapse. Card holds last about 7
+  // days; after that Stripe drops them and the sale is lost.
+  @Column({ type: "timestamptz", nullable: true })
+  authorizedAt?: Date | null;
+
+  @Column({ type: "timestamptz", nullable: true })
+  holdReminderSentAt?: Date | null;
+
   @Column({ type: "text", nullable: true })
   notes!: string;
 

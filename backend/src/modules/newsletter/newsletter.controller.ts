@@ -4,6 +4,7 @@ import { IsNull, Not } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { NewsletterSubscriber } from "./newsletter.entities";
 import { deliver, notifyInBackground } from "../../notifications/deliver";
+import { isUniqueViolation } from "../../lib/db";
 
 const repo = AppDataSource.getRepository(NewsletterSubscriber);
 const newToken = () => crypto.randomBytes(32).toString("hex");
@@ -21,7 +22,16 @@ export const subscribe = async (req: Request, res: Response) => {
     if (!alreadyIn) {
       subscriber = subscriber ?? repo.create({ email });
       subscriber.token = newToken();
-      await repo.save(subscriber);
+      try {
+        await repo.save(subscriber);
+      } catch (err) {
+        // A simultaneous sign-up for the same address won the insert —
+        // that one sends the confirmation; this one just says "check your inbox".
+        if (isUniqueViolation(err)) {
+          return res.json({ message: "Check your inbox — click the link we sent to confirm." });
+        }
+        throw err;
+      }
       const token = subscriber.token;
       notifyInBackground(() =>
         deliver(email, {
@@ -95,7 +105,12 @@ export const exportSubscribers = async (_req: Request, res: Response) => {
   try {
     const rows = await repo.find({ where: activeWhere, order: { confirmedAt: "ASC" } });
     const site = (process.env.FRONTEND_URL ?? "http://localhost:5173").split(",")[0].trim().replace(/\/+$/, "");
-    const quote = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    // A leading = + - @ (or tab/CR) makes Excel/Sheets run the cell as a
+    // formula — prefix those with ' so they stay plain text.
+    const quote = (v: string) => {
+      const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const csv = [
       "email,confirmed_at,unsubscribe_url",
       ...rows.map((r) =>

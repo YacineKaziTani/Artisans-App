@@ -33,6 +33,7 @@ import {
   shopStatusSchema,
   updateShopSchema,
 } from "./shop.schemas";
+import { auditAdmin } from "../audit/audit";
 
 const router = Router();
 
@@ -108,6 +109,7 @@ router.patch(
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
   validateBody(resolveVerificationSchema),
+  auditAdmin("shop.verification_resolved", "shop"),
   resolveShopVerification,
 );
 router.post(
@@ -148,6 +150,7 @@ router.patch(
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
   validateBody(shopStatusSchema),
+  auditAdmin("shop.status_changed", "shop"),
   updateShopStatus,
 );
 

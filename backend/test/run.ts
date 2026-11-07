@@ -22,6 +22,10 @@ import { reviewExtrasTests } from "./review-extras.test";
 import { notificationTests } from "./notifications.test";
 import { supportTests } from "./support.test";
 import { growthTests, metricsTests } from "./growth.test";
+import { fixesTests } from "./fixes.test";
+import { highValueTests } from "./high-value.test";
+import { accountTests } from "./account.test";
+import { holdTests } from "./holds.test";
 
 describe("Artisans API", () => {
   before(async () => {
@@ -54,4 +58,8 @@ describe("Artisans API", () => {
   supportTests();
   growthTests();
   metricsTests();
+  fixesTests();
+  highValueTests();
+  accountTests();
+  holdTests();
 });

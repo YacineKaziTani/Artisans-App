@@ -93,6 +93,14 @@ export function useUpdateOrderStatus() {
   });
 }
 
+export function useConfirmReceived() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => orderApi.confirmReceived(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: orderKeys.all }),
+  });
+}
+
 export function useCancelMyOrder() {
   const qc = useQueryClient();
   return useMutation({

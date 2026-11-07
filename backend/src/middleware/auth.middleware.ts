@@ -71,7 +71,7 @@ export async function resolveSession(
 
   const user = await AppDataSource.getRepository(User).findOne({
     where: { id: payload.sub },
-    select: ["id", "name", "email", "role", "isActive", "passwordChangedAt", "emailVerifiedAt"],
+    select: ["id", "name", "email", "role", "isActive", "passwordChangedAt", "emailVerifiedAt", "sessionsRevokedAt"],
   });
 
   if (!user) {
@@ -90,6 +90,16 @@ export async function resolveSession(
       status: 401,
       message: "Session expired, please log in again",
     };
+  }
+
+  // "Sign out of all devices". Compared in whole seconds (a token's iat is),
+  // so signing in again right after still works.
+  if (
+    user.sessionsRevokedAt &&
+    payload.iat !== undefined &&
+    payload.iat < Math.floor(user.sessionsRevokedAt.getTime() / 1000)
+  ) {
+    return { ok: false, status: 401, message: "You were signed out — please log in again" };
   }
 
   return {

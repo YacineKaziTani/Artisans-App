@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMyProfile, useUpdateMyProfile } from "@/hooks/useProfile";
 import { useMyBookings, useCancelMyBooking } from "@/hooks/useBookings";
-import { useMyOrders, useCancelMyOrder } from "@/hooks/useOrders";
+import { useMyOrders, useCancelMyOrder, useConfirmReceived } from "@/hooks/useOrders";
 import { DisputeDialog } from "@/components/DisputeDialog";
 import { useConfirm } from "@/hooks/useConfirm";
 import { Pagination } from "@/components/Pagination";
@@ -18,6 +18,8 @@ import { getErrorMessage } from "@/lib/errors";
 import { AvatarPicker } from "./account/AvatarPicker";
 import { ChangePasswordCard } from "./account/ChangePasswordCard";
 import { EmailPreferencesCard } from "./account/EmailPreferencesCard";
+import { SecurityCard } from "./account/SecurityCard";
+import { YourDataCard } from "./account/YourDataCard";
 import { MyDisputesCard } from "./account/MyDisputesCard";
 import { ReferralCard } from "@/components/growth/ReferralCard";
 import type { User } from "@/types";
@@ -146,10 +148,12 @@ export default function ClientProfilePage() {
 
         <ChangePasswordCard />
         {profile && <EmailPreferencesCard profile={profile} />}
+        {profile && <SecurityCard profile={profile} />}
         <MyBookingsCard />
         <MyOrdersCard />
         <MyDisputesCard />
         <ReferralCard />
+        <YourDataCard />
       </div>
     </div>
   );
@@ -289,6 +293,7 @@ function MyOrdersCard() {
   const { data: ordersPage, isLoading, isError, isFetching } = useMyOrders({ page });
   const orders = ordersPage?.data;
   const cancelOrder = useCancelMyOrder();
+  const confirmReceived = useConfirmReceived();
   const confirm = useConfirm();
   const [disputingOrderId, setDisputingOrderId] = useState<string | null>(null);
 
@@ -353,6 +358,13 @@ function MyOrdersCard() {
                     {order.trackingInfo && (
                       <p className="text-xs text-muted-foreground">Tracking: {order.trackingInfo}</p>
                     )}
+                    {order.deliveryMethod === "delivery" && order.status === "fulfilled" && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {order.deliveredAt
+                          ? `Delivered ${new Date(order.deliveredAt).toLocaleDateString()}`
+                          : "Shipped — let the artisan know when it arrives."}
+                      </p>
+                    )}
                     {unpaid && (
                       <p className="text-xs text-muted-foreground mt-1">
                         Payment wasn't completed — this checkout is released
@@ -370,6 +382,16 @@ function MyOrdersCard() {
                       <StatusBadge status="unpaid" label="payment not completed" />
                     ) : (
                       <StatusBadge status={order.status} />
+                    )}
+                    {order.deliveryMethod === "delivery" && order.status === "fulfilled" && !order.deliveredAt && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={confirmReceived.isPending && confirmReceived.variables === order.id}
+                        onClick={() => confirmReceived.mutate(order.id)}
+                      >
+                        Confirm received
+                      </Button>
                     )}
                     {cancellable && (
                       <Button

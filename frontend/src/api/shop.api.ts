@@ -105,7 +105,12 @@ export const shopApi = {
   /** Artisan dashboard numbers. */
   getMyStats: () => api.get<ShopStats>("/shops/mine/stats").then((r) => r.data),
 
-  updateHours: (payload: { timezone: string; openingHours: OpeningHours | null }) =>
+  updateHours: (payload: {
+    timezone: string;
+    openingHours: OpeningHours | null;
+    bookingMinNoticeHours?: number;
+    bookingMaxDaysAhead?: number;
+  }) =>
     api.put<{ shop: Shop }>("/shops/mine/hours", payload).then((r) => r.data.shop),
 
   updateDelivery: (payload: {

@@ -8,6 +8,7 @@ import {
   cancelMyOrder,
   getAllOrdersAdmin,
   abandonMyCheckout,
+  confirmOrderReceived,
 } from "./order.controller";
 import { authMiddleware, requireVerifiedEmail } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
@@ -20,6 +21,7 @@ import {
   createOrderSchema,
   orderStatusSchema,
 } from "./order.schemas";
+import { auditAdmin } from "../audit/audit";
 
 const router = Router();
 
@@ -60,8 +62,10 @@ router.patch(
   authMiddleware,
   authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN),
   validateBody(orderStatusSchema),
+  auditAdmin("order.status_changed", "order"),
   updateOrderStatus,
 );
 router.patch("/:id/cancel", authMiddleware, cancelMyOrder);
+router.patch("/:id/received", authMiddleware, confirmOrderReceived);
 
 export default router;

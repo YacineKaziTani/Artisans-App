@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { HoldDeadline } from "@/components/HoldDeadline";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useShopBookings, useUpdateBookingStatus } from "@/hooks/useBookings";
@@ -79,6 +80,9 @@ export function ShopBookingsTab() {
                     <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={booking.status} />
                       <StatusBadge status={booking.paymentStatus} />
+                      {booking.status === "pending" && booking.paymentStatus === "authorized" && (
+                        <HoldDeadline since={booking.authorizedAt ?? booking.createdAt} verb="Confirm" now={now} />
+                      )}
                     </div>
                   </div>
 

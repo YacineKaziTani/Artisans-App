@@ -92,6 +92,20 @@ export class Order {
   @Column({ nullable: true })
   trackingInfo?: string;
 
+  // For delivery orders: when the client confirmed it arrived. (Fulfilled
+  // means shipped/handed over — that's when the card is charged.)
+  @Column({ type: "timestamptz", nullable: true })
+  deliveredAt?: Date | null;
+
+  // When the card hold was placed (authorization webhook), and when the
+  // artisan was reminded that it's about to lapse. Card holds last about 7
+  // days; after that Stripe drops them and the sale is lost.
+  @Column({ type: "timestamptz", nullable: true })
+  authorizedAt?: Date | null;
+
+  @Column({ type: "timestamptz", nullable: true })
+  holdReminderSentAt?: Date | null;
+
   @ManyToOne(() => User)
   client!: User;
 

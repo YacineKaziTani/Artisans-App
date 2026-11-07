@@ -22,6 +22,7 @@ import supportRoutes from "./modules/support/support.routes";
 import seoRoutes from "./modules/seo/seo.routes";
 import newsletterRoutes from "./modules/newsletter/newsletter.routes";
 import metricsRoutes from "./modules/metrics/metrics.routes";
+import auditRoutes from "./modules/audit/audit.routes";
 import { stripeWebhook } from "./modules/booking/booking.controller";
 import { generalLimiter } from "./middleware/rate-limit.middleware";
 import { requireTrustedOrigin } from "./middleware/origin.middleware";
@@ -109,6 +110,7 @@ export function createApp() {
   app.use("/api/seo", seoRoutes);
   app.use("/api/newsletter", newsletterRoutes);
   app.use("/api/metrics", metricsRoutes);
+  app.use("/api/audit", auditRoutes);
 
   app.use("/api", (_req, res) => {
     res.status(404).json({ message: "Not found" });

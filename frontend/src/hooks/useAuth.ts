@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { homePathFor, returnPathFrom } from "@/lib/redirects";
 import { authApi } from "@/api/auth.api";
 import { useAuthStore } from "@/store/auth.store";
-import type { LoginPayload, RegisterPayload } from "@/types";
+import type { LoginPayload, RegisterPayload, User } from "@/types";
 import { useEffect } from "react";
 import { track } from "@/lib/analytics";
 
@@ -36,20 +36,76 @@ export function useMe() {
  * to always go to /dashboard, which bounced clients to "/" and lost the
  * checkout they were in the middle of.
  */
-export function useLogin() {
+/** Stores the session and goes back to where the user was headed. */
+function useFinishLogin() {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const qc = useQueryClient();
+  return (user: User) => {
+    setAuth(user);
+    qc.setQueryData(authKeys.me, user);
+    navigate(returnPathFrom(location.state) ?? homePathFor(user), { replace: true });
+  };
+}
 
+export function useLogin() {
+  const finish = useFinishLogin();
   return useMutation({
     mutationFn: (payload: LoginPayload) => authApi.login(payload),
+    // With two-step login on, there's no user yet — the page asks for the code.
     onSuccess: ({ user }) => {
-      setAuth(user);
-      qc.setQueryData(authKeys.me, user);
-      navigate(returnPathFrom(location.state) ?? homePathFor(user), {
-        replace: true,
-      });
+      if (user) finish(user);
+    },
+  });
+}
+
+/** The authenticator-code step of a two-step login. */
+export function useLoginSecondStep() {
+  const finish = useFinishLogin();
+  return useMutation({
+    mutationFn: authApi.loginSecondStep,
+    onSuccess: ({ user }) => finish(user),
+  });
+}
+
+/** Ends every session of the account, including this one. */
+export function useLogoutAll() {
+  const { logout } = useAuthStore();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: authApi.logoutAll,
+    onSuccess: () => {
+      logout();
+      qc.clear();
+      navigate("/login", { state: { notice: "You've been signed out on all your devices." } });
+    },
+  });
+}
+
+export function useTwoFactorSetup() {
+  return useMutation({ mutationFn: authApi.twoFactorSetup });
+}
+
+export function useTwoFactorEnable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: authApi.twoFactorEnable,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: authKeys.me });
+      qc.invalidateQueries({ queryKey: ["users", "mine"] });
+    },
+  });
+}
+
+export function useTwoFactorDisable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: authApi.twoFactorDisable,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: authKeys.me });
+      qc.invalidateQueries({ queryKey: ["users", "mine"] });
     },
   });
 }

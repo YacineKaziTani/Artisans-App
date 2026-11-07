@@ -59,6 +59,10 @@ export const orderApi = {
   cancelMine: (id: string) =>
     api.patch<Order>(`/orders/${id}/cancel`).then((r) => r.data),
 
+  /** The client confirms a delivery order arrived. */
+  confirmReceived: (id: string) =>
+    api.patch<Order>(`/orders/${id}/received`).then((r) => r.data),
+
   /** Back out of an unpaid checkout: releases its reserved stock now. */
   abandon: (orderIds: string[]) =>
     api

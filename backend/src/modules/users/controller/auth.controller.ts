@@ -17,6 +17,13 @@ import { EMAIL_VERIFICATION_TTL_MS } from "../../../config/email-verification";
 import { sendEmailVerification } from "../../../notifications";
 import { notifyInBackground } from "../../../notifications/deliver";
 import { newReferralCode } from "../../../lib/codes";
+import {
+  generateRecoveryCodes,
+  generateTotpSecret,
+  hashRecoveryCode,
+  otpauthUrl,
+  verifyTotp,
+} from "../../../lib/totp";
 
 // Request bodies are validated and normalized by the zod schemas in
 // user.schemas.ts (emails arrive trimmed and lowercased).
@@ -46,6 +53,7 @@ export function publicUser(user: User) {
     avatarUrl: user.avatarUrl,
     emailVerified: Boolean(user.emailVerifiedAt),
     emailNotifications: user.emailNotifications !== false,
+    twoFactorEnabled: Boolean(user.twoFactorEnabledAt),
     createdAt: user.createdAt,
   };
 }
@@ -58,6 +66,32 @@ function newEmailVerificationToken() {
     hash: hashToken(raw),
     expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
   };
+}
+
+// The 2FA challenge is signed with a different key than sessions, so it
+// can never be used as one.
+const TWO_FACTOR_SECRET = `${process.env.JWT_SECRET}|2fa-challenge`;
+
+function issueTwoFactorChallenge(userId: string) {
+  return jwt.sign({ sub: userId, purpose: "2fa" }, TWO_FACTOR_SECRET, { expiresIn: "5m" });
+}
+
+/** Checks an authenticator code or an unused recovery code; consumes a recovery code. */
+async function checkSecondFactor(userId: string, code: string): Promise<boolean> {
+  const user = await userRepo
+    .createQueryBuilder("user")
+    .addSelect(["user.twoFactorSecret", "user.twoFactorRecoveryCodes"])
+    .where("user.id = :id", { id: userId })
+    .getOne();
+  if (!user?.twoFactorSecret) return false;
+  const trimmed = code.trim();
+  if (/^\d{6}$/.test(trimmed)) return verifyTotp(user.twoFactorSecret, trimmed);
+
+  const hash = hashRecoveryCode(trimmed);
+  const remaining = user.twoFactorRecoveryCodes ?? [];
+  if (!remaining.includes(hash)) return false;
+  await userRepo.update(user.id, { twoFactorRecoveryCodes: remaining.filter((h) => h !== hash) });
+  return true;
 }
 
 function issueToken(user: User) {
@@ -184,6 +218,12 @@ export const login = async (req: Request, res: Response) => {
       user.failedLoginAttempts = 0;
       user.lockedUntil = null;
       await userRepo.save(user);
+    }
+
+    // Two-step login: the password was right, now the authenticator code.
+    // No session yet — just a short-lived challenge for /auth/login/2fa.
+    if (user.twoFactorEnabledAt) {
+      return res.json({ twoFactorRequired: true, challenge: issueTwoFactorChallenge(user.id) });
     }
 
     res.cookie("token", issueToken(user), COOKIE_OPTIONS);
@@ -359,6 +399,126 @@ export const resendEmailVerification = async (req: Request, res: Response) => {
     return res.json({ message: `We sent a new link to ${user.email}` });
   } catch (error) {
     console.error("resendEmailVerification failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * POST /auth/logout-all — ends every session of this account (other
+ * browsers, phones, a forgotten public computer), including this one.
+ */
+export const logoutEverywhere = async (req: Request, res: Response) => {
+  try {
+    await userRepo.update(req.user!.id, { sessionsRevokedAt: new Date() });
+    disconnectUserSockets(req.user!.id);
+    res.clearCookie("token", CLEAR_COOKIE_OPTIONS);
+    return res.json({ message: "Signed out on all devices" });
+  } catch (error) {
+    console.error("logoutEverywhere failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ── Two-step login ─────────────────────────────────────────────────────────
+
+/** POST /auth/login/2fa { challenge, code } — finishes a two-step login. */
+export const loginSecondStep = async (req: Request, res: Response) => {
+  try {
+    const { challenge, code } = req.body as { challenge: string; code: string };
+    let userId: string;
+    try {
+      const payload = jwt.verify(challenge, TWO_FACTOR_SECRET) as { sub: string; purpose?: string };
+      if (payload.purpose !== "2fa") throw new Error("wrong purpose");
+      userId = payload.sub;
+    } catch {
+      return res.status(401).json({ message: "That took too long — please log in again." });
+    }
+
+    if (!(await checkSecondFactor(userId, code))) {
+      return res.status(401).json({ message: "That code isn't right. Check your authenticator app and try again." });
+    }
+    const user = await userRepo.findOne({ where: { id: userId } });
+    if (!user || user.isActive === false) {
+      return res.status(403).json({ message: "This account can't sign in" });
+    }
+    res.cookie("token", issueToken(user), COOKIE_OPTIONS);
+    return res.json({ message: "Logged in successfully", user: publicUser(user) });
+  } catch (error) {
+    console.error("loginSecondStep failed:", error);
+    return res.status(500).json({ message: "Server error during login" });
+  }
+};
+
+/** POST /auth/2fa/setup — a new secret to add to an authenticator app (not active yet). */
+export const startTwoFactorSetup = async (req: Request, res: Response) => {
+  try {
+    const user = await userRepo.findOne({ where: { id: req.user!.id } });
+    if (!user) return res.status(401).json({ message: "Not authenticated" });
+    if (user.twoFactorEnabledAt) {
+      return res.status(400).json({ message: "Two-step login is already on" });
+    }
+    const secret = generateTotpSecret();
+    await userRepo.update(user.id, { twoFactorPendingSecret: secret });
+    return res.json({ secret, otpauthUrl: otpauthUrl(secret, user.email) });
+  } catch (error) {
+    console.error("startTwoFactorSetup failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** POST /auth/2fa/enable { code } — confirms the app works, turns it on, returns recovery codes once. */
+export const enableTwoFactor = async (req: Request, res: Response) => {
+  try {
+    const user = await userRepo
+      .createQueryBuilder("user")
+      .addSelect(["user.twoFactorPendingSecret"])
+      .where("user.id = :id", { id: req.user!.id })
+      .getOne();
+    if (!user?.twoFactorPendingSecret) {
+      return res.status(400).json({ message: "Start the setup first" });
+    }
+    if (!verifyTotp(user.twoFactorPendingSecret, String(req.body.code ?? "").trim())) {
+      return res.status(400).json({ message: "That code isn't right — check the time on your phone and try again.", field: "code" });
+    }
+    const { codes, hashes } = generateRecoveryCodes();
+    await userRepo.update(user.id, {
+      twoFactorSecret: user.twoFactorPendingSecret,
+      twoFactorPendingSecret: null,
+      twoFactorEnabledAt: new Date(),
+      twoFactorRecoveryCodes: hashes,
+    });
+    return res.json({ message: "Two-step login is on", recoveryCodes: codes });
+  } catch (error) {
+    console.error("enableTwoFactor failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** POST /auth/2fa/disable { password, code } — needs both, so a stolen session alone can't turn it off. */
+export const disableTwoFactor = async (req: Request, res: Response) => {
+  try {
+    const { password, code } = req.body as { password: string; code: string };
+    const user = await userRepo
+      .createQueryBuilder("user")
+      .addSelect(["user.password"])
+      .where("user.id = :id", { id: req.user!.id })
+      .getOne();
+    if (!user?.twoFactorEnabledAt) return res.status(400).json({ message: "Two-step login is already off" });
+    if (!(await bcrypt.compare(password, user.password))) {
+      return res.status(400).json({ message: "Your password isn't right", field: "password" });
+    }
+    if (!(await checkSecondFactor(user.id, code))) {
+      return res.status(400).json({ message: "That code isn't right", field: "code" });
+    }
+    await userRepo.update(user.id, {
+      twoFactorSecret: null,
+      twoFactorPendingSecret: null,
+      twoFactorEnabledAt: null,
+      twoFactorRecoveryCodes: null,
+    });
+    return res.json({ message: "Two-step login is off" });
+  } catch (error) {
+    console.error("disableTwoFactor failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };

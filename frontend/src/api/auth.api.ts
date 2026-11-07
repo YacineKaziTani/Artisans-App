@@ -2,10 +2,25 @@ import { api } from "@/lib/axios";
 import type { LoginPayload, RegisterPayload, User } from "@/types";
 
 export const authApi = {
+  /** Either signs in ({ user }) or asks for the authenticator code ({ twoFactorRequired, challenge }). */
   login: (payload: LoginPayload) =>
     api
-      .post<{ message: string; user: User }>("/auth/login", payload)
+      .post<{ message?: string; user?: User; twoFactorRequired?: boolean; challenge?: string }>("/auth/login", payload)
       .then((r) => r.data),
+
+  loginSecondStep: (payload: { challenge: string; code: string }) =>
+    api.post<{ message: string; user: User }>("/auth/login/2fa", payload).then((r) => r.data),
+
+  logoutAll: () => api.post<{ message: string }>("/auth/logout-all").then((r) => r.data),
+
+  twoFactorSetup: () =>
+    api.post<{ secret: string; otpauthUrl: string }>("/auth/2fa/setup").then((r) => r.data),
+
+  twoFactorEnable: (code: string) =>
+    api.post<{ message: string; recoveryCodes: string[] }>("/auth/2fa/enable", { code }).then((r) => r.data),
+
+  twoFactorDisable: (payload: { password: string; code: string }) =>
+    api.post<{ message: string }>("/auth/2fa/disable", payload).then((r) => r.data),
 
   register: (payload: RegisterPayload) =>
     api

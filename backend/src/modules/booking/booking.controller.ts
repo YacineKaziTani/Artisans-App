@@ -33,6 +33,12 @@ import {
 } from "../orders/order.controller";
 import { ProcessedWebhookEvent } from "../webhook-events/webhook-event.entities";
 import {
+  notifyBookingCompleted,
+  notifyBookingHoldExpired,
+  notifyBookingHoldExpiring,
+  notifyBookingReminder,
+} from "../../notifications";
+import {
   dayWindow,
   hasOpeningHours,
   slotsForDate,
@@ -147,10 +153,19 @@ export const createBooking = async (req: Request, res: Response) => {
         .status(400)
         .json({ message: "Choose a date and time in the future" });
     }
-    if (scheduledAt.getTime() > now + MAX_BOOKING_AHEAD_MS) {
-      return res
-        .status(400)
-        .json({ message: "Bookings can be made up to a year in advance" });
+    // Each shop's own rules: minimum notice, and how far ahead it takes bookings.
+    const { earliest, latest } = bookingWindow(service.shop, now);
+    if (scheduledAt.getTime() < earliest) {
+      const hours = service.shop.bookingMinNoticeHours;
+      return res.status(400).json({
+        message: `This artisan needs at least ${hours} hour${hours === 1 ? "" : "s"}' notice — please pick a later time.`,
+      });
+    }
+    if (scheduledAt.getTime() > latest) {
+      const days = service.shop.bookingMaxDaysAhead ?? 365;
+      return res.status(400).json({
+        message: `This artisan takes bookings up to ${days} day${days === 1 ? "" : "s"} ahead.`,
+      });
     }
 
     const shopId = service.shop.id;
@@ -226,6 +241,7 @@ export const createBooking = async (req: Request, res: Response) => {
         currency: "usd",
         capture_method: "manual",
         metadata: { type: "booking", bookingId: booking.id },
+        receipt_email: req.user!.email,
         automatic_payment_methods: { enabled: true },
         ...connectChargeParams(service.shop, amountInCents),
       });
@@ -619,7 +635,7 @@ async function handleBookingIntentAuthorized(bookingId: string) {
       paymentStatus: In(UNPAID_STATES),
       status: Not(BookingStatus.CANCELLED),
     },
-    { paymentStatus: PaymentStatus.AUTHORIZED },
+    { paymentStatus: PaymentStatus.AUTHORIZED, authorizedAt: new Date() },
   );
   // This is when the artisan has something to confirm. The update is
   // conditional and webhook events are de-duplicated, so this sends once.
@@ -697,7 +713,7 @@ async function handleBookingIntentCanceled(bookingId: string) {
   } else if (booking.status === BookingStatus.PENDING && authorized) {
     // The hold was released or expired (about 7 days) before the artisan
     // confirmed the booking.
-    await bookingRepo.update(
+    const expired = await bookingRepo.update(
       {
         id: bookingId,
         status: BookingStatus.PENDING,
@@ -705,6 +721,7 @@ async function handleBookingIntentCanceled(bookingId: string) {
       },
       { status: BookingStatus.CANCELLED, paymentStatus: PaymentStatus.UNPAID },
     );
+    if (expired.affected) notifyInBackground(() => notifyBookingHoldExpired(bookingId));
   } else if (booking.status === BookingStatus.CANCELLED && authorized) {
     await bookingRepo.update(
       { id: bookingId, paymentStatus: PaymentStatus.AUTHORIZED },
@@ -803,6 +820,19 @@ async function busyIntervals(shopId: string, from: Date, to: Date): Promise<Inte
   }));
 }
 
+/** The earliest and latest start a shop accepts right now (ms since epoch). */
+function bookingWindow(
+  shop: { bookingMinNoticeHours?: number | null; bookingMaxDaysAhead?: number | null },
+  now: number,
+) {
+  const noticeMs = Math.max(0, shop.bookingMinNoticeHours ?? 0) * 60 * 60 * 1000;
+  const aheadMs = Math.min(
+    MAX_BOOKING_AHEAD_MS,
+    Math.max(1, shop.bookingMaxDaysAhead ?? 365) * 24 * 60 * 60 * 1000,
+  );
+  return { earliest: now + noticeMs, latest: now + aheadMs };
+}
+
 /** Slot length offered for services without an appointment length. */
 const UNTIMED_SLOT_MINUTES = 30;
 
@@ -833,7 +863,8 @@ export const getServiceAvailability = async (req: Request, res: Response) => {
 
     const durationMinutes = service.durationMinutes ?? UNTIMED_SLOT_MINUTES;
     const window = dayWindow(date, timezone);
-    const tooFar = window.start.getTime() > Date.now() + MAX_BOOKING_AHEAD_MS;
+    const { earliest, latest } = bookingWindow(shop, Date.now());
+    const tooFar = window.start.getTime() > latest;
     const slots = tooFar
       ? []
       : slotsForDate({
@@ -843,7 +874,7 @@ export const getServiceAvailability = async (req: Request, res: Response) => {
           durationMinutes,
           stepMinutes: Math.min(30, durationMinutes),
           busy: await busyIntervals(shop.id, window.start, window.end),
-          notBefore: new Date(),
+          notBefore: new Date(earliest - 1),
         });
 
     return res.json({
@@ -858,3 +889,93 @@ export const getServiceAvailability = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Couldn't load available times" });
   }
 };
+
+/**
+ * Day-before reminders for confirmed appointments (once each; skipped for
+ * bookings made in the last hour — they were just confirmed by email).
+ */
+export async function sendBookingReminders() {
+  const due: { id: string }[] = await AppDataSource.query(
+    `UPDATE bookings SET "reminderSentAt" = now()
+      WHERE status = 'confirmed' AND "reminderSentAt" IS NULL
+        AND "scheduledAt" > now() AND "scheduledAt" <= now() + interval '24 hours'
+        AND "createdAt" < now() - interval '1 hour'
+      RETURNING id`,
+  ).then((r) => (Array.isArray(r[0]) ? r[0] : r));
+  for (const { id } of due) notifyInBackground(() => notifyBookingReminder(id));
+  return due.length;
+}
+
+/**
+ * Confirmed appointments that ended over a day ago become "completed" — so
+ * the client can review — unless the artisan already marked them. Only
+ * recent ones prompt the client (older ones are tidied up silently).
+ */
+export async function autoCompleteBookings() {
+  const done: { id: string; recent: boolean }[] = await AppDataSource.query(
+    `UPDATE bookings SET status = 'completed', "updatedAt" = now()
+      WHERE status = 'confirmed'
+        AND COALESCE("endsAt", "scheduledAt") < now() - interval '24 hours'
+      RETURNING id, COALESCE("endsAt", "scheduledAt") > now() - interval '8 days' AS recent`,
+  ).then((r) => (Array.isArray(r[0]) ? r[0] : r));
+  for (const { id, recent } of done) {
+    if (recent) notifyInBackground(() => notifyBookingCompleted(id));
+  }
+  return done.length;
+}
+
+/** Reminds artisans ~2 days before the hold lapses on a booking they haven't confirmed. */
+export async function sendBookingHoldReminders() {
+  const due: { id: string }[] = await AppDataSource.query(
+    `UPDATE bookings SET "holdReminderSentAt" = now()
+      WHERE status = 'pending' AND "paymentStatus" = 'authorized' AND "holdReminderSentAt" IS NULL
+        AND COALESCE("authorizedAt", "createdAt") < now() - interval '5 days'
+      RETURNING id`,
+  ).then((r) => (Array.isArray(r[0]) ? r[0] : r));
+  for (const { id } of due) notifyInBackground(() => notifyBookingHoldExpiring(id));
+  return due.length;
+}
+
+const INTENT_STATUS_EVENTS: Record<string, string> = {
+  canceled: "payment_intent.canceled",
+  succeeded: "payment_intent.succeeded",
+};
+
+/**
+ * Safety net for missed webhooks: holds older than ~7 days that we still
+ * show as "on hold" are checked with Stripe, and whatever Stripe says
+ * happened (dropped, or captured) is applied as if the event had arrived.
+ */
+export async function reconcileStaleHolds(limit = 25) {
+  let fixed = 0;
+  const stale = `COALESCE("authorizedAt", "createdAt") < now() - interval '7 days 6 hours'`;
+  const orderIntents: { id: string }[] = await AppDataSource.query(
+    `SELECT DISTINCT "stripePaymentIntentId" AS id FROM orders
+      WHERE "paymentStatus" = 'authorized' AND "stripePaymentIntentId" IS NOT NULL AND ${stale}
+      LIMIT $1`,
+    [limit],
+  );
+  for (const { id } of orderIntents) {
+    const intent = await stripe.paymentIntents.retrieve(id);
+    const handler = ORDER_EVENT_HANDLERS[INTENT_STATUS_EVENTS[intent.status] ?? ""];
+    if (handler) {
+      await handler(id);
+      fixed++;
+    }
+  }
+  const bookings: { id: string; intent: string }[] = await AppDataSource.query(
+    `SELECT id, "stripePaymentIntentId" AS intent FROM bookings
+      WHERE "paymentStatus" = 'authorized' AND "stripePaymentIntentId" IS NOT NULL AND ${stale}
+      LIMIT $1`,
+    [limit],
+  );
+  for (const booking of bookings) {
+    const intent = await stripe.paymentIntents.retrieve(booking.intent);
+    const handler = BOOKING_EVENT_HANDLERS[INTENT_STATUS_EVENTS[intent.status] ?? ""];
+    if (handler) {
+      await handler(booking.id);
+      fixed++;
+    }
+  }
+  return fixed;
+}

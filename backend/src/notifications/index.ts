@@ -403,3 +403,247 @@ export async function notifyReviewReplied(reviewId: string) {
     cta: { label: "See the reply", path: `/artisan/${review.shop.id}` },
   });
 }
+
+// ── Periodic: unread messages, booking reminders, review prompts ──────────
+
+const UNREAD_ALERT_AFTER = "15 minutes";
+
+/**
+ * Messages still unread 15 minutes after they arrived: one alert per
+ * conversation (bell + email unless turned off) instead of one per message.
+ * Each message is claimed before alerting, so it's only ever alerted once,
+ * even with several instances running.
+ */
+export async function notifyUnreadMessages(limit = 500) {
+  const rows: {
+    id: string;
+    conversationId: string;
+    senderId: string;
+    content: string;
+    clientId: string;
+    ownerId: string;
+    shopName: string;
+  }[] = await AppDataSource.query(
+    `SELECT m.id, m."conversationId", m."senderId", m.content, c."clientId", s."ownerId", s."shopName"
+       FROM messages m
+       JOIN conversations c ON c.id = m."conversationId"
+       JOIN shops s ON s.id = c."shopId"
+      WHERE m."readAt" IS NULL AND m."notifiedAt" IS NULL
+        AND m."createdAt" < now() - interval '${UNREAD_ALERT_AFTER}'
+      ORDER BY m."createdAt" ASC
+      LIMIT $1`,
+    [limit],
+  );
+
+  const groups = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const recipientId = row.senderId === row.clientId ? row.ownerId : row.clientId;
+    if (!recipientId || recipientId === row.senderId) continue;
+    const key = `${row.conversationId}:${recipientId}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+
+  let alerted = 0;
+  const users = AppDataSource.getRepository(User);
+  for (const [key, messages] of groups) {
+    const [conversationId, recipientId] = key.split(":");
+    const claimed: { id: string }[] = await AppDataSource.query(
+      `UPDATE messages SET "notifiedAt" = now() WHERE id = ANY($1) AND "notifiedAt" IS NULL RETURNING id`,
+      [messages.map((m) => m.id)],
+    ).then((r) => (Array.isArray(r[0]) ? r[0] : r));
+    if (!claimed.length) continue;
+
+    const first = messages[0];
+    const fromShop = first.senderId === first.ownerId;
+    const sender = fromShop ? null : await users.findOne({ where: { id: first.senderId } });
+    const senderName = fromShop ? first.shopName : (sender?.name ?? "A client");
+    const recipient = await users.findOne({ where: { id: recipientId } });
+    const snippet = first.content.length > 200 ? `${first.content.slice(0, 199)}…` : first.content;
+    await inform(recipient, {
+      subject: `New message from ${senderName}`,
+      heading: `${senderName} sent you a message`,
+      paragraphs: [
+        `"${snippet}"${claimed.length > 1 ? ` — and ${claimed.length - 1} more` : ""}`,
+      ],
+      cta: { label: "Reply", path: `/messages/${conversationId}` },
+    });
+    alerted++;
+  }
+  return alerted;
+}
+
+/** The day before a confirmed appointment — to the client and the artisan. */
+export async function notifyBookingReminder(bookingId: string) {
+  const booking = await bookingRepo().findOne({
+    where: { id: bookingId },
+    relations: ["service", "client", "shop", "shop.owner"],
+  });
+  if (!booking) return;
+  const when = formatWhen(booking.scheduledAt, booking.shop.timezone);
+  await inform(booking.client, {
+    subject: `Reminder: ${booking.service.name} tomorrow`,
+    heading: `See you soon at ${booking.shop.shopName}`,
+    paragraphs: [
+      `Your booking for ${booking.service.name} is on ${when}.`,
+      booking.shop.address ? `Address: ${booking.shop.address}${booking.shop.city ? `, ${booking.shop.city}` : ""}` : "",
+    ].filter(Boolean),
+    cta: { label: "View booking", path: CLIENT_ACTIVITY },
+  });
+  await inform(booking.shop.owner, {
+    subject: `Tomorrow: ${booking.client.name} — ${booking.service.name}`,
+    heading: "Appointment tomorrow",
+    paragraphs: [`${booking.client.name} booked ${booking.service.name} on ${when}.`],
+    cta: { label: "View bookings", path: ARTISAN_BOOKINGS },
+  });
+}
+
+/** An appointment was completed — invite the client to review. */
+export async function notifyBookingCompleted(bookingId: string) {
+  const booking = await bookingRepo().findOne({
+    where: { id: bookingId },
+    relations: ["service", "client", "shop"],
+  });
+  if (!booking) return;
+  await inform(booking.client, {
+    subject: `How was ${booking.service.name}?`,
+    heading: `How was your visit to ${booking.shop.shopName}?`,
+    paragraphs: ["A short review helps other clients — and the artisan."],
+    cta: { label: "Leave a review", path: `/artisan/${booking.shop.id}` },
+  });
+}
+
+/** The client confirmed a delivery arrived — tell the artisan. */
+export async function notifyOrderDelivered(orderId: string) {
+  const order = await orderRepo().findOne({
+    where: { id: orderId },
+    relations: ["product", "client", "shop", "shop.owner"],
+  });
+  if (!order) return;
+  await inform(order.shop.owner, {
+    subject: `Delivered: ${order.product?.title ?? "an order"}`,
+    heading: `${order.client.name} received their order`,
+    paragraphs: [describeLine(order)],
+    cta: { label: "View orders", path: ARTISAN_ORDERS },
+  });
+}
+
+// ── Card holds (they lapse after about 7 days) ─────────────────────────────
+
+/** Card holds last about 7 days from authorization. */
+export const HOLD_DAYS = 7;
+
+function holdDeadline(heldSince: Date | string) {
+  return new Date(new Date(heldSince).getTime() + HOLD_DAYS * 24 * 60 * 60 * 1000);
+}
+
+const formatDay = (date: Date, timeZone: string) =>
+  new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric", timeZone }).format(date);
+
+/** ~2 days before an order's hold lapses — the artisan still hasn't fulfilled it. */
+export async function notifyOrderHoldExpiring(orderIds: string[]) {
+  if (!orderIds.length) return;
+  const orders = await orderRepo().find({
+    where: { id: In(orderIds) },
+    relations: ["product", "client", "shop", "shop.owner"],
+  });
+  if (!orders.length) return;
+  const { shop, client } = orders[0];
+  const deadline = holdDeadline(orders[0].authorizedAt ?? orders[0].createdAt);
+  const inCart = Boolean(orders[0].checkoutGroupId);
+  await inform(shop.owner, {
+    subject: `Action needed: ${client.name}'s order expires soon`,
+    heading: "Fulfil this order before the card hold runs out",
+    paragraphs: [
+      ...orders.map(describeLine),
+      `The client's card is only held until about ${formatDay(deadline, shop.timezone || "UTC")}. After that the hold lapses, the order is cancelled and you won't be paid.`,
+      inCart
+        ? "This was one checkout: the card is charged once every item in it is fulfilled or cancelled — so resolve them all."
+        : "Mark it fulfilled to charge the card, or cancel it if you can't make it.",
+    ],
+    cta: { label: "Open orders", path: ARTISAN_ORDERS },
+  });
+}
+
+/** ~2 days before a booking's hold lapses — still not confirmed. */
+export async function notifyBookingHoldExpiring(bookingId: string) {
+  const booking = await bookingRepo().findOne({
+    where: { id: bookingId },
+    relations: ["service", "client", "shop", "shop.owner"],
+  });
+  if (!booking) return;
+  const deadline = holdDeadline(booking.authorizedAt ?? booking.createdAt);
+  await inform(booking.shop.owner, {
+    subject: `Action needed: confirm ${booking.client.name}'s booking`,
+    heading: "Confirm this booking before the card hold runs out",
+    paragraphs: [
+      `${booking.client.name} asked for ${booking.service.name} on ${formatWhen(booking.scheduledAt, booking.shop.timezone)}.`,
+      `The card is only held until about ${formatDay(deadline, booking.shop.timezone || "UTC")}. Confirm it to charge the card, or decline it — otherwise it's cancelled automatically.`,
+    ],
+    cta: { label: "Open bookings", path: ARTISAN_BOOKINGS },
+  });
+}
+
+/**
+ * The hold lapsed before the artisan acted: the order was cancelled. Tells
+ * the client (not charged) and the artisan (sale lost). `collected` lines
+ * were fulfilled but the money couldn't be collected — the artisan is told
+ * that separately, since they may have shipped already.
+ */
+export async function notifyOrderHoldExpired(cancelledIds: string[], uncollectedIds: string[]) {
+  const ids = [...cancelledIds, ...uncollectedIds];
+  if (!ids.length) return;
+  const orders = await orderRepo().find({
+    where: { id: In(ids) },
+    relations: ["product", "client", "shop", "shop.owner"],
+  });
+  if (!orders.length) return;
+  const { shop, client } = orders[0];
+  const cancelled = orders.filter((o) => cancelledIds.includes(o.id));
+  const uncollected = orders.filter((o) => uncollectedIds.includes(o.id));
+
+  if (cancelled.length) {
+    await inform(client, {
+      subject: `Your order with ${shop.shopName} was cancelled`,
+      heading: "Your order was cancelled — you weren't charged",
+      paragraphs: [
+        ...cancelled.map(describeLine),
+        `${shop.shopName} didn't fulfil it in time, so the hold on your card was released. Nothing was charged. You're welcome to order again.`,
+      ],
+      cta: { label: "Visit the shop", path: `/artisan/${shop.id}` },
+    });
+  }
+  await inform(shop.owner, {
+    subject: uncollected.length ? "Payment couldn't be collected" : `Order expired: ${client.name}`,
+    heading: uncollected.length ? "The card hold lapsed before payment was collected" : "An order expired",
+    paragraphs: [
+      ...cancelled.map((o) => `Cancelled (not fulfilled in time): ${describeLine(o)}`),
+      ...uncollected.map((o) => `Fulfilled but not paid: ${describeLine(o)}`),
+      uncollected.length
+        ? "The card is only charged once every item in a checkout is resolved, and the hold ran out first. Contact the client or our team about the unpaid items."
+        : "Card holds last about 7 days. Fulfil or cancel orders sooner so you don't lose sales.",
+    ],
+    cta: { label: "Open orders", path: ARTISAN_ORDERS },
+  });
+}
+
+/** The hold lapsed before the booking was confirmed: it was cancelled. */
+export async function notifyBookingHoldExpired(bookingId: string) {
+  const booking = await bookingRepo().findOne({
+    where: { id: bookingId },
+    relations: ["service", "client", "shop", "shop.owner"],
+  });
+  if (!booking) return;
+  const what = `${booking.service.name} on ${formatWhen(booking.scheduledAt, booking.shop.timezone)}`;
+  await inform(booking.client, {
+    subject: `Your booking with ${booking.shop.shopName} was cancelled`,
+    heading: "Your booking request expired — you weren't charged",
+    paragraphs: [`${booking.shop.shopName} didn't confirm ${what} in time, so the hold on your card was released.`],
+    cta: { label: "Book another time", path: `/artisan/${booking.shop.id}` },
+  });
+  await inform(booking.shop.owner, {
+    subject: `Booking expired: ${booking.client.name}`,
+    heading: "A booking request expired",
+    paragraphs: [`${booking.client.name}'s request for ${what} wasn't confirmed within about 7 days, so it was cancelled.`],
+    cta: { label: "Open bookings", path: ARTISAN_BOOKINGS },
+  });
+}

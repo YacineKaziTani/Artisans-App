@@ -11,6 +11,7 @@ import { moderationLimiter } from "../../middleware/rate-limit.middleware";
 import { UserRole } from "../users/entities/user.entities";
 import { uuidParam, validateBody } from "../../middleware/validate.middleware";
 import { createReportSchema, resolveReportSchema } from "./report.schemas";
+import { auditAdmin } from "../audit/audit";
 
 const router = Router();
 
@@ -36,6 +37,7 @@ router.patch(
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
   validateBody(resolveReportSchema),
+  auditAdmin("report.resolved", "report"),
   resolveReport,
 );
 

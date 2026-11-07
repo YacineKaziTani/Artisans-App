@@ -50,6 +50,25 @@ export const verifyEmailSchema = z.object({
     .regex(/^[0-9a-f]{64}$/i, "This confirmation link is invalid"),
 });
 
+const secondFactorCode = z
+  .string({ error: "Enter the code from your authenticator app" })
+  .trim()
+  .regex(/^(\d{6}|[a-z2-7]{4}-[a-z2-7]{4})$/i, "Enter the 6-digit code (or a recovery code like abcd-efgh)");
+
+export const loginSecondStepSchema = z.object({
+  challenge: z.string({ error: "Please log in again" }).min(10).max(2000),
+  code: secondFactorCode,
+});
+
+export const twoFactorCodeSchema = z.object({
+  code: z.string({ error: "Enter the 6-digit code" }).trim().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
+
+export const disableTwoFactorSchema = z.object({
+  password: z.string({ error: "Enter your password" }).min(1).max(128),
+  code: secondFactorCode,
+});
+
 export const updateMeSchema = z.object({
   name: requiredText("Name", 100).optional(),
   phone: phone().optional(),

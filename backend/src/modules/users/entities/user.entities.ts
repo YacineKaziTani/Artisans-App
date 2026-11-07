@@ -88,6 +88,24 @@ export class User {
   @Column({ type: "timestamptz", nullable: true })
   passwordChangedAt?: Date;
 
+  // "Sign out of all devices": sessions issued before this are refused.
+  @Column({ type: "timestamptz", nullable: true })
+  sessionsRevokedAt?: Date | null;
+
+  // Two-step login (authenticator app, TOTP). The secret is only stored
+  // once confirmed with a valid code; recovery codes are sha256 hashes.
+  @Column({ type: "varchar", nullable: true, select: false })
+  twoFactorSecret?: string | null;
+
+  @Column({ type: "varchar", nullable: true, select: false })
+  twoFactorPendingSecret?: string | null;
+
+  @Column({ type: "timestamptz", nullable: true })
+  twoFactorEnabledAt?: Date | null;
+
+  @Column({ type: "jsonb", nullable: true, select: false })
+  twoFactorRecoveryCodes?: string[] | null;
+
   @Column({ type: "int", default: 0, select: false })
   failedLoginAttempts!: number;
 

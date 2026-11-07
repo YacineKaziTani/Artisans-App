@@ -144,6 +144,7 @@ interface FakeIntent {
   status: FakeIntentStatus;
   metadata: Record<string, string>;
   client_secret: string;
+  receipt_email?: string;
 }
 
 let intentSeq = 0;
@@ -152,10 +153,13 @@ let eventSeq = 0;
 export const fakeStripe = {
   intents: new Map<string, FakeIntent>(),
   refunds: [] as Record<string, unknown>[],
+  /** Connected accounts Stripe reports as restricted. */
+  restrictedAccounts: new Set<string>(),
 
   reset() {
     this.intents.clear();
     this.refunds.length = 0;
+    this.restrictedAccounts.clear();
   },
 
   /** The intent the API created most recently. */
@@ -185,6 +189,7 @@ export function installFakeStripe() {
   mock.method(stripe.paymentIntents, "create", async (params: {
     amount: number;
     metadata?: Record<string, string>;
+    receipt_email?: string;
   }) => {
     const id = `pi_test_${++intentSeq}`;
     const intent: FakeIntent = {
@@ -196,6 +201,7 @@ export function installFakeStripe() {
       status: "requires_payment_method",
       metadata: params.metadata ?? {},
       client_secret: `${id}_secret_test`,
+      receipt_email: params.receipt_email,
     };
     fakeStripe.intents.set(id, intent);
     return { ...intent };
@@ -245,6 +251,19 @@ export function installFakeStripe() {
       return JSON.parse(payload.toString());
     },
   ) as never;
+
+  // Connected-account status: active unless a test says otherwise.
+  mock.method(stripe.v2.core.accounts, "retrieve", async (id: string) => {
+    const active = !fakeStripe.restrictedAccounts.has(id);
+    const status = active ? "active" : "restricted";
+    return {
+      id,
+      configuration: {
+        merchant: { capabilities: { card_payments: { status } } },
+        recipient: { capabilities: { stripe_balance: { stripe_transfers: { status } } } },
+      },
+    };
+  }) as never;
 
   // No email leaves the test run — each one is recorded instead.
   mock.method(mail, "sendMail", async (to: string, subject: string, html: string, replyTo?: string) => {

@@ -11,6 +11,8 @@ export interface User {
   emailVerified?: boolean;
   /** Activity emails on/off (in-app notifications always). */
   emailNotifications?: boolean;
+  /** Two-step login (authenticator app) is on. */
+  twoFactorEnabled?: boolean;
   createdAt: string;
 }
 
@@ -111,6 +113,8 @@ export interface Shop {
   timezone?: string;
   /** Null/empty = no fixed hours: clients request any time. */
   openingHours?: OpeningHours | null;
+  bookingMinNoticeHours?: number;
+  bookingMaxDaysAhead?: number;
   pickupEnabled?: boolean;
   deliveryEnabled?: boolean;
   deliveryFee?: string | number;
@@ -178,6 +182,8 @@ export interface Booking {
   totalAmount: string | number;
   paymentStatus: PaymentStatus;
   stripePaymentIntentId?: string;
+  /** When the card hold was placed (holds last ~7 days). */
+  authorizedAt?: string | null;
   shop?: Shop;
   service?: Service;
   client?: User;
@@ -266,6 +272,10 @@ export interface Order {
   totalAmount: string | number;
   /** Included in totalAmount. In a cart it sits on one line only. */
   deliveryFee?: string | number;
+  /** Delivery orders: when the client confirmed it arrived. */
+  deliveredAt?: string | null;
+  /** When the card hold was placed (holds last ~7 days). */
+  authorizedAt?: string | null;
   status: OrderStatus;
   paymentStatus: OrderPaymentStatus;
   deliveryMethod?: DeliveryMethod;

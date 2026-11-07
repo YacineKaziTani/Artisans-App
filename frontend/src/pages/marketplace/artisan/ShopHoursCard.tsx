@@ -25,6 +25,8 @@ export function ShopHoursCard({ shop }: { shop: Shop }) {
       : browserTimeZone(),
   );
   const [fixedHours, setFixedHours] = useState(hasOpeningHours(shop.openingHours));
+  const [minNotice, setMinNotice] = useState(String(shop.bookingMinNoticeHours ?? 2));
+  const [maxDays, setMaxDays] = useState(String(shop.bookingMaxDaysAhead ?? 365));
   const [hours, setHours] = useState<OpeningHours>(
     hasOpeningHours(shop.openingHours)
       ? shop.openingHours
@@ -55,7 +57,12 @@ export function ShopHoursCard({ shop }: { shop: Shop }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    save.mutate({ timezone, openingHours: fixedHours ? hours : null });
+    save.mutate({
+      timezone,
+      openingHours: fixedHours ? hours : null,
+      bookingMinNoticeHours: Math.max(0, Math.min(168, Math.round(Number(minNotice) || 0))),
+      bookingMaxDaysAhead: Math.max(1, Math.min(365, Math.round(Number(maxDays) || 365))),
+    });
   };
 
   return (
@@ -87,6 +94,18 @@ export function ShopHoursCard({ shop }: { shop: Shop }) {
                 <option key={z} value={z}>{zoneLabel(z)}</option>
               ))}
             </select>
+          </div>
+
+          <div className="grid max-w-md gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="min-notice" className="field-label">Minimum notice (hours)</label>
+              <Input id="min-notice" type="number" min="0" max="168" step="1" value={minNotice} onChange={(e) => setMinNotice(e.target.value)} />
+              <p className="mt-1 text-xs text-muted-foreground">How soon a client can book. 0 = right away.</p>
+            </div>
+            <div>
+              <label htmlFor="max-days" className="field-label">Book up to (days ahead)</label>
+              <Input id="max-days" type="number" min="1" max="365" step="1" value={maxDays} onChange={(e) => setMaxDays(e.target.value)} />
+            </div>
           </div>
 
           <fieldset className="space-y-2">

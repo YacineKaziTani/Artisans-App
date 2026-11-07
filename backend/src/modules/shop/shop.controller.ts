@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { hasOpeningHours, type OpeningHours } from "../../lib/schedule";
-import { In, IsNull, MoreThan } from "typeorm";
+import { In, IsNull, MoreThan, Not } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import {
   Shop,
@@ -487,30 +487,7 @@ export const getStripeAccountStatus = async (req: Request, res: Response) => {
       return res.json({ connected: false, onboardingComplete: false });
     }
 
-    const account = await stripe.v2.core.accounts.retrieve(
-      shop.stripeAccountId,
-      {
-        include: [
-          "configuration.merchant",
-          "configuration.recipient",
-          "requirements",
-        ],
-      },
-    );
-
-    const cardPaymentsActive =
-      account.configuration?.merchant?.capabilities?.card_payments?.status ===
-      "active";
-    const transfersActive =
-      account.configuration?.recipient?.capabilities?.stripe_balance
-        ?.stripe_transfers?.status === "active";
-    const onboardingComplete = cardPaymentsActive && transfersActive;
-
-    if (onboardingComplete !== shop.stripeOnboardingComplete) {
-      shop.stripeOnboardingComplete = onboardingComplete;
-      await shopRepo.save(shop);
-    }
-
+    const onboardingComplete = await refreshStripeStatus(shop);
     return res.json({ connected: true, onboardingComplete });
   } catch (error) {
     console.error("getStripeAccountStatus failed:", error);
@@ -634,11 +611,15 @@ export const updateMyHours = async (req: Request, res: Response) => {
     const shop = await shopRepo.findOne({ where: { owner: { id: req.user!.id } } });
     if (!shop) return res.status(404).json({ message: "Shop not found" });
 
-    const { timezone, openingHours } = req.body as {
+    const { timezone, openingHours, bookingMinNoticeHours, bookingMaxDaysAhead } = req.body as {
       timezone: string;
       openingHours: OpeningHours | null;
+      bookingMinNoticeHours?: number;
+      bookingMaxDaysAhead?: number;
     };
     shop.timezone = timezone;
+    if (bookingMinNoticeHours !== undefined) shop.bookingMinNoticeHours = bookingMinNoticeHours;
+    if (bookingMaxDaysAhead !== undefined) shop.bookingMaxDaysAhead = bookingMaxDaysAhead;
     // Days with no periods are dropped; no periods at all = no fixed hours.
     const cleaned = openingHours
       ? (Object.fromEntries(
@@ -807,3 +788,47 @@ export const getMyStripeDashboardLink = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * Asks Stripe whether the shop's connected account can take card payments
+ * and receive transfers, and stores the answer. Used by the dashboard and
+ * by the periodic refresh (there's no Connect webhook), so a shop whose
+ * account gets restricted stops taking payments without waiting for its
+ * owner to open the dashboard.
+ */
+export async function refreshStripeStatus(shop: Shop): Promise<boolean> {
+  if (!shop.stripeAccountId) return false;
+  const account = await stripe.v2.core.accounts.retrieve(shop.stripeAccountId, {
+    include: ["configuration.merchant", "configuration.recipient", "requirements"],
+  });
+  const cardPaymentsActive =
+    account.configuration?.merchant?.capabilities?.card_payments?.status === "active";
+  const transfersActive =
+    account.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === "active";
+  const onboardingComplete = cardPaymentsActive && transfersActive;
+
+  if (onboardingComplete !== shop.stripeOnboardingComplete) {
+    await shopRepo.update(shop.id, { stripeOnboardingComplete: onboardingComplete });
+    shop.stripeOnboardingComplete = onboardingComplete;
+  }
+  return onboardingComplete;
+}
+
+/** Refreshes every connected shop's Stripe status (oldest-checked first, capped). */
+export async function refreshAllStripeStatuses(limit = 200) {
+  const shops = await shopRepo.find({
+    where: { stripeAccountId: Not(IsNull()) },
+    order: { updatedAt: "ASC" },
+    take: limit,
+  });
+  let changed = 0;
+  for (const shop of shops) {
+    const before = shop.stripeOnboardingComplete;
+    try {
+      if ((await refreshStripeStatus(shop)) !== before) changed++;
+    } catch (err) {
+      console.warn("[stripe] couldn't refresh status for shop", shop.id, err instanceof Error ? err.message : err);
+    }
+  }
+  return changed;
+}

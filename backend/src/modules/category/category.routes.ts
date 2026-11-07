@@ -14,6 +14,7 @@ import {
   createCategorySchema,
   updateCategorySchema,
 } from "./category.schemas";
+import { auditAdmin } from "../audit/audit";
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.post(
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
   validateBody(createCategorySchema),
+  auditAdmin("category.created", "category"),
   createCategory,
 );
 router.put(
@@ -38,12 +40,14 @@ router.put(
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
   validateBody(updateCategorySchema),
+  auditAdmin("category.updated", "category"),
   updateCategory,
 );
 router.delete(
   "/:id",
   authMiddleware,
   authorize(UserRole.SUPER_ADMIN),
+  auditAdmin("category.deleted", "category"),
   deleteCategory,
 );
 

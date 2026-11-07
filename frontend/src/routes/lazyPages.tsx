@@ -80,6 +80,7 @@ export const AdminConversationThreadPage = lazy(
 export const AdminReportsPage = lazy(
   () => import("@/pages/dashboard/admin/AdminReportsPage"),
 );
+export const AdminAuditPage = lazy(() => import("@/pages/dashboard/admin/AdminAuditPage"));
 export const AdminDisputesPage = lazy(
   () => import("@/pages/dashboard/admin/AdminDisputesPage"),
 );

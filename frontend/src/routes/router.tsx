@@ -39,6 +39,7 @@ import {
   AdminConversationThreadPage,
   AdminReportsPage,
   AdminDisputesPage,
+  AdminAuditPage,
   TermsPage,
   PrivacyPage,
   RefundPolicyPage,
@@ -174,6 +175,10 @@ export const router = createBrowserRouter([
                   {
                     path: "dashboard/disputes",
                     element: withSuspense(AdminDisputesPage),
+                  },
+                  {
+                    path: "dashboard/audit",
+                    element: withSuspense(AdminAuditPage),
                   },
                 ],
               },

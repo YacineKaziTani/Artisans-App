@@ -147,9 +147,19 @@ function AdminDashboardHome() {
   const { data: pendingPage } = useAdminShops({ status: "pending", limit: 1 });
 
   const pendingShops = pendingPage?.meta.total ?? 0;
+  const user = useAuthStore((s) => s.user);
 
   return (
     <div className="space-y-6">
+      {user && user.twoFactorEnabled === false && (
+        <p className="alert-note">
+          Admin accounts can refund payments and suspend shops — protect yours with{" "}
+          <Link to="/profile-client#security" className="font-semibold underline">
+            two-step login
+          </Link>
+          .
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Categories"

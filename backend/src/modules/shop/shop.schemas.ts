@@ -70,6 +70,18 @@ export const shopHoursSchema = z.object({
   timezone: z
     .string({ error: "Choose a time zone" })
     .refine(isValidTimeZone, "Choose a valid time zone"),
+  bookingMinNoticeHours: z
+    .number({ error: "Minimum notice must be a number of hours" })
+    .int("Minimum notice must be whole hours")
+    .min(0)
+    .max(168, "Minimum notice can be at most a week (168 hours)")
+    .optional(),
+  bookingMaxDaysAhead: z
+    .number({ error: "Booking window must be a number of days" })
+    .int("Booking window must be whole days")
+    .min(1)
+    .max(365, "Bookings can be taken at most a year ahead")
+    .optional(),
   // null = no fixed hours (clients request any time).
   openingHours: z
     .object(Object.fromEntries(WEEKDAYS.map((d) => [d, dayRanges.optional()])))

@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Package,
   Scale,
+  ScrollText,
   Store,
   Tag,
   Users,
@@ -62,6 +63,7 @@ const ADMIN_NAV: NavGroup[] = [
       { to: "/dashboard/messages", label: "Messages", icon: MessageCircle },
       { to: "/dashboard/reports", label: "Reports", icon: Flag },
       { to: "/dashboard/disputes", label: "Disputes", icon: Scale },
+      { to: "/dashboard/audit", label: "Admin log", icon: ScrollText },
     ],
   },
 ];

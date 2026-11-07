@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AuthShell } from "@/components/layout/AuthShell";
-import { useLogin } from "@/hooks/useAuth";
+import { useLogin, useLoginSecondStep } from "@/hooks/useAuth";
 import { getErrorMessage } from "@/lib/errors";
 
 export default function LoginPage() {
@@ -15,12 +15,64 @@ export default function LoginPage() {
   // e.g. "Password changed — please log in…" after a password change.
   const notice = (location.state as { notice?: string } | null)?.notice;
 
-  const { mutate: login, isPending, error } = useLogin();
+  const { mutate: login, isPending, error, data, reset } = useLogin();
+  const secondStep = useLoginSecondStep();
+  const [code, setCode] = useState("");
+  const challenge = data?.twoFactorRequired ? data.challenge : undefined;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     login({ email, password });
   };
+
+  if (challenge) {
+    return (
+      <AuthShell title="Two-step login" subtitle="Enter the 6-digit code from your authenticator app.">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            secondStep.mutate({ challenge, code: code.trim() });
+          }}
+          className="space-y-5"
+        >
+          {secondStep.isError && (
+            <p className="alert-error">{getErrorMessage(secondStep.error, "That code didn't work.")}</p>
+          )}
+          <div>
+            <label htmlFor="otp" className="field-label">Code</label>
+            <Input
+              id="otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123456"
+              maxLength={9}
+              required
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Lost your phone? Enter one of your recovery codes (like abcd-efgh) instead.
+            </p>
+          </div>
+          <Button type="submit" variant="gradient" size="lg" disabled={secondStep.isPending} className="w-full">
+            {secondStep.isPending ? "Checking…" : "Verify and sign in"}
+          </Button>
+          <button
+            type="button"
+            onClick={() => {
+              reset();
+              secondStep.reset();
+              setCode("");
+            }}
+            className="w-full text-sm text-muted-foreground hover:text-foreground"
+          >
+            Back
+          </button>
+        </form>
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell

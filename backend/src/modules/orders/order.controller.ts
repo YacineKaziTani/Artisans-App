@@ -39,6 +39,9 @@ import {
   notifyOrderCancelledByClient,
   notifyOrdersAuthorized,
   notifyOrderUpdatedByShop,
+  notifyOrderDelivered,
+  notifyOrderHoldExpired,
+  notifyOrderHoldExpiring,
 } from "../../notifications";
 
 // Request bodies are validated by the zod schemas in order.schemas.ts.
@@ -283,6 +286,7 @@ async function openPaymentIntent(
   orders: Order[],
   shop: Shop,
   metadata: Record<string, string>,
+  receiptEmail?: string,
 ) {
   const amountInCents = orders.reduce((sum, o) => sum + toCents(o.totalAmount), 0);
 
@@ -293,6 +297,8 @@ async function openPaymentIntent(
       currency: "usd",
       capture_method: "manual",
       metadata,
+      // Stripe emails the client a receipt once the card is actually charged.
+      ...(receiptEmail ? { receipt_email: receiptEmail } : {}),
       automatic_payment_methods: { enabled: true },
       ...connectChargeParams(shop, amountInCents),
     });
@@ -346,10 +352,12 @@ export const createOrder = async (req: Request, res: Response) => {
     }
 
     const { order, shop } = reserved;
-    const clientSecret = await openPaymentIntent([order], shop, {
-      type: "order",
-      orderId: order.id,
-    });
+    const clientSecret = await openPaymentIntent(
+      [order],
+      shop,
+      { type: "order", orderId: order.id },
+      req.user!.email,
+    );
 
     return res.status(201).json({ order, clientSecret });
   } catch (error) {
@@ -428,10 +436,12 @@ export const createCartCheckout = async (req: Request, res: Response) => {
     // Orders are found from the webhook by stripePaymentIntentId, so the
     // metadata only needs the group id (a CSV of order ids used to go past
     // Stripe's 500-character metadata limit at ~13 lines).
-    const clientSecret = await openPaymentIntent(orders, shop, {
-      type: "cart",
-      checkoutGroupId,
-    });
+    const clientSecret = await openPaymentIntent(
+      orders,
+      shop,
+      { type: "cart", checkoutGroupId },
+      req.user!.email,
+    );
 
     return res.status(201).json({ orders, clientSecret });
   } catch (error) {
@@ -464,10 +474,38 @@ export async function settleCheckoutGroup(groupId: string) {
 
   const fulfilled = held.filter((o) => o.status === OrderStatus.FULFILLED);
   const released = held.filter((o) => o.status !== OrderStatus.FULFILLED);
-  const captureCents = fulfilled.reduce(
+  let captureCents = fulfilled.reduce(
     (sum, o) => sum + toCents(o.totalAmount),
     0,
   );
+
+  // The delivery fee rides on one line. If that line was cancelled but the
+  // rest of the cart is still being delivered, the fee belongs with what's
+  // delivered: move it onto a fulfilled line and charge it. The move is
+  // conditional, so racing settlements move it once — and they all compute
+  // the same capture amount from the same starting rows either way.
+  if (fulfilled.length) {
+    for (const line of released) {
+      const feeCents = toCents(line.deliveryFee);
+      if (feeCents <= 0) continue;
+      const moved = await orderRepo
+        .createQueryBuilder()
+        .update(Order)
+        .set({
+          deliveryFee: 0,
+          totalAmount: () => `"totalAmount" - ${fromCents(feeCents)}`,
+        })
+        .where("id = :id AND \"deliveryFee\" > 0", { id: line.id })
+        .execute();
+      if (moved.affected) {
+        await AppDataSource.query(
+          `UPDATE orders SET "totalAmount" = "totalAmount" + $1, "deliveryFee" = "deliveryFee" + $1 WHERE id = $2`,
+          [fromCents(feeCents), fulfilled[0].id],
+        );
+      }
+      captureCents += feeCents;
+    }
+  }
 
   // Idempotency keys make two settlements racing over the same cart (two
   // lines resolved at the same moment) safe: Stripe replays the first result.
@@ -921,7 +959,7 @@ export async function handleOrderIntentAuthorized(intentId: string) {
   });
   await orderRepo.update(
     { stripePaymentIntentId: intentId, paymentStatus: In(UNPAID_STATES) },
-    { paymentStatus: OrderPaymentStatus.AUTHORIZED },
+    { paymentStatus: OrderPaymentStatus.AUTHORIZED, authorizedAt: new Date() },
   );
   // This is the moment an order becomes real for the artisan. Webhook events
   // are de-duplicated and the update is conditional, so this sends once.
@@ -987,6 +1025,8 @@ export async function handleOrderIntentCanceled(intentId: string) {
     relations: ["variant"],
   });
 
+  const expired: string[] = [];
+  const uncollected: string[] = [];
   for (const order of orders) {
     const authorized = order.paymentStatus === OrderPaymentStatus.AUTHORIZED;
 
@@ -1003,14 +1043,16 @@ export async function handleOrderIntentCanceled(intentId: string) {
         await orderRepo.update(order.id, {
           paymentStatus: OrderPaymentStatus.UNPAID,
         });
+        expired.push(order.id);
       }
     } else if (order.status === OrderStatus.FULFILLED && authorized) {
       // Fulfilled, but the hold expired before the cart settled — the money
       // was never collected.
-      await orderRepo.update(
+      const marked = await orderRepo.update(
         { id: order.id, paymentStatus: OrderPaymentStatus.AUTHORIZED },
         { paymentStatus: OrderPaymentStatus.FAILED },
       );
+      if (marked.affected) uncollected.push(order.id);
     } else if (order.status === OrderStatus.CANCELLED && authorized) {
       await orderRepo.update(
         { id: order.id, paymentStatus: OrderPaymentStatus.AUTHORIZED },
@@ -1018,4 +1060,55 @@ export async function handleOrderIntentCanceled(intentId: string) {
       );
     }
   }
+  // Only Stripe dropping the hold lands here with live orders — our own
+  // cancellations close the orders before cancelling the intent.
+  if (expired.length || uncollected.length) {
+    notifyInBackground(() => notifyOrderHoldExpired(expired, uncollected));
+  }
 }
+
+/**
+ * Reminds artisans ~2 days before a card hold lapses on an order they
+ * haven't fulfilled (once per checkout). Holds last about 7 days.
+ */
+export async function sendOrderHoldReminders() {
+  const due: { id: string; intent: string | null }[] = await AppDataSource.query(
+    `UPDATE orders SET "holdReminderSentAt" = now()
+      WHERE status = 'pending' AND "paymentStatus" = 'authorized' AND "holdReminderSentAt" IS NULL
+        AND COALESCE("authorizedAt", "createdAt") < now() - interval '5 days'
+      RETURNING id, "stripePaymentIntentId" AS intent`,
+  ).then((r) => (Array.isArray(r[0]) ? r[0] : r));
+  const byCheckout = new Map<string, string[]>();
+  for (const row of due) {
+    const key = row.intent ?? row.id;
+    byCheckout.set(key, [...(byCheckout.get(key) ?? []), row.id]);
+  }
+  for (const ids of byCheckout.values()) notifyInBackground(() => notifyOrderHoldExpiring(ids));
+  return byCheckout.size;
+}
+
+/**
+ * PATCH /orders/:id/received — the client confirms a delivery order arrived.
+ * (Fulfilled = shipped; this closes the loop for both sides.)
+ */
+export const confirmOrderReceived = async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const order = await orderRepo.findOne({ where: { id }, relations: ["client"] });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.client.id !== req.user!.id) return res.status(403).json({ message: "Forbidden" });
+    if (order.deliveryMethod !== DeliveryMethod.DELIVERY) {
+      return res.status(400).json({ message: "Only delivery orders are confirmed as received" });
+    }
+    if (order.status !== OrderStatus.FULFILLED) {
+      return res.status(400).json({ message: "This order hasn't been shipped yet" });
+    }
+
+    const updated = await orderRepo.update({ id, deliveredAt: IsNull() }, { deliveredAt: new Date() });
+    if (updated.affected) notifyInBackground(() => notifyOrderDelivered(id));
+    return res.json(await orderRepo.findOne({ where: { id } }));
+  } catch (error) {
+    console.error("confirmOrderReceived failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};

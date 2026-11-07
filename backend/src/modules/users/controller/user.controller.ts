@@ -33,6 +33,7 @@ const PROFILE_FIELDS = {
   // unconfirmed with activity emails on.
   emailVerifiedAt: true,
   emailNotifications: true,
+  twoFactorEnabledAt: true,
   createdAt: true,
 } as const;
 
@@ -212,42 +213,7 @@ export const deleteUser = async (req: Request, res: Response) => {
       }
     }
 
-    const now = new Date();
-    // An unguessable password nobody knows, so the row can never sign in
-    // even if it were reactivated by mistake.
-    const lockedPassword = await bcrypt.hash(
-      crypto.randomBytes(32).toString("hex"),
-      10,
-    );
-
-    await AppDataSource.transaction(async (manager) => {
-      await manager.update(User, id, {
-        name: "Deleted user",
-        email: `deleted-${id}@deleted.invalid`,
-        phone: `deleted-${id}`,
-        avatarUrl: null,
-        password: lockedPassword,
-        resetPasswordTokenHash: null,
-        resetPasswordExpiresAt: null,
-        isActive: false,
-        passwordChangedAt: now,
-        deletedAt: now,
-      });
-
-      const shop = await manager.findOne(Shop, { where: { owner: { id } } });
-      if (shop) {
-        await manager.update(Shop, shop.id, { status: ShopStatus.CLOSED });
-      }
-
-      await manager
-        .createQueryBuilder()
-        .delete()
-        .from(Favorite)
-        .where(`"userId" = :id`, { id })
-        .execute();
-    });
-
-    disconnectUserSockets(id);
+    await anonymizeAccount(user);
     res.status(204).send();
   } catch (error) {
     console.error("deleteUser failed:", error);
@@ -341,5 +307,175 @@ export const getMyReferrals = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("getMyReferrals failed:", error);
     return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ── Account deletion & data export (self-service) ──────────────────────────
+
+/**
+ * Erases an account's personal data while keeping the row, so orders,
+ * bookings, reviews and messages that reference it stay consistent for the
+ * other side. Used by admins and by people deleting their own account.
+ */
+export async function anonymizeAccount(user: User) {
+  const id = user.id;
+  const now = new Date();
+  // An unguessable password nobody knows, so the row can never sign in
+  // even if it were reactivated by mistake.
+  const lockedPassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+
+  await AppDataSource.transaction(async (manager) => {
+    await manager.update(User, id, {
+      name: "Deleted user",
+      email: `deleted-${id}@deleted.invalid`,
+      phone: `deleted-${id}`,
+      avatarUrl: null,
+      password: lockedPassword,
+      resetPasswordTokenHash: null,
+      resetPasswordExpiresAt: null,
+      emailVerificationTokenHash: null,
+      emailVerificationExpiresAt: null,
+      twoFactorSecret: null,
+      twoFactorPendingSecret: null,
+      twoFactorEnabledAt: null,
+      twoFactorRecoveryCodes: null,
+      referralCode: null,
+      emailNotifications: false,
+      isActive: false,
+      passwordChangedAt: now,
+      sessionsRevokedAt: now,
+      deletedAt: now,
+    });
+
+    const shop = await manager.findOne(Shop, { where: { owner: { id } } });
+    if (shop) {
+      await manager.update(Shop, shop.id, { status: ShopStatus.CLOSED, phone: null, address: null });
+    }
+
+    await manager.createQueryBuilder().delete().from(Favorite).where(`"userId" = :id`, { id }).execute();
+    await manager.query(`DELETE FROM notifications WHERE "userId" = $1`, [id]);
+    await manager.query(`DELETE FROM newsletter_subscribers WHERE email = $1`, [user.email.toLowerCase()]);
+  });
+
+  disconnectUserSockets(id);
+}
+
+/** Why an account can't be deleted right now (things in progress), or null. */
+async function deletionBlocker(user: User): Promise<string | null> {
+  if (user.role === UserRole.SUPER_ADMIN) {
+    const admins = await userRepo.count({ where: { role: UserRole.SUPER_ADMIN, deletedAt: IsNull() } });
+    if (admins <= 1) return "You're the only admin — make someone else an admin first.";
+  }
+  const [[asClient], [asShop]] = await Promise.all([
+    AppDataSource.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM orders WHERE "clientId" = $1 AND status = 'pending'
+            AND "paymentStatus" IN ('authorized', 'paid')) AS orders,
+         (SELECT COUNT(*)::int FROM bookings WHERE "clientId" = $1 AND status IN ('pending', 'confirmed')
+            AND "scheduledAt" > now() AND "paymentStatus" IN ('authorized', 'paid')) AS bookings`,
+      [user.id],
+    ),
+    AppDataSource.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM orders o JOIN shops s ON s.id = o."shopId"
+           WHERE s."ownerId" = $1 AND o.status = 'pending' AND o."paymentStatus" IN ('authorized', 'paid')) AS orders,
+         (SELECT COUNT(*)::int FROM bookings b JOIN shops s ON s.id = b."shopId"
+           WHERE s."ownerId" = $1 AND b.status IN ('pending', 'confirmed') AND b."scheduledAt" > now()
+             AND b."paymentStatus" IN ('authorized', 'paid')) AS bookings`,
+      [user.id],
+    ),
+  ]);
+  if (asClient.orders || asClient.bookings) {
+    return "You have orders or bookings in progress — cancel them or wait until they're done, then delete your account.";
+  }
+  if (asShop.orders || asShop.bookings) {
+    return "Your shop has orders or bookings to fulfil — complete or cancel them first, then delete your account.";
+  }
+  return null;
+}
+
+/** DELETE /users/mine { password } — the user deletes their own account. */
+export const deleteMyAccount = async (req: Request, res: Response) => {
+  try {
+    const user = await userRepo
+      .createQueryBuilder("user")
+      .addSelect("user.password")
+      .where("user.id = :id AND user.deletedAt IS NULL", { id: req.user!.id })
+      .getOne();
+    if (!user) return res.status(404).json({ message: "Account not found" });
+    if (!(await bcrypt.compare(String(req.body.password ?? ""), user.password))) {
+      return res.status(400).json({ message: "That password isn't right", field: "password" });
+    }
+    const blocker = await deletionBlocker(user);
+    if (blocker) return res.status(409).json({ message: blocker });
+
+    await anonymizeAccount(user);
+    res.clearCookie("token", CLEAR_COOKIE_OPTIONS);
+    return res.json({ message: "Your account has been deleted" });
+  } catch (error) {
+    console.error("deleteMyAccount failed:", error);
+    return res.status(500).json({ message: "Server error deleting your account" });
+  }
+};
+
+/**
+ * GET /users/mine/export — everything the platform holds about this
+ * account, as a JSON download (right of access / data portability).
+ */
+export const exportMyData = async (req: Request, res: Response) => {
+  try {
+    const id = req.user!.id;
+    const user = await userRepo.findOne({ where: { id } });
+    if (!user) return res.status(404).json({ message: "Account not found" });
+    const q = (sql: string, params: unknown[] = [id]) => AppDataSource.query(sql, params);
+
+    const [shop, orders, bookings, reviews, messages, favorites, notifications, disputes, reports, newsletter, referrals] =
+      await Promise.all([
+        q(`SELECT id, "shopName", description, address, city, phone, status, timezone, "openingHours",
+                  "createdAt" FROM shops WHERE "ownerId" = $1`),
+        q(`SELECT o.id, p.title AS product, o."variantLabel", o.quantity, o."totalAmount", o."deliveryFee",
+                  o.status, o."paymentStatus", o."deliveryMethod", o."shippingAddress", o."createdAt", s."shopName" AS shop
+             FROM orders o LEFT JOIN products p ON p.id = o."productId" JOIN shops s ON s.id = o."shopId"
+            WHERE o."clientId" = $1 ORDER BY o."createdAt"`),
+        q(`SELECT b.id, sv.name AS service, b."scheduledAt", b.notes, b.status, b."paymentStatus", b."totalAmount",
+                  b."createdAt", s."shopName" AS shop
+             FROM bookings b LEFT JOIN services sv ON sv.id = b."serviceId" JOIN shops s ON s.id = b."shopId"
+            WHERE b."clientId" = $1 ORDER BY b."createdAt"`),
+        q(`SELECT r.id, r.rating, r.comment, r.reply, r."createdAt", s."shopName" AS shop
+             FROM reviews r JOIN shops s ON s.id = r."shopId" WHERE r."authorId" = $1 ORDER BY r."createdAt"`),
+        q(`SELECT id, "conversationId", content, "createdAt", "readAt" FROM messages WHERE "senderId" = $1 ORDER BY "createdAt"`),
+        q(`SELECT "targetType", "targetId", "createdAt" FROM favorites WHERE "userId" = $1`),
+        q(`SELECT title, body, "createdAt", "readAt" FROM notifications WHERE "userId" = $1 ORDER BY "createdAt"`),
+        q(`SELECT id, "targetType", "targetId", reason, status, "resolutionNote", "createdAt" FROM disputes WHERE "raisedById" = $1`),
+        q(`SELECT id, "targetType", "targetId", reason, status, "createdAt" FROM reports WHERE "reporterId" = $1`),
+        q(`SELECT "confirmedAt", "unsubscribedAt", "createdAt" FROM newsletter_subscribers WHERE email = $1`, [user.email.toLowerCase()]),
+        q(`SELECT COUNT(*)::int AS joined FROM users WHERE "referredById" = $1`),
+      ]);
+
+    const data = {
+      exportedAt: new Date().toISOString(),
+      account: {
+        ...accountView(user),
+        acceptedTermsAt: user.acceptedTermsAt ?? null,
+        referralCode: user.referralCode ?? null,
+        peopleReferred: referrals[0]?.joined ?? 0,
+      },
+      shop: shop[0] ?? null,
+      orders,
+      bookings,
+      reviews,
+      messagesSent: messages,
+      favorites,
+      notifications,
+      disputes,
+      reports,
+      newsletter: newsletter[0] ?? null,
+    };
+    res.set("Content-Type", "application/json; charset=utf-8");
+    res.set("Content-Disposition", `attachment; filename="artisan-market-data-${new Date().toISOString().slice(0, 10)}.json"`);
+    return res.send(JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.error("exportMyData failed:", error);
+    return res.status(500).json({ message: "Couldn't prepare your data" });
   }
 };

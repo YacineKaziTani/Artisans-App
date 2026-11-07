@@ -25,5 +25,6 @@ export function accountView(user: User) {
     isActive: user.isActive,
     emailVerified: Boolean(user.emailVerifiedAt),
     emailNotifications: user.emailNotifications !== false,
+    twoFactorEnabled: Boolean(user.twoFactorEnabledAt),
   };
 }
