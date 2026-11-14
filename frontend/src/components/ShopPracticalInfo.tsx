@@ -4,7 +4,18 @@ import { formatMoney } from "@/lib/pricing";
 import type { Shop } from "@/types";
 
 /** Opening hours and pickup/delivery terms, for the public shop page. */
-export function ShopPracticalInfo({ shop, showHours, showDelivery }: { shop: Shop; showHours: boolean; showDelivery: boolean }) {
+export function ShopPracticalInfo({
+  shop,
+  showHours,
+  showDelivery,
+  stacked = false,
+}: {
+  shop: Shop;
+  showHours: boolean;
+  showDelivery: boolean;
+  /** One column (sidebars) instead of two side by side. */
+  stacked?: boolean;
+}) {
   const hours = shop.openingHours;
   const pickup = shop.pickupEnabled !== false;
   const delivery = shop.deliveryEnabled !== false;
@@ -12,7 +23,7 @@ export function ShopPracticalInfo({ shop, showHours, showDelivery }: { shop: Sho
   const freeOver = shop.freeDeliveryOver != null && shop.freeDeliveryOver !== "" ? Number(shop.freeDeliveryOver) : null;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className={`grid gap-5 ${stacked ? "" : "sm:grid-cols-2"}`}>
       {showHours && (
         <div className="flex items-start gap-3">
           <Clock className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />

@@ -429,12 +429,12 @@ export const exportMyData = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ message: "Account not found" });
     const q = (sql: string, params: unknown[] = [id]) => AppDataSource.query(sql, params);
 
-    const [shop, orders, bookings, reviews, messages, favorites, notifications, disputes, reports, newsletter, referrals] =
+    const [shop, orders, bookings, reviews, messages, favorites, notifications, disputes, reports, newsletter, referrals, customRequests] =
       await Promise.all([
         q(`SELECT id, "shopName", description, address, city, phone, status, timezone, "openingHours",
                   "createdAt" FROM shops WHERE "ownerId" = $1`),
-        q(`SELECT o.id, p.title AS product, o."variantLabel", o.quantity, o."totalAmount", o."deliveryFee",
-                  o.status, o."paymentStatus", o."deliveryMethod", o."shippingAddress", o."createdAt", s."shopName" AS shop
+        q(`SELECT o.id, COALESCE(p.title, o.title) AS product, o."variantLabel", o.quantity, o."totalAmount",
+                  o."deliveryFee", o."discountCode", o."discountAmount", o.status, o."paymentStatus", o."deliveryMethod", o."shippingAddress", o."createdAt", s."shopName" AS shop
              FROM orders o LEFT JOIN products p ON p.id = o."productId" JOIN shops s ON s.id = o."shopId"
             WHERE o."clientId" = $1 ORDER BY o."createdAt"`),
         q(`SELECT b.id, sv.name AS service, b."scheduledAt", b.notes, b.status, b."paymentStatus", b."totalAmount",
@@ -443,13 +443,16 @@ export const exportMyData = async (req: Request, res: Response) => {
             WHERE b."clientId" = $1 ORDER BY b."createdAt"`),
         q(`SELECT r.id, r.rating, r.comment, r.reply, r."createdAt", s."shopName" AS shop
              FROM reviews r JOIN shops s ON s.id = r."shopId" WHERE r."authorId" = $1 ORDER BY r."createdAt"`),
-        q(`SELECT id, "conversationId", content, "createdAt", "readAt" FROM messages WHERE "senderId" = $1 ORDER BY "createdAt"`),
+        q(`SELECT id, "conversationId", content, attachments, "createdAt", "readAt" FROM messages WHERE "senderId" = $1 ORDER BY "createdAt"`),
         q(`SELECT "targetType", "targetId", "createdAt" FROM favorites WHERE "userId" = $1`),
         q(`SELECT title, body, "createdAt", "readAt" FROM notifications WHERE "userId" = $1 ORDER BY "createdAt"`),
         q(`SELECT id, "targetType", "targetId", reason, status, "resolutionNote", "createdAt" FROM disputes WHERE "raisedById" = $1`),
         q(`SELECT id, "targetType", "targetId", reason, status, "createdAt" FROM reports WHERE "reporterId" = $1`),
         q(`SELECT "confirmedAt", "unsubscribedAt", "createdAt" FROM newsletter_subscribers WHERE email = $1`, [user.email.toLowerCase()]),
         q(`SELECT COUNT(*)::int AS joined FROM users WHERE "referredById" = $1`),
+        q(`SELECT r.id, s."shopName" AS shop, r.description, r.budget, r."neededBy", r.status, r."quotePrice",
+                  r."quoteReadyBy", r."quoteNote", r."createdAt"
+             FROM custom_requests r JOIN shops s ON s.id = r."shopId" WHERE r."clientId" = $1 ORDER BY r."createdAt"`),
       ]);
 
     const data = {
@@ -463,6 +466,7 @@ export const exportMyData = async (req: Request, res: Response) => {
       shop: shop[0] ?? null,
       orders,
       bookings,
+      customRequests,
       reviews,
       messagesSent: messages,
       favorites,

@@ -6,6 +6,8 @@ import { Shop, ShopStatus, VerificationStatus } from "../modules/shop/shop.entit
 import { Dispute, DisputeStatus, DisputeTargetType } from "../modules/disputes/dispute.entities";
 import { User, UserRole } from "../modules/users/entities/user.entities";
 import { Review } from "../modules/reviews/review.entities";
+import { Product } from "../modules/products/product.entities";
+import { CustomRequest } from "../modules/custom-requests/custom-request.entities";
 import { deliver, formatMoney, formatWhen, type EmailContent } from "./deliver";
 import { Notification } from "../modules/notifications/notification.entities";
 import { emitToUser } from "../realtime/socket";
@@ -44,7 +46,7 @@ const CLIENT_ACTIVITY = "/profile-client";
 
 function describeLine(order: Order) {
   const variant = order.variantLabel ? ` (${order.variantLabel})` : "";
-  return `${order.quantity} × ${order.product?.title ?? "item"}${variant} — ${formatMoney(order.totalAmount)}`;
+  return `${order.quantity} × ${order.product?.title ?? order.title ?? "item"}${variant} — ${formatMoney(order.totalAmount)}`;
 }
 
 // ── Orders ─────────────────────────────────────────────────────────────────
@@ -150,6 +152,7 @@ export async function notifyBookingAuthorized(bookingId: string) {
     heading: `${booking.client.name} wants to book ${booking.service.name}`,
     paragraphs: [
       `When: ${when}`,
+      booking.seats > 1 ? `Places: ${booking.seats}` : "",
       booking.notes ? `Notes: ${booking.notes}` : "",
       `Price: ${formatMoney(booking.totalAmount)} — the client's card is on hold. Confirming charges it; cancelling releases the hold. Holds expire after about 7 days.`,
     ].filter(Boolean),
@@ -458,7 +461,8 @@ export async function notifyUnreadMessages(limit = 500) {
     const sender = fromShop ? null : await users.findOne({ where: { id: first.senderId } });
     const senderName = fromShop ? first.shopName : (sender?.name ?? "A client");
     const recipient = await users.findOne({ where: { id: recipientId } });
-    const snippet = first.content.length > 200 ? `${first.content.slice(0, 199)}…` : first.content;
+    const text = first.content.trim() || "(Sent a photo)";
+    const snippet = text.length > 200 ? `${text.slice(0, 199)}…` : text;
     await inform(recipient, {
       subject: `New message from ${senderName}`,
       heading: `${senderName} sent you a message`,
@@ -520,7 +524,7 @@ export async function notifyOrderDelivered(orderId: string) {
   });
   if (!order) return;
   await inform(order.shop.owner, {
-    subject: `Delivered: ${order.product?.title ?? "an order"}`,
+    subject: `Delivered: ${order.product?.title ?? order.title ?? "an order"}`,
     heading: `${order.client.name} received their order`,
     paragraphs: [describeLine(order)],
     cta: { label: "View orders", path: ARTISAN_ORDERS },
@@ -645,5 +649,139 @@ export async function notifyBookingHoldExpired(bookingId: string) {
     heading: "A booking request expired",
     paragraphs: [`${booking.client.name}'s request for ${what} wasn't confirmed within about 7 days, so it was cancelled.`],
     cta: { label: "Open bookings", path: ARTISAN_BOOKINGS },
+  });
+}
+
+// ── Followers, stock, custom orders ────────────────────────────────────────
+
+const FOLLOWER_ALERT_GAP = "6 hours";
+
+/**
+ * A followed shop listed something new: tell the people who follow it.
+ * At most one alert per shop every few hours, however many products the
+ * artisan adds in a sitting (the shop row is claimed first, so concurrent
+ * uploads can't both send).
+ */
+export async function notifyFollowersOfNewProduct(productId: string) {
+  const product = await AppDataSource.getRepository(Product).findOne({
+    where: { id: productId },
+    relations: ["shop", "shop.owner"],
+  });
+  if (!product || product.shop.status !== ShopStatus.ACTIVE) return;
+  const claimed: unknown[] = await AppDataSource.query(
+    `UPDATE shops SET "followersNotifiedAt" = now()
+      WHERE id = $1 AND ("followersNotifiedAt" IS NULL OR "followersNotifiedAt" < now() - interval '${FOLLOWER_ALERT_GAP}')
+      RETURNING id`,
+    [product.shop.id],
+  ).then((r) => (Array.isArray(r[0]) ? r[0] : r));
+  if (!claimed.length) return;
+
+  const followers: { id: string; email: string; emailNotifications: boolean }[] = await AppDataSource.query(
+    `SELECT u.id, u.email, u."emailNotifications"
+       FROM favorites f JOIN users u ON u.id = f."userId"
+      WHERE f."targetType" = 'shop' AND f."targetId" = $1
+        AND u."isActive" = true AND u."deletedAt" IS NULL AND u.id <> $2`,
+    [product.shop.id, product.shop.owner?.id ?? null],
+  );
+  for (const follower of followers) {
+    await inform(follower, {
+      subject: `New from ${product.shop.shopName}: ${product.title}`,
+      heading: `${product.shop.shopName} just listed something new`,
+      paragraphs: [
+        `${product.title} — ${formatMoney(product.basePrice)}`,
+        "You're getting this because you follow this shop. Unfollow from the shop page any time.",
+      ],
+      cta: { label: "Take a look", path: `/product/${product.id}` },
+    });
+  }
+}
+
+/** Products whose stock just dropped to the shop's alert level or below. */
+export async function notifyLowStock(items: { productId: string; title: string; left: number }[], shopId: string) {
+  if (!items.length) return;
+  const shop = await AppDataSource.getRepository(Shop).findOne({ where: { id: shopId }, relations: ["owner"] });
+  if (!shop) return;
+  await inform(shop.owner, {
+    subject: items.length === 1 ? `Low stock: ${items[0].title}` : `${items.length} products are running low`,
+    heading: "Time to restock",
+    paragraphs: [
+      ...items.map((i) => (i.left === 0 ? `${i.title} — sold out` : `${i.title} — only ${i.left} left`)),
+      "Update the stock in your shop when you've made more. You can change when we warn you in your shop settings.",
+    ],
+    cta: { label: "Manage products", path: "/profile-artisan?tab=products" },
+  });
+}
+
+const ARTISAN_REQUESTS = "/profile-artisan?tab=requests";
+const CLIENT_REQUESTS = "/profile-client?tab=requests";
+
+async function loadRequest(id: string) {
+  return AppDataSource.getRepository(CustomRequest).findOne({
+    where: { id },
+    relations: ["client", "shop", "shop.owner"],
+  });
+}
+
+const excerpt = (text: string) => (text.length > 140 ? `${text.slice(0, 137)}…` : text);
+
+export async function notifyCustomRequestCreated(requestId: string) {
+  const request = await loadRequest(requestId);
+  if (!request) return;
+  await inform(request.shop.owner, {
+    subject: `Custom request from ${request.client.name}`,
+    heading: "Someone would like a custom piece",
+    paragraphs: [
+      `"${excerpt(request.description)}"`,
+      [
+        request.budget != null ? `Budget: ${formatMoney(request.budget)}` : "",
+        request.neededBy ? `Needed by ${request.neededBy}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      "Send a quote with your price and when it'll be ready — or decline if it isn't for you.",
+    ].filter(Boolean),
+    cta: { label: "Reply with a quote", path: ARTISAN_REQUESTS },
+  });
+}
+
+export async function notifyCustomRequestQuoted(requestId: string) {
+  const request = await loadRequest(requestId);
+  if (!request || request.quotePrice == null) return;
+  await inform(request.client, {
+    subject: `${request.shop.shopName} sent you a quote`,
+    heading: `Your quote: ${formatMoney(request.quotePrice)}`,
+    paragraphs: [
+      `For: "${excerpt(request.description)}"`,
+      request.quoteReadyBy ? `Ready by ${request.quoteReadyBy}.` : "",
+      request.quoteNote ? `${request.shop.shopName}: "${request.quoteNote}"` : "",
+      "Accept it to place the order — your card is only held until the piece is ready.",
+    ].filter(Boolean),
+    cta: { label: "See the quote", path: CLIENT_REQUESTS },
+  });
+}
+
+export async function notifyCustomRequestDeclined(requestId: string) {
+  const request = await loadRequest(requestId);
+  if (!request) return;
+  await inform(request.client, {
+    subject: `${request.shop.shopName} can't take on your request`,
+    heading: "Your custom request was declined",
+    paragraphs: [
+      `For: "${excerpt(request.description)}"`,
+      request.quoteNote ? `${request.shop.shopName}: "${request.quoteNote}"` : "",
+      "Other makers in the same craft may be able to help.",
+    ].filter(Boolean),
+    cta: { label: "Find another artisan", path: "/categories" },
+  });
+}
+
+export async function notifyCustomRequestCancelled(requestId: string) {
+  const request = await loadRequest(requestId);
+  if (!request) return;
+  await inform(request.shop.owner, {
+    subject: `${request.client.name} withdrew a custom request`,
+    heading: "A custom request was withdrawn",
+    paragraphs: [`"${excerpt(request.description)}"`, "There's nothing more to do for it."],
+    cta: { label: "Open requests", path: ARTISAN_REQUESTS },
   });
 }

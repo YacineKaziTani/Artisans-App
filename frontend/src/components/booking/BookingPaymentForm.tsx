@@ -55,7 +55,7 @@ export function BookingPaymentForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <PaymentElement />
       {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
+        <div className="alert-error">
           {error}
         </div>
       )}

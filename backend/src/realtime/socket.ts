@@ -3,8 +3,7 @@ import { Server, Socket } from "socket.io";
 import { parseCookie } from "cookie";
 import {
   findConversationForParticipant,
-  persistMessage,
-  otherParticipantId,
+  deliverMessage,
   MAX_MESSAGE_LENGTH,
 } from "../modules/messaging/conversation.controller";
 import { UserRole } from "../modules/users/entities/user.entities";
@@ -159,17 +158,7 @@ export function initSocketServer(httpServer: HttpServer) {
         return ack({ ok: false, message: "Forbidden" });
       }
 
-      const saved = await persistMessage(conversation, userId, content);
-
-      io!.to(conversationRoom(conversationId)).emit("new_message", {
-        conversationId,
-        message: saved,
-      });
-
-      const otherId = otherParticipantId(conversation, userId);
-      io!.to(userRoom(otherId)).emit("conversation_updated", { conversationId });
-      io!.to("admins").emit("conversation_updated", { conversationId });
-
+      await deliverMessage(conversation, userId, content);
       ack({ ok: true });
     });
 
@@ -215,6 +204,17 @@ export function closeSocketServer(): Promise<void> {
  */
 export function disconnectUserSockets(userId: string) {
   io?.in(userRoom(userId)).disconnectSockets(true);
+}
+
+/**
+ * A new message in a conversation: to everyone with the thread open, and a
+ * nudge to the recipient's (and admins') conversation lists.
+ */
+export function broadcastNewMessage(conversationId: string, message: unknown, recipientId: string) {
+  if (!io) return;
+  io.to(conversationRoom(conversationId)).emit("new_message", { conversationId, message });
+  io.to(userRoom(recipientId)).emit("conversation_updated", { conversationId });
+  io.to("admins").emit("conversation_updated", { conversationId });
 }
 
 /** Pushes an event to every open tab of one user (no-op without a socket server, e.g. in tests). */

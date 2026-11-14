@@ -9,6 +9,14 @@ export const reviewKeys = {
     ["reviews", "shop", shopId, "eligibility"] as const,
 };
 
+export function useReviewHighlights(limit = 6) {
+  return useQuery({
+    queryKey: ["reviews", "highlights", limit],
+    queryFn: () => reviewApi.highlights(limit),
+    staleTime: 10 * 60_000,
+  });
+}
+
 export function useShopReviews(shopId: string | undefined) {
   return useQuery({
     queryKey: reviewKeys.byShop(shopId ?? ""),

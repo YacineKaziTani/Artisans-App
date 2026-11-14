@@ -15,6 +15,7 @@ export interface ListShopsParams {
 export type ShopDetailsPayload = Partial<{
   shopName: string;
   description: string;
+  story: string;
   address: string;
   city: string;
   phone: string;
@@ -127,6 +128,14 @@ export const shopApi = {
   /** A one-time sign-in link to the artisan's Stripe Express dashboard. */
   getStripeDashboardLink: () =>
     api.post<{ url: string }>("/shops/mine/stripe-dashboard").then((r) => r.data),
+
+  uploadCover: (file: File) => {
+    const form = new FormData();
+    form.append("image", file);
+    return api.put<{ shop: Shop }>("/shops/mine/cover", form).then((r) => r.data.shop);
+  },
+
+  removeCover: () => api.delete<{ shop: Shop }>("/shops/mine/cover").then((r) => r.data.shop),
 
   /** Admin preview of a shop in any status (pending shops aren't public). */
   getAdminPreview: (id: string) =>

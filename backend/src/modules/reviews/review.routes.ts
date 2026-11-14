@@ -9,6 +9,7 @@ import {
   replyToReview,
   addReviewPhoto,
   removeReviewPhoto,
+  getReviewHighlights,
 } from "./review.controller";
 import { parser } from "../../config/cloudinary";
 import { authMiddleware, requireVerifiedEmail } from "../../middleware/auth.middleware";
@@ -21,6 +22,7 @@ router.param("id", uuidParam);
 router.param("shopId", uuidParam);
 router.param("productId", uuidParam);
 
+router.get("/highlights", getReviewHighlights);
 router.get("/product/:productId", getProductReviews);
 router.put("/:id/reply", authMiddleware, validateBody(reviewReplySchema), replyToReview);
 router.post("/:id/photos", authMiddleware, parser.single("image"), addReviewPhoto);

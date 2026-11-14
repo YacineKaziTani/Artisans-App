@@ -1,19 +1,15 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router";
-import { Check, Package, ShoppingBag, SlidersHorizontal } from "lucide-react";
+import { useSearchParams } from "react-router";
+import { Package, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { LoginLink } from "@/components/LoginLink";
 import { Input } from "@/components/ui/input";
 import { useProducts } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
 import { useFavoriteIds } from "@/hooks/useFavorites";
 import { useAuthStore } from "@/store/auth.store";
-import { FavoriteButton } from "@/components/FavoriteButton";
-import { useCartStore } from "@/store/cart.store";
-import { shopCanAcceptPayments } from "@/lib/stripe";
+import { ProductCard } from "@/components/ProductCard";
 import { Pagination } from "@/components/Pagination";
 import type { ProductSort } from "@/api/product.api";
-import { img } from "@/lib/images";
 import { PageMeta } from "@/components/PageMeta";
 
 const PAGE_SIZE = 12;
@@ -44,13 +40,9 @@ export default function ProductsPage() {
 
   const { data: categories } = useCategories();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const userId = useAuthStore((s) => s.user?.id);
   const { data: favoriteIds } = useFavoriteIds("product", {
     enabled: isAuthenticated,
   });
-  const addToCart = useCartStore((s) => s.addItem);
-  const [justAdded, setJustAdded] = useState<string | null>(null);
-  const [wrongShop, setWrongShop] = useState(false);
 
   const {
     data: productsPage,
@@ -207,8 +199,8 @@ export default function ProductsPage() {
               className="h-11 rounded-xl border border-input bg-card px-3.5 text-sm shadow-[var(--shadow-xs)] outline-none transition-colors hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25"
             >
               <option value="">Any</option>
-              <option value="4">4★ and up</option>
-              <option value="3">3★ and up</option>
+              <option value="4">4 stars &amp; up</option>
+              <option value="3">3 stars &amp; up</option>
             </select>
           </div>
 
@@ -264,14 +256,6 @@ export default function ProductsPage() {
           )}
         </form>
 
-        {wrongShop && (
-          <p className="alert-note mb-6">
-            Your cart already has items from another shop. Each order is paid
-            out to a single artisan, so check out first (or clear the cart)
-            before adding this.
-          </p>
-        )}
-
         {isLoading && (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -299,118 +283,12 @@ export default function ProductsPage() {
         {!isLoading && !isError && (products ?? []).length > 0 && (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {products!.map((product) => (
-              <div
+              <ProductCard
                 key={product.id}
-                className="surface-lift group relative flex flex-col overflow-hidden"
-              >
-                {isAuthenticated && (
-                  <div className="absolute top-3 right-3 z-10 flex size-9 items-center justify-center rounded-full bg-card/90 shadow-[var(--shadow-sm)] backdrop-blur">
-                    <FavoriteButton
-                      targetType="product"
-                      targetId={product.id}
-                      isFavorited={(favoriteIds ?? []).includes(product.id)}
-                    />
-                  </div>
-                )}
-
-                <Link
-                  to={`/product/${product.id}`}
-                  className="block overflow-hidden"
-                >
-                  {product.imageUrl ? (
-                    <img
-                      {...img(product.imageUrl, 480)}
-                      alt={product.title}
-                      loading="lazy"
-                      className="h-48 w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-48 w-full items-center justify-center bg-brand-50 text-brand-500">
-                      <Package className="size-9" />
-                    </div>
-                  )}
-                </Link>
-
-                <div className="flex flex-1 flex-col p-5">
-                  <Link to={`/product/${product.id}`}>
-                    <h3 className="font-display text-lg font-semibold hover:text-primary">
-                      {product.title}
-                    </h3>
-                  </Link>
-                  <Link
-                    to={`/artisan/${product.shop?.id}`}
-                    className="mt-0.5 text-xs text-muted-foreground hover:text-primary"
-                  >
-                    {product.shop?.shopName}
-                  </Link>
-
-                  {product.description && (
-                    <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-                      {product.description}
-                    </p>
-                  )}
-
-                  <p className="mt-4 font-display text-2xl font-semibold text-primary">
-                    ${Number(product.basePrice).toFixed(2)}
-                  </p>
-
-                  <div className="mt-4 pt-1">
-                    {isAuthenticated ? (
-                      // Matches ArtisanShopPage: a shop that can't take payment
-                      // shouldn't offer a buy path that fails at checkout.
-                      userId && product.shop?.owner?.id === userId ? (
-                        <Button asChild variant="outline" className="w-full">
-                          <Link to="/profile-artisan?tab=products">Your product — manage</Link>
-                        </Button>
-                      ) : !shopCanAcceptPayments(product.shop ?? {}) ? (
-                        <Button variant="outline" className="w-full" disabled>
-                          Not available yet
-                        </Button>
-                      ) : product.variantOptions?.length ? (
-                        <Button asChild variant="outline" className="w-full">
-                          <Link to={`/product/${product.id}`}>
-                            Select options
-                          </Link>
-                        </Button>
-                      ) : product.stockQuantity === 0 ? (
-                        <Button variant="outline" className="w-full" disabled>
-                          Out of stock
-                        </Button>
-                      ) : (
-                        <Button
-                          variant={
-                            justAdded === product.id ? "jade" : "default"
-                          }
-                          className="w-full"
-                          onClick={() => {
-                            if (!addToCart(product)) {
-                              setWrongShop(true);
-                              return;
-                            }
-                            setWrongShop(false);
-                            setJustAdded(product.id);
-                            setTimeout(() => setJustAdded(null), 1500);
-                          }}
-                        >
-                          {justAdded === product.id ? (
-                            <>
-                              <Check className="size-4" /> Added
-                            </>
-                          ) : (
-                            <>
-                              <ShoppingBag className="size-4" /> Add to cart
-                            </>
-                          )}
-                        </Button>
-                      )
-                    ) : (
-                      <Button asChild variant="outline" className="w-full">
-                        <LoginLink>Log in to buy</LoginLink>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
+                product={product}
+                favorited={(favoriteIds ?? []).includes(product.id)}
+                showDescription
+              />
             ))}
           </div>
         )}

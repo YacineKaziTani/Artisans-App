@@ -1,3 +1,4 @@
+import { Store } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { isAxiosError } from "axios";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { ShopHoursCard } from "./artisan/ShopHoursCard";
 import { ShopDeliveryCard } from "./artisan/ShopDeliveryCard";
 import { ShopEarningsTab } from "./artisan/ShopEarningsTab";
 import { MyDisputesCard } from "./account/MyDisputesCard";
+import { PageHeader } from "@/components/PageHeader";
 
 const TABS = [
   { id: "profile", label: "Profile" },
@@ -79,12 +81,7 @@ export default function ArtisanProfilePage() {
     return (
       <main className="page-shell py-12">
         <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-foreground mb-2">Create Your Shop</h1>
-            <p className="text-muted-foreground">
-              Set up your shop to start listing services and products.
-            </p>
-          </div>
+          <PageHeader className="mb-8" title="Create your shop" description="Set up your shop to start listing services and products." icon={Store} />
           <CreateShopForm />
         </div>
       </main>
@@ -94,10 +91,7 @@ export default function ArtisanProfilePage() {
   return (
     <main className="page-shell py-12">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-foreground mb-2">My Shop</h1>
-          <p className="text-muted-foreground">Manage your shop profile and services</p>
-        </div>
+        <PageHeader className="mb-8" title="My shop" description="Manage your shop profile and services" icon={Store} />
 
         <div
           role="tablist"

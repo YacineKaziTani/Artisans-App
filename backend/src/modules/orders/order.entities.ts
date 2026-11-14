@@ -121,6 +121,27 @@ export class Order {
   @JoinColumn({ name: "productId" })
   product!: Product;
 
+  // What was bought, for orders without a product (custom pieces).
+  @Column({ type: "varchar", length: 200, nullable: true })
+  title?: string | null;
+
+  // The custom request this order pays for, if any.
+  @Index()
+  @Column({ type: "uuid", nullable: true })
+  customRequestId?: string | null;
+
+  // Discount code used at checkout. discountAmount is this line's share of
+  // the discount, already taken off totalAmount.
+  @Index()
+  @Column({ type: "uuid", nullable: true })
+  discountCodeId?: string | null;
+
+  @Column({ type: "varchar", length: 40, nullable: true })
+  discountCode?: string | null;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  discountAmount!: number;
+
   // Which specific variant (e.g. Size=M, Color=Red) was ordered, if the
   // product has variants. Nullable since not every product has any.
   @ManyToOne(() => ProductVariant, { nullable: true, onDelete: "SET NULL" })

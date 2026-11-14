@@ -35,7 +35,9 @@ import {
   restoreOrderStock,
 } from "../products/stock";
 import { notifyInBackground } from "../../notifications/deliver";
+import { allocate, DiscountError, resolveDiscount, type AppliedDiscount } from "../discounts/discounts";
 import {
+  notifyLowStock,
   notifyOrderCancelledByClient,
   notifyOrdersAuthorized,
   notifyOrderUpdatedByShop,
@@ -60,7 +62,7 @@ const CONCURRENT_UPDATE = {
   message: "This order was just updated — refresh and try again",
 };
 
-class CheckoutError extends Error {
+export class CheckoutError extends Error {
   constructor(
     public status: number,
     message: string,
@@ -70,18 +72,19 @@ class CheckoutError extends Error {
 }
 
 /** Runs a checkout transaction, turning a CheckoutError into a value. */
-async function runCheckout<T>(
+export async function runCheckout<T>(
   work: (manager: EntityManager) => Promise<T>,
 ): Promise<T | CheckoutError> {
   try {
     return await AppDataSource.transaction(work);
   } catch (err) {
     if (err instanceof CheckoutError) return err;
+    if (err instanceof DiscountError) return new CheckoutError(400, err.message);
     throw err;
   }
 }
 
-function deliveryFields(body: {
+export function deliveryFields(body: {
   deliveryMethod: DeliveryMethod;
   shippingAddress?: string;
 }) {
@@ -100,7 +103,7 @@ function deliveryFields(body: {
  * Thrown inside the checkout transaction, so a refusal rolls back the
  * stock already reserved.
  */
-function deliveryChargeCents(shop: Shop, method: DeliveryMethod, itemsCents: number) {
+export function deliveryChargeCents(shop: Shop, method: DeliveryMethod, itemsCents: number) {
   if (method === DeliveryMethod.PICKUP) {
     if (shop.pickupEnabled === false) {
       throw new CheckoutError(400, "This shop doesn't offer pickup — please choose delivery.");
@@ -116,13 +119,64 @@ function deliveryChargeCents(shop: Shop, method: DeliveryMethod, itemsCents: num
   return toCents(shop.deliveryFee);
 }
 
-function assertChargeable(totalCents: number) {
+export function assertChargeable(totalCents: number) {
   if (totalCents < MIN_CHARGE_CENTS) {
     throw new CheckoutError(
       400,
       `The order total must be at least $${fromCents(MIN_CHARGE_CENTS).toFixed(2)}`,
     );
   }
+}
+
+/** Shops in holiday mode take no orders until they're back. */
+export function assertNotOnHoliday(shop: Shop) {
+  if (shop.holidayUntil && shop.holidayUntil.getTime() > Date.now()) {
+    const back = shop.holidayUntil.toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: shop.timezone || "UTC" });
+    throw new CheckoutError(400, `${shop.shopName} is away until ${back} — orders reopen then.`);
+  }
+}
+
+interface ReservedLine {
+  product: Product;
+  variant: ProductVariant | null;
+  unitPriceCents: number;
+  variantLabel?: string;
+  quantity: number;
+}
+
+/**
+ * Lines whose stock this checkout pushed down to the shop's alert level
+ * (crossing it, so each drop alerts once). Stock was read just before the
+ * reservation, so "before" is what the line found.
+ */
+function lowStockAlerts(shop: Shop, lines: ReservedLine[]) {
+  const threshold = shop.lowStockThreshold ?? 0;
+  if (threshold <= 0) return [];
+  const alerts: { productId: string; title: string; left: number }[] = [];
+  for (const line of lines) {
+    const before = line.variant ? line.variant.stockQuantity : line.product.stockQuantity;
+    if (before === null || before === undefined) continue; // made to order
+    const after = before - line.quantity;
+    if (before > threshold && after <= threshold) {
+      alerts.push({
+        productId: line.product.id,
+        title: line.variantLabel ? `${line.product.title} (${line.variantLabel})` : line.product.title,
+        left: Math.max(0, after),
+      });
+    }
+  }
+  return alerts;
+}
+
+/** Applies a discount code inside the checkout transaction (null = no code). */
+async function applyDiscount(
+  manager: EntityManager,
+  shop: Shop,
+  code: string | undefined,
+  itemsCents: number,
+): Promise<AppliedDiscount | null> {
+  if (!code) return null;
+  return resolveDiscount(manager, shop.id, code, itemsCents, { lock: true });
 }
 
 /**
@@ -157,6 +211,7 @@ async function reserveLineItem(
       "This shop hasn't finished setting up payouts yet and can't accept orders.",
     );
   }
+  assertNotOnHoliday(product.shop);
 
   if (!line.variantId) {
     // A product with options is only sold as one of its variants — that's
@@ -184,9 +239,9 @@ async function reserveLineItem(
     }
     return {
       product,
-      variant: null,
+      variant: null as ProductVariant | null,
       unitPriceCents: toCents(product.basePrice),
-      variantLabel: undefined,
+      variantLabel: undefined as string | undefined,
     };
   }
 
@@ -236,7 +291,7 @@ async function reserveLineItem(
  * metadata) as the record, and abandoned carts stay out of both the client's
  * and the artisan's order lists.
  */
-async function discardUnpaidOrder(order: Order) {
+export async function discardUnpaidOrder(order: Order) {
   const result = await orderRepo.delete({
     id: order.id,
     status: OrderStatus.PENDING,
@@ -282,7 +337,7 @@ export async function releaseOrderCancellation(
  * there's nothing the client could pay, so the rows are discarded and their
  * stock released rather than left reserved.
  */
-async function openPaymentIntent(
+export async function openPaymentIntent(
   orders: Order[],
   shop: Shop,
   metadata: Record<string, string>,
@@ -325,8 +380,11 @@ export const createOrder = async (req: Request, res: Response) => {
       const { product, variant, unitPriceCents, variantLabel } =
         await reserveLineItem(manager, line, userId);
       const itemsCents = unitPriceCents * line.quantity;
-      const feeCents = deliveryChargeCents(product.shop, delivery.deliveryMethod, itemsCents);
-      const totalCents = itemsCents + feeCents;
+      const discount = await applyDiscount(manager, product.shop, req.body.discountCode, itemsCents);
+      const discountCents = discount?.itemsDiscountCents ?? 0;
+      let feeCents = deliveryChargeCents(product.shop, delivery.deliveryMethod, itemsCents - discountCents);
+      if (discount?.freeDelivery) feeCents = 0;
+      const totalCents = itemsCents - discountCents + feeCents;
       assertChargeable(totalCents);
 
       const order = await manager.save(
@@ -340,24 +398,31 @@ export const createOrder = async (req: Request, res: Response) => {
           quantity: line.quantity,
           totalAmount: fromCents(totalCents),
           deliveryFee: fromCents(feeCents),
+          discountCodeId: discount?.code.id ?? null,
+          discountCode: discount?.code.code ?? null,
+          discountAmount: fromCents(discountCents),
           status: OrderStatus.PENDING,
           paymentStatus: OrderPaymentStatus.UNPAID,
           ...delivery,
         }),
       );
-      return { order, shop: product.shop };
+      const lowStock = lowStockAlerts(product.shop, [
+        { product, variant, unitPriceCents, variantLabel, quantity: line.quantity },
+      ]);
+      return { order, shop: product.shop, lowStock };
     });
     if (reserved instanceof CheckoutError) {
       return res.status(reserved.status).json({ message: reserved.message });
     }
 
-    const { order, shop } = reserved;
+    const { order, shop, lowStock } = reserved;
     const clientSecret = await openPaymentIntent(
       [order],
       shop,
       { type: "order", orderId: order.id },
       req.user!.email,
     );
+    if (lowStock.length) notifyInBackground(() => notifyLowStock(lowStock, shop.id));
 
     return res.status(201).json({ order, clientSecret });
   } catch (error) {
@@ -375,12 +440,14 @@ export const createCartCheckout = async (req: Request, res: Response) => {
 
     const reserved = await runCheckout(async (manager) => {
       const orders: Order[] = [];
+      const reservedLines: ReservedLine[] = [];
       let shop: Shop | undefined;
       let totalCents = 0;
 
       for (const line of lines) {
         const { product, variant, unitPriceCents, variantLabel } =
           await reserveLineItem(manager, line, userId);
+        reservedLines.push({ product, variant, unitPriceCents, variantLabel, quantity: line.quantity });
         const lineCents = unitPriceCents * line.quantity;
         totalCents += lineCents;
 
@@ -413,10 +480,33 @@ export const createCartCheckout = async (req: Request, res: Response) => {
         );
       }
 
+      // A discount code comes off the items, split across the lines in
+      // proportion, so each line's total is what it really costs.
+      const discount = await applyDiscount(manager, shop!, req.body.discountCode, totalCents);
+      if (discount && discount.itemsDiscountCents > 0) {
+        const shares = allocate(
+          discount.itemsDiscountCents,
+          orders.map((o) => toCents(o.totalAmount)),
+        );
+        orders.forEach((o, i) => {
+          o.totalAmount = fromCents(toCents(o.totalAmount) - shares[i]);
+          o.discountAmount = fromCents(shares[i]);
+        });
+        totalCents -= discount.itemsDiscountCents;
+      }
+      if (discount) {
+        for (const o of orders) {
+          o.discountCodeId = discount.code.id;
+          o.discountCode = discount.code.code;
+        }
+        await manager.save(orders);
+      }
+
       // Delivery is charged once per checkout, on the first line: its
       // totalAmount includes the fee, so per-line capture and refunds need
       // no special case.
-      const feeCents = deliveryChargeCents(shop!, delivery.deliveryMethod, totalCents);
+      let feeCents = deliveryChargeCents(shop!, delivery.deliveryMethod, totalCents);
+      if (discount?.freeDelivery) feeCents = 0;
       if (feeCents > 0) {
         const first = orders[0];
         first.totalAmount = fromCents(toCents(first.totalAmount) + feeCents);
@@ -426,13 +516,14 @@ export const createCartCheckout = async (req: Request, res: Response) => {
       }
 
       assertChargeable(totalCents);
-      return { orders, shop: shop! };
+      return { orders, shop: shop!, lowStock: lowStockAlerts(shop!, reservedLines) };
     });
     if (reserved instanceof CheckoutError) {
       return res.status(reserved.status).json({ message: reserved.message });
     }
 
-    const { orders, shop } = reserved;
+    const { orders, shop, lowStock } = reserved;
+    if (lowStock.length) notifyInBackground(() => notifyLowStock(lowStock, shop.id));
     // Orders are found from the webhook by stripePaymentIntentId, so the
     // metadata only needs the group id (a CSV of order ids used to go past
     // Stripe's 500-character metadata limit at ~13 lines).
@@ -965,6 +1056,12 @@ export async function handleOrderIntentAuthorized(intentId: string) {
   // are de-duplicated and the update is conditional, so this sends once.
   if (newlyAuthorized.length) {
     const ids = newlyAuthorized.map((o) => o.id);
+    // A paid quote turns its custom request into an accepted order.
+    await AppDataSource.query(
+      `UPDATE custom_requests SET status = 'accepted', "updatedAt" = now()
+        WHERE "orderId" = ANY($1::uuid[]) AND status = 'quoted'`,
+      [ids],
+    );
     notifyInBackground(() => notifyOrdersAuthorized(ids));
   }
 

@@ -11,6 +11,7 @@ import {
 } from "@/api/order.api";
 import type { OrderStatus } from "@/types";
 import { track } from "@/lib/analytics";
+import { toast } from "@/lib/toast";
 
 export const orderKeys = {
   all: ["orders"] as const,
@@ -85,7 +86,8 @@ export function useUpdateOrderStatus() {
       status: OrderStatus;
       trackingInfo?: string;
     }) => orderApi.updateStatus(id, status, trackingInfo),
-    onSuccess: () => {
+    onSuccess: (_data, { status }) => {
+      toast.success(status === "fulfilled" ? "Order marked as sent — the card is charged" : status === "cancelled" ? "Order cancelled" : "Order updated");
       // A cart order settles its siblings when the last line resolves, so
       // refresh the whole list rather than patching the single row.
       qc.invalidateQueries({ queryKey: orderKeys.all });

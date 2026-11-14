@@ -129,6 +129,22 @@ export function useMyShopStats(options: { enabled?: boolean } = {}) {
 }
 
 /** Admin preview of any shop, including pending ones. */
+export function useUploadShopCover() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: shopApi.uploadCover,
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopKeys.all }),
+  });
+}
+
+export function useRemoveShopCover() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: shopApi.removeCover,
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopKeys.all }),
+  });
+}
+
 export function useUpdateShopHours() {
   const qc = useQueryClient();
   return useMutation({

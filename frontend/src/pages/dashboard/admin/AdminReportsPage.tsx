@@ -1,3 +1,4 @@
+import { Flag } from "lucide-react";
 import { useState } from "react";
 import { Pagination } from "@/components/Pagination";
 import {
@@ -12,6 +13,7 @@ import { useAdminReports, useResolveReport } from "@/hooks/useReports";
 import type { ReportStatus } from "@/types";
 import { getErrorMessage } from "@/lib/errors";
 import { StatusBadge } from "@/components/StatusBadge";
+import { PageHeader } from "@/components/PageHeader";
 
 
 export default function AdminReportsPage() {
@@ -23,10 +25,7 @@ export default function AdminReportsPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Reports</h1>
-        <p className="text-muted-foreground">Flagged shops, products, services, and reviews</p>
-      </div>
+      <PageHeader title="Reports" description="Flagged shops, products, services, and reviews" icon={Flag} />
 
       <div className="flex gap-2">
         {(["pending", "dismissed", "actioned", undefined] as const).map((s) => (
@@ -62,7 +61,7 @@ export default function AdminReportsPage() {
           )}
 
           {isError && (
-            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+            <p className="alert-error">
               Couldn't load reports.
             </p>
           )}

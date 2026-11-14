@@ -38,7 +38,8 @@ export type AnalyticsEvent =
   | "Checkout started"
   | "Payment authorized"
   | "Shop created"
-  | "Newsletter signup";
+  | "Newsletter signup"
+  | "Add to cart";
 
 /** Records a business event; a no-op when analytics is off or blocked. */
 export function track(event: AnalyticsEvent, props?: Props) {

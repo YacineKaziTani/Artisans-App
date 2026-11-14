@@ -28,6 +28,7 @@ export const updateShopSchema = z.object({
   shopName: requiredText("Shop name", 120).optional(),
   categoryId: z.preprocess(emptyToUndefined, uuid("Category").optional()),
   description: optionalText("Description", 2000),
+  story: optionalText("Story", 5000),
   address: optionalText("Address", 200),
   city: optionalText("City", 100),
   phone: z.union([z.literal(""), phone()]).optional(),
@@ -87,6 +88,27 @@ export const shopHoursSchema = z.object({
     .object(Object.fromEntries(WEEKDAYS.map((d) => [d, dayRanges.optional()])))
     .strict()
     .nullable(),
+});
+
+// ── Holiday mode and stock alerts (JSON) ───────────────────────────────────
+
+export const shopHolidaySchema = z.object({
+  // null switches holiday mode off.
+  until: z
+    .iso.datetime({ offset: true, error: "Choose the date you're back" })
+    .transform((value) => new Date(value))
+    .refine((d) => d.getTime() > Date.now(), "The return date must be in the future")
+    .refine((d) => d.getTime() < Date.now() + 366 * 24 * 60 * 60 * 1000, "Holiday mode can last at most a year")
+    .nullable(),
+  message: optionalText("Away message", 500),
+});
+
+export const shopStockAlertsSchema = z.object({
+  lowStockThreshold: z
+    .number({ error: "Enter a number" })
+    .int("Enter a whole number")
+    .min(0, "Use 0 to turn alerts off")
+    .max(1000),
 });
 
 // ── Delivery options (JSON) ────────────────────────────────────────────────

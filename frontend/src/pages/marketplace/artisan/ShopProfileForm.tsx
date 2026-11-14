@@ -15,6 +15,9 @@ import type { Shop } from "@/types";
 import { ShopFields, type ShopFieldValues } from "./ShopFields";
 import { StripeConnectBanner } from "./StripeConnectBanner";
 import { VerificationBanner } from "./VerificationBanner";
+import { ShopCoverCard } from "./ShopCoverCard";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/lib/toast";
 
 const valuesFor = (shop: Shop): ShopFieldValues => ({
   shopName: shop.shopName,
@@ -32,6 +35,7 @@ export function ShopProfileForm({ shop }: { shop: Shop }) {
   const reopenShop = useReopenMyShop();
   const confirm = useConfirm();
   const [values, setValues] = useState<ShopFieldValues>(() => valuesFor(shop));
+  const [story, setStory] = useState(shop.story ?? "");
   const logoTooLarge = isImageTooLarge(values.logo);
   const statusError = closeShop.error ?? reopenShop.error;
 
@@ -48,8 +52,14 @@ export function ShopProfileForm({ shop }: { shop: Shop }) {
         address: values.address.trim(),
         city: values.city.trim(),
         logo: values.logo,
+        story: story.trim(),
       },
-      { onSuccess: () => setValues((v) => ({ ...v, logo: null })) },
+      {
+        onSuccess: () => {
+          setValues((v) => ({ ...v, logo: null }));
+          toast.success("Shop details saved");
+        },
+      },
     );
   };
 
@@ -67,7 +77,7 @@ export function ShopProfileForm({ shop }: { shop: Shop }) {
   return (
     <div className="space-y-6">
       {shop.status === "closed" && (
-        <div className="p-4 bg-muted border border-border rounded-lg flex items-center justify-between flex-wrap gap-2">
+        <div className="surface flex flex-wrap items-center justify-between gap-2 p-4">
           <p className="text-sm text-foreground/80">
             Your shop is closed and hidden from public listings.
           </p>
@@ -77,13 +87,13 @@ export function ShopProfileForm({ shop }: { shop: Shop }) {
         </div>
       )}
       {shop.status === "suspended" && (
-        <div className="p-4 bg-destructive/10 border border-destructive/25 rounded-lg text-sm text-destructive">
+        <div className="alert-error">
           Your shop was suspended by an admin and is hidden from public
           listings. Contact support if you believe this is a mistake.
         </div>
       )}
       {shop.status === "pending" && (
-        <div className="p-4 bg-yellow-100 border border-yellow-300 rounded-lg text-sm text-yellow-800">
+        <div className="alert-note">
           Your shop is pending admin approval and isn't publicly visible yet.
         </div>
       )}
@@ -91,6 +101,8 @@ export function ShopProfileForm({ shop }: { shop: Shop }) {
 
       <StripeConnectBanner shop={shop} />
       <VerificationBanner shop={shop} />
+
+      <ShopCoverCard shop={shop} />
 
       <Card>
         <CardHeader>
@@ -104,13 +116,22 @@ export function ShopProfileForm({ shop }: { shop: Shop }) {
                 {getErrorMessage(updateShop.error, "Couldn't save your changes. Please try again.")}
               </div>
             )}
-            {updateShop.isSuccess && (
-              <div className="p-3 bg-jade-50 border border-jade-500/25 rounded-lg text-jade-600 text-sm">
-                Shop updated.
-              </div>
-            )}
-
             <ShopFields values={values} onChange={setValues} currentLogoUrl={shop.logoUrl} />
+
+            <div>
+              <label htmlFor="shop-story" className="field-label">
+                Our story <span className="font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <Textarea
+                id="shop-story"
+                rows={6}
+                maxLength={5000}
+                value={story}
+                onChange={(e) => setStory(e.target.value)}
+                placeholder="How you started, how you work, what makes your pieces yours. Shown on the About tab of your shop."
+              />
+              <p className="mt-1 text-right text-xs text-muted-foreground">{story.length}/5000</p>
+            </div>
 
             <Button
               type="submit"

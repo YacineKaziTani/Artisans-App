@@ -1,5 +1,5 @@
 import { api } from "@/lib/axios";
-import type { Review, ReviewEligibility } from "@/types";
+import type { Review, ReviewEligibility, ReviewHighlight } from "@/types";
 
 export interface ReviewPayload {
   rating: number;
@@ -9,6 +9,9 @@ export interface ReviewPayload {
 }
 
 export const reviewApi = {
+  highlights: (limit = 6) =>
+    api.get<ReviewHighlight[]>("/reviews/highlights", { params: { limit } }).then((r) => r.data),
+
   listByShop: (shopId: string) =>
     api.get<Review[]>(`/reviews/shop/${shopId}`).then((r) => r.data),
 

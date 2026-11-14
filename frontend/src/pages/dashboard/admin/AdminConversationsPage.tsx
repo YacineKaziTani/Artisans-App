@@ -1,7 +1,9 @@
+import { MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { Link, Outlet, useParams } from "react-router";
 import { Pagination } from "@/components/Pagination";
 import { useAdminConversations } from "@/hooks/useConversations";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function AdminConversationsPage() {
   const [page, setPage] = useState(1);
@@ -11,10 +13,7 @@ export default function AdminConversationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Conversations</h1>
-        <p className="text-muted-foreground">All client ↔ artisan messages (read-only)</p>
-      </div>
+      <PageHeader title="Conversations" description="All client ↔ artisan messages (read-only)" icon={MessageCircle} />
 
       <div className="flex gap-6 bg-card rounded-xl border border-border overflow-hidden min-h-[65vh]">
         <div

@@ -124,8 +124,8 @@ export default function CategoryDetailPage() {
               <label htmlFor="shop-rating" className="field-label">Rating</label>
               <select id="shop-rating" value={minRating} onChange={(e) => { setMinRating(e.target.value); setPage(1); }} className="h-10 rounded-xl border border-input bg-card px-3 text-sm">
                 <option value="">Any</option>
-                <option value="4">4★ and up</option>
-                <option value="3">3★ and up</option>
+                <option value="4">4 stars &amp; up</option>
+                <option value="3">3 stars &amp; up</option>
               </select>
             </div>
             <div>
@@ -185,7 +185,7 @@ export default function CategoryDetailPage() {
                   </h3>
                   {shop.averageRating > 0 && (
                     <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold">
-                      <Star className="size-3 fill-current text-amber-500" />
+                      <Star className="size-3 fill-star text-star" />
                       {shop.averageRating.toFixed(1)}
                     </span>
                   )}

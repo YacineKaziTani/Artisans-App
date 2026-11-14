@@ -27,6 +27,14 @@ export class Product {
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   basePrice!: number;
 
+  // The "was" price for a sale: shown crossed out when higher than basePrice.
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  compareAtPrice?: number | null;
+
+  // Pinned to the top of the shop page.
+  @Column({ type: "boolean", default: false })
+  featured!: boolean;
+
   // Stock for a product sold without variants. NULL means "not tracked"
   // (made to order — any quantity can be ordered); a number is reserved at
   // checkout exactly like variant stock. Products with variants keep their

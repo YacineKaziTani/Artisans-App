@@ -1,3 +1,4 @@
+import { Scale } from "lucide-react";
 import { useState } from "react";
 import { Pagination } from "@/components/Pagination";
 import {
@@ -16,6 +17,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/pricing";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { Dispute, DisputeStatus, DisputeTarget } from "@/types";
+import { PageHeader } from "@/components/PageHeader";
 
 const STATUS_LABELS: Record<DisputeStatus, string> = {
   open: "Open",
@@ -157,12 +159,7 @@ export default function AdminDisputesPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Disputes</h1>
-        <p className="text-muted-foreground">
-          Booking and order disputes raised by clients or artisans
-        </p>
-      </div>
+      <PageHeader title="Disputes" description="Booking and order disputes raised by clients or artisans" icon={Scale} />
 
       <div className="flex gap-2 flex-wrap">
         {FILTERS.map((s) => (

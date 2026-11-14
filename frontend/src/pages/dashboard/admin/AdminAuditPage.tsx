@@ -1,8 +1,10 @@
+import { ScrollText } from "lucide-react";
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Pagination } from "@/components/Pagination";
 import { api } from "@/lib/axios";
 import { getErrorMessage } from "@/lib/errors";
+import { PageHeader } from "@/components/PageHeader";
 
 interface AdminActionRow {
   id: string;
@@ -43,10 +45,7 @@ export default function AdminAuditPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Admin log</h1>
-        <p className="text-muted-foreground">Every change made from the admin dashboard. Entries can't be edited.</p>
-      </div>
+      <PageHeader title="Admin log" description="Every change made from the admin dashboard. Entries can't be edited." icon={ScrollText} />
 
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (

@@ -1,3 +1,4 @@
+import { Store, Truck } from "lucide-react";
 import { useState } from "react";
 import { HoldDeadline } from "@/components/HoldDeadline";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +38,7 @@ export function ShopOrdersTab() {
         )}
 
         {isError && (
-          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+          <p className="alert-error">
             Couldn't load your orders right now.
           </p>
         )}
@@ -69,14 +70,18 @@ export function ShopOrdersTab() {
                         {order.client?.name} · $
                         {Number(order.totalAmount).toFixed(2)}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {order.deliveryMethod === "delivery" ? "🚚 Delivery" : "🏬 Pickup"}
+                      <p className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-1">
+                        {order.deliveryMethod === "delivery" ? (
+                          <span className="inline-flex items-center gap-1"><Truck className="size-3.5" aria-hidden="true" /> Delivery</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1"><Store className="size-3.5" aria-hidden="true" /> Pickup</span>
+                        )}
                         {order.shippingAddress && ` · ${order.shippingAddress}`}
                       </p>
                       {order.deliveryMethod === "delivery" && order.status === "fulfilled" && (
                         <p className="text-xs mt-1 font-medium text-jade-600">
                           {order.deliveredAt
-                            ? `✓ Client confirmed delivery ${new Date(order.deliveredAt).toLocaleDateString()}`
+                            ? `Client confirmed delivery ${new Date(order.deliveredAt).toLocaleDateString()}`
                             : "Shipped — waiting for the client to confirm it arrived"}
                         </p>
                       )}
@@ -97,7 +102,7 @@ export function ShopOrdersTab() {
                     <div className="space-y-2">
                       {updateStatus.isError &&
                         updateStatus.variables?.id === order.id && (
-                          <p className="p-2 bg-destructive/10 border border-destructive/25 rounded text-destructive text-xs">
+                          <p className="alert-error px-3 py-2 text-xs">
                             {getErrorMessage(
                               updateStatus.error,
                               "Couldn't update this order. Please try again.",

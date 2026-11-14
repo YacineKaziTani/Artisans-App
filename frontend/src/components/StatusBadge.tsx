@@ -1,10 +1,10 @@
 type Tone = "warning" | "success" | "danger" | "info" | "neutral" | "brand";
 
 const TONE_CLASSES: Record<Tone, string> = {
-  warning: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  warning: "bg-warning/10 text-warning border-warning/25",
   success: "bg-jade-50 text-jade-600 border-jade-500/25",
   danger: "bg-destructive/10 text-destructive border-destructive/25",
-  info: "bg-sky-100 text-sky-800 border-sky-200",
+  info: "bg-info/10 text-info border-info/25",
   neutral: "bg-muted text-foreground/80 border-border",
   brand: "bg-brand-100 text-primary border-border",
 };

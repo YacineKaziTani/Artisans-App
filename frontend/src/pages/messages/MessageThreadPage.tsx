@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -174,9 +175,7 @@ export default function MessageThreadPage() {
   if (isError || !data) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 p-8 text-center">
-        <span className="text-4xl" aria-hidden="true">
-          ⚠️
-        </span>
+        <AlertTriangle className="size-10 text-warning" aria-hidden="true" />
         <p className="text-sm text-destructive">
           Couldn't load this conversation.
         </p>

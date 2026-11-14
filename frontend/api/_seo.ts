@@ -117,6 +117,7 @@ interface ShopData {
   description?: string | null;
   city?: string | null;
   logoUrl?: string | null;
+  coverUrl?: string | null;
   photos?: { url: string }[];
 }
 
@@ -125,7 +126,7 @@ export function shopSharePage(s: ShopData): SharePage {
     title: s.city ? `${s.shopName} — artisan in ${s.city}` : s.shopName,
     description: summarize(s.description) || `Handmade work by ${s.shopName}.`,
     path: `/artisan/${s.id}`,
-    image: previewImage(s.photos?.[0]?.url ?? s.logoUrl),
+    image: previewImage(s.coverUrl ?? s.photos?.[0]?.url ?? s.logoUrl),
     type: "profile",
     jsonLd: {
       "@context": "https://schema.org",

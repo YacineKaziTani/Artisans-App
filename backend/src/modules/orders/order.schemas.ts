@@ -12,6 +12,11 @@ const lineItem = z.object({
 });
 
 const delivery = {
+  // A shop's promo code (checked and applied by the API).
+  discountCode: z.preprocess(
+    emptyToUndefined,
+    z.string({ error: "Discount code must be text" }).trim().max(40, "That code is too long").optional(),
+  ),
   deliveryMethod: z
     .enum(DeliveryMethod, { error: "Choose pickup or delivery" })
     .default(DeliveryMethod.PICKUP),

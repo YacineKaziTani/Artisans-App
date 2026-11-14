@@ -25,6 +25,9 @@ import { User } from "./modules/users/entities/user.entities";
 import { Notification } from "./modules/notifications/notification.entities";
 import { NewsletterSubscriber } from "./modules/newsletter/newsletter.entities";
 import { AdminAction } from "./modules/audit/admin-action.entities";
+import { CustomRequest } from "./modules/custom-requests/custom-request.entities";
+import { DiscountCode } from "./modules/discounts/discount-code.entities";
+import { ProductView } from "./modules/analytics/product-view.entities";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -65,6 +68,9 @@ export const AppDataSource = new DataSource({
     Notification,
     NewsletterSubscriber,
     AdminAction,
+    CustomRequest,
+    DiscountCode,
+    ProductView,
   ],
   // Anchored to this file's own directory, not the cwd: resolves to
   // src/migrations/*.ts under ts-node and dist/migrations/*.js once compiled.

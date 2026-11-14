@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import Stripe from "stripe";
-import { In, IsNull, Not } from "typeorm";
+import { EntityManager, In, IsNull, Not } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { Booking, BookingStatus, PaymentStatus } from "./booking.entities";
 import { Shop, ShopStatus } from "../shop/shop.entities";
@@ -12,7 +12,7 @@ import {
   parsePagination,
   queryString,
 } from "../../middleware/validate.middleware";
-import { toCents } from "../../lib/money";
+import { fromCents, toCents } from "../../lib/money";
 import {
   stripe,
   shopCanAcceptPayments,
@@ -122,6 +122,7 @@ export const createBooking = async (req: Request, res: Response) => {
       scheduledAt: Date;
       notes?: string;
     };
+    const seats = (req.body as { seats?: number }).seats ?? 1;
 
     const service = await serviceRepo.findOne({
       where: { id: serviceId, archivedAt: IsNull() },
@@ -147,6 +148,15 @@ export const createBooking = async (req: Request, res: Response) => {
       });
     }
 
+    const capacity = Math.max(1, service.capacity ?? 1);
+    if (seats > capacity) {
+      return res.status(400).json({
+        message: capacity === 1
+          ? "This is a private appointment — book one place."
+          : `Each session has ${capacity} places — book ${capacity} or fewer.`,
+      });
+    }
+
     const now = Date.now();
     if (scheduledAt.getTime() <= now) {
       return res
@@ -155,6 +165,17 @@ export const createBooking = async (req: Request, res: Response) => {
     }
     // Each shop's own rules: minimum notice, and how far ahead it takes bookings.
     const { earliest, latest } = bookingWindow(service.shop, now);
+    const holidayEnd = service.shop.holidayUntil?.getTime() ?? 0;
+    if (holidayEnd > now && scheduledAt.getTime() < holidayEnd) {
+      const back = service.shop.holidayUntil!.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        timeZone: service.shop.timezone || "UTC",
+      });
+      return res.status(400).json({
+        message: `${service.shop.shopName} is away until ${back} — please pick a time after that.`,
+      });
+    }
     if (scheduledAt.getTime() < earliest) {
       const hours = service.shop.bookingMinNoticeHours;
       return res.status(400).json({
@@ -195,22 +216,16 @@ export const createBooking = async (req: Request, res: Response) => {
 
       // A slot is taken by any live booking overlapping it — except an
       // unpaid one older than the checkout TTL, which the expiry sweep is
-      // about to delete.
-      const clash = await manager
-        .createQueryBuilder(Booking, "booking")
-        .where("booking.shopId = :shopId", { shopId })
-        .andWhere("booking.status IN (:...live)", { live: LIVE_STATUSES })
-        .andWhere("booking.scheduledAt < :endsAt", { endsAt })
-        .andWhere(
-          `COALESCE(booking.endsAt, booking.scheduledAt + interval '${DEFAULT_SLOT_MINUTES} minute') > :startsAt`,
-          { startsAt: scheduledAt },
-        )
-        .andWhere(
-          `(booking.paymentStatus NOT IN (:...unpaid) OR ${withinCheckoutTtlSql("booking.createdAt")})`,
-          { unpaid: UNPAID_STATES },
-        )
-        .getExists();
-      if (clash) return null;
+      // about to delete. For a class, other clients in the *same session*
+      // (same service, same start) share it until the places run out.
+      const overlapping = await liveBookingsBetween(shopId, scheduledAt, endsAt, manager);
+      const sameSession = (row: (typeof overlapping)[number]) =>
+        capacity > 1 &&
+        row.serviceId === service.id &&
+        row.start.getTime() === scheduledAt.getTime();
+      if (overlapping.some((row) => !sameSession(row))) return { clash: "time" as const };
+      const taken = overlapping.reduce((sum, row) => sum + row.seats, 0);
+      if (taken + seats > capacity) return { clash: "full" as const, left: Math.max(0, capacity - taken) };
 
       return manager.save(
         manager.create(Booking, {
@@ -220,20 +235,25 @@ export const createBooking = async (req: Request, res: Response) => {
           scheduledAt,
           endsAt,
           notes,
-          totalAmount: service.price,
+          seats,
+          totalAmount: fromCents(toCents(service.price) * seats),
           status: BookingStatus.PENDING,
           paymentStatus: PaymentStatus.UNPAID,
         }),
       );
     });
-    if (!booking) {
+    if ("clash" in booking) {
       return res.status(409).json({
         message:
-          "That time overlaps another booking at this shop — please pick a different time",
+          booking.clash === "full"
+            ? booking.left > 0
+              ? `Only ${booking.left} place${booking.left === 1 ? "" : "s"} left in that session.`
+              : "That session is full — please pick another time."
+            : "That time overlaps another booking at this shop — please pick a different time",
       });
     }
 
-    const amountInCents = toCents(service.price);
+    const amountInCents = toCents(service.price) * seats;
     let intent: Stripe.PaymentIntent;
     try {
       intent = await stripe.paymentIntents.create({
@@ -795,29 +815,36 @@ export const stripeWebhook = async (req: Request, res: Response) => {
 };
 
 /**
- * Live bookings at a shop that overlap [from, to) — the same rule the
- * clash check in createBooking applies (abandoned unpaid ones don't count).
+ * Live bookings at a shop that overlap [from, to), with their service and
+ * places — what the clash check in createBooking and the availability
+ * endpoint both go by (abandoned unpaid ones don't count).
  */
-async function busyIntervals(shopId: string, from: Date, to: Date): Promise<Interval[]> {
-  const rows = await bookingRepo
-    .createQueryBuilder("booking")
-    .select(["booking.id", "booking.scheduledAt", "booking.endsAt"])
-    .where("booking.shopId = :shopId", { shopId })
-    .andWhere("booking.status IN (:...live)", { live: LIVE_STATUSES })
-    .andWhere("booking.scheduledAt < :to", { to })
-    .andWhere(
-      `COALESCE(booking.endsAt, booking.scheduledAt + interval '${DEFAULT_SLOT_MINUTES} minute') > :from`,
-      { from },
-    )
-    .andWhere(
-      `(booking.paymentStatus NOT IN (:...unpaid) OR ${withinCheckoutTtlSql("booking.createdAt")})`,
-      { unpaid: UNPAID_STATES },
-    )
-    .getMany();
-  return rows.map((b) => ({
-    start: b.scheduledAt,
-    end: b.endsAt ?? new Date(b.scheduledAt.getTime() + DEFAULT_SLOT_MINUTES * 60_000),
-  }));
+async function liveBookingsBetween(
+  shopId: string,
+  from: Date,
+  to: Date,
+  manager: EntityManager = AppDataSource.manager,
+) {
+  const rows: { scheduledAt: Date; endsAt: Date | null; seats: number; serviceId: string | null }[] =
+    await manager.query(
+      `SELECT "scheduledAt", "endsAt", seats, "serviceId"
+         FROM bookings
+        WHERE "shopId" = $1
+          AND status::text = ANY($2)
+          AND "scheduledAt" < $4
+          AND COALESCE("endsAt", "scheduledAt" + interval '${DEFAULT_SLOT_MINUTES} minute') > $3
+          AND ("paymentStatus"::text <> ALL($5) OR ${withinCheckoutTtlSql('"createdAt"')})`,
+      [shopId, LIVE_STATUSES, from, to, UNPAID_STATES],
+    );
+  return rows.map((b) => {
+    const start = new Date(b.scheduledAt);
+    return {
+      start,
+      end: b.endsAt ? new Date(b.endsAt) : new Date(start.getTime() + DEFAULT_SLOT_MINUTES * 60_000),
+      seats: Number(b.seats ?? 1),
+      serviceId: b.serviceId,
+    };
+  });
 }
 
 /** The earliest and latest start a shop accepts right now (ms since epoch). */
@@ -863,9 +890,23 @@ export const getServiceAvailability = async (req: Request, res: Response) => {
 
     const durationMinutes = service.durationMinutes ?? UNTIMED_SLOT_MINUTES;
     const window = dayWindow(date, timezone);
-    const { earliest, latest } = bookingWindow(shop, Date.now());
+    const { earliest: noticeEarliest, latest } = bookingWindow(shop, Date.now());
+    // Away on holiday: nothing before the return date.
+    const earliest = Math.max(noticeEarliest, shop.holidayUntil?.getTime() ?? 0);
     const tooFar = window.start.getTime() > latest;
-    const slots = tooFar
+    const capacity = Math.max(1, service.capacity ?? 1);
+    const booked = tooFar ? [] : await liveBookingsBetween(shop.id, window.start, window.end);
+
+    // A class's sessions: places taken per start time. A session with room
+    // left stays bookable even though it "overlaps" its own bookings.
+    const sessions = new Map<number, number>();
+    if (capacity > 1) {
+      for (const b of booked) {
+        if (b.serviceId === service.id) sessions.set(b.start.getTime(), (sessions.get(b.start.getTime()) ?? 0) + b.seats);
+      }
+    }
+    const busy: Interval[] = booked.map((b) => ({ start: b.start, end: b.end }));
+    const free = tooFar
       ? []
       : slotsForDate({
           hours: shop.openingHours,
@@ -873,16 +914,39 @@ export const getServiceAvailability = async (req: Request, res: Response) => {
           date,
           durationMinutes,
           stepMinutes: Math.min(30, durationMinutes),
-          busy: await busyIntervals(shop.id, window.start, window.end),
+          busy,
           notBefore: new Date(earliest - 1),
         });
+
+    const starts = new Set(free.map((slot) => slot.getTime()));
+    if (capacity > 1) {
+      const end = (start: number) => start + durationMinutes * 60_000;
+      for (const [start, taken] of sessions) {
+        if (taken >= capacity || start < earliest) continue;
+        // Bookable only if nothing *else* (another service, or another
+        // session of this one) overlaps it.
+        const blocked = booked.some(
+          (b) =>
+            !(b.serviceId === service.id && b.start.getTime() === start) &&
+            b.start.getTime() < end(start) &&
+            b.end.getTime() > start,
+        );
+        if (!blocked) starts.add(start);
+      }
+    }
+    const slots = [...starts].sort((a, b) => a - b);
 
     return res.json({
       date,
       timezone,
       hasOpeningHours: true,
       durationMinutes,
-      slots: slots.map((slot) => slot.toISOString()),
+      capacity,
+      slots: slots.map((slot) => new Date(slot).toISOString()),
+      // Places left per start time, for classes.
+      ...(capacity > 1
+        ? { seatsLeft: Object.fromEntries(slots.map((s) => [new Date(s).toISOString(), capacity - (sessions.get(s) ?? 0)])) }
+        : {}),
     });
   } catch (error) {
     console.error("getServiceAvailability failed:", error);

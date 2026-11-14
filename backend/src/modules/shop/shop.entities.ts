@@ -58,6 +58,18 @@ export class Shop {
   @Column({ type: "varchar", nullable: true })
   logoUrl?: string | null;
 
+  // Wide banner photo at the top of the public shop page, and its
+  // Cloudinary id (so a replaced cover can be deleted; never sent out).
+  @Column({ type: "varchar", nullable: true })
+  coverUrl?: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  coverPublicId?: string | null;
+
+  // "Our story": the longer About text on the shop page.
+  @Column({ type: "text", nullable: true })
+  story?: string | null;
+
   @Column({ type: "varchar", nullable: true })
   phone?: string | null;
 
@@ -131,6 +143,35 @@ export class Shop {
   @Column({ type: "varchar", length: 300, nullable: true })
   deliveryArea?: string | null;
 
+  // ── Holiday mode ──
+  // While holidayUntil is in the future the shop takes no orders, only
+  // bookings after it, and new chats get one automatic reply.
+  @Column({ type: "timestamptz", nullable: true })
+  holidayUntil?: Date | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  holidayMessage?: string | null;
+
+  // When holiday mode was switched on, so each conversation gets one
+  // automatic reply per holiday rather than one ever.
+  @Column({ type: "timestamptz", nullable: true })
+  holidayStartedAt?: Date | null;
+
+  // ── Tools ──
+  // Secret token in the artisan's calendar feed URL (never sent out).
+  @Index({ unique: true, where: `"calendarToken" IS NOT NULL` })
+  @Column({ type: "varchar", length: 64, nullable: true, select: false })
+  calendarToken?: string | null;
+
+  // Email the artisan when a product's stock drops to this or below (0 = off).
+  @Column({ type: "int", default: 2 })
+  lowStockThreshold!: number;
+
+  // Last time followers were told about a new product (at most one alert
+  // every few hours, however many products are added).
+  @Column({ type: "timestamptz", nullable: true })
+  followersNotifiedAt?: Date | null;
+
   @OneToOne(() => User, (user) => user.shop)
   @JoinColumn()
   owner!: User;
@@ -167,7 +208,14 @@ export class Shop {
    * fields plus a frontend env var.
    */
   toJSON() {
-    const { stripeAccountId: _account, verificationNote: _note, ...rest } = this;
+    const {
+      stripeAccountId: _account,
+      verificationNote: _note,
+      coverPublicId: _cover,
+      calendarToken: _calendar,
+      followersNotifiedAt: _followers,
+      ...rest
+    } = this;
     return { ...rest, acceptsPayments: shopCanAcceptPayments(this) };
   }
 }

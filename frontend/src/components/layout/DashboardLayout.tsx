@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { useLogout } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/auth.store";
 import { NotificationBell } from "@/components/NotificationBell";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 type NavItem = { to: string; label: string; icon: LucideIcon };
 type NavGroup = { heading: string; items: NavItem[] };
@@ -208,7 +209,8 @@ export function DashboardLayout() {
           <span className="font-display text-base font-semibold lg:hidden">
             Dashboard
           </span>
-          <NotificationBell className="ml-auto" />
+          <ThemeToggle className="ml-auto" />
+          <NotificationBell />
         </header>
 
         <main className="flex-1 overflow-y-auto p-5 sm:p-8">

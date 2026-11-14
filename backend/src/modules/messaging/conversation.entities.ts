@@ -31,6 +31,10 @@ export class Conversation {
   @OneToMany(() => Message, (m) => m.conversation)
   messages!: Message[];
 
+  // Last holiday auto-reply sent in this conversation.
+  @Column({ type: "timestamptz", nullable: true })
+  autoRepliedAt?: Date | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 

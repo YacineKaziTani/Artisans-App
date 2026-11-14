@@ -1,3 +1,4 @@
+import { Wrench } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Card,
@@ -12,6 +13,7 @@ import { useDeleteService } from "@/hooks/useServices";
 import { useConfirm } from "@/hooks/useConfirm";
 import { getErrorMessage } from "@/lib/errors";
 import type { Service } from "@/types";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function AdminServicesPage() {
   const { data: services, isLoading, isError } = useQuery({
@@ -34,10 +36,7 @@ export default function AdminServicesPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Services</h1>
-        <p className="text-muted-foreground">Moderate services listed across all shops</p>
-      </div>
+      <PageHeader title="Services" description="Moderate services listed across all shops" icon={Wrench} />
 
       <Card>
         <CardHeader>
@@ -54,7 +53,7 @@ export default function AdminServicesPage() {
           )}
 
           {isError && (
-            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+            <p className="alert-error">
               Couldn't load services.
             </p>
           )}

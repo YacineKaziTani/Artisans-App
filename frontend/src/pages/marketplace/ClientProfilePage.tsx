@@ -1,3 +1,4 @@
+import { Store, Truck } from "lucide-react";
 import { useState } from "react";
 import {
   Card,
@@ -47,7 +48,7 @@ function ProfileEditForm({
     <CardContent className="space-y-4">
       <form onSubmit={handleSaveProfile} className="space-y-4">
         {updateProfile.isError && (
-          <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
+          <div className="alert-error">
             {getErrorMessage(
               updateProfile.error,
               "Couldn't save your changes. Please try again.",
@@ -183,7 +184,7 @@ function MyBookingsCard() {
         )}
 
         {isError && (
-          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+          <p className="alert-error">
             Couldn't load your bookings right now.
           </p>
         )}
@@ -313,7 +314,7 @@ function MyOrdersCard() {
         )}
 
         {isError && (
-          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+          <p className="alert-error">
             Couldn't load your orders right now.
           </p>
         )}
@@ -353,7 +354,11 @@ function MyOrdersCard() {
                       {Number(order.totalAmount).toFixed(2)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {order.deliveryMethod === "delivery" ? "🚚 Delivery" : "🏬 Pickup"}
+                      {order.deliveryMethod === "delivery" ? (
+                          <span className="inline-flex items-center gap-1"><Truck className="size-3.5" aria-hidden="true" /> Delivery</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1"><Store className="size-3.5" aria-hidden="true" /> Pickup</span>
+                        )}
                     </p>
                     {order.trackingInfo && (
                       <p className="text-xs text-muted-foreground">Tracking: {order.trackingInfo}</p>

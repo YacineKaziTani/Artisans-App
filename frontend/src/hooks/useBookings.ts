@@ -7,6 +7,7 @@ import {
 import { bookingApi, type BookingListParams } from "@/api/booking.api";
 import type { BookingStatus } from "@/types";
 import { track } from "@/lib/analytics";
+import { toast } from "@/lib/toast";
 
 export const bookingKeys = {
   all: ["bookings"] as const,
@@ -56,7 +57,10 @@ export function useUpdateBookingStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: BookingStatus }) =>
       bookingApi.updateStatus(id, status),
-    onSuccess: () => {
+    onSuccess: (_data, { status }) => {
+      toast.success(
+        status === "confirmed" ? "Booking confirmed" : status === "completed" ? "Marked as completed" : "Booking cancelled",
+      );
       qc.invalidateQueries({ queryKey: bookingKeys.shop() });
     },
   });

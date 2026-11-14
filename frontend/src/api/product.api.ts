@@ -28,6 +28,14 @@ export const productApi = {
   listAll: (params: ListProductsParams = {}) =>
     api.get<Page<Product>>("/products", { params }).then((r) => r.data),
 
+  /** What's selling now (home page). */
+  trending: (limit = 8) =>
+    api.get<Product[]>("/products/trending", { params: { limit } }).then((r) => r.data),
+
+  /** "You may also like": same craft, other listings. */
+  similar: (id: string, limit = 8) =>
+    api.get<Product[]>(`/products/${id}/similar`, { params: { limit } }).then((r) => r.data),
+
   /** Public product page: gallery, options, variants and the shop. */
   getById: (id: string) => api.get<Product>(`/products/${id}`).then((r) => r.data),
 

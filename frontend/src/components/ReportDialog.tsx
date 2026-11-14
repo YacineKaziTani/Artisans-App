@@ -57,7 +57,7 @@ export function ReportDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {createReport.isError && (
-            <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
+            <div className="alert-error">
               {getErrorMessage(
                 createReport.error,
                 "Couldn't submit your report. Please try again.",

@@ -59,3 +59,8 @@ export function deliveryFeeFor(
 export function defaultDeliveryMethod(shop: { pickupEnabled?: boolean } | null | undefined): "pickup" | "delivery" {
   return shop?.pickupEnabled === false ? "delivery" : "pickup";
 }
+
+/** True when the product is on sale (a higher "was" price is set). */
+export function onSale(price: string | number, compareAt?: string | number | null) {
+  return compareAt != null && compareAt !== "" && Number(compareAt) > Number(price);
+}

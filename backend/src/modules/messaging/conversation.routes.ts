@@ -4,11 +4,13 @@ import {
   getMyConversations,
   getConversationMessages,
   sendMessage,
+  sendAttachment,
   getAllConversationsAdmin,
   getConversationMessagesAdmin,
 } from "./conversation.controller";
 import { authMiddleware, requireVerifiedEmail } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/authorize.middleware";
+import { parser } from "../../config/cloudinary";
 import { UserRole } from "../users/entities/user.entities";
 import { uuidParam, validateBody } from "../../middleware/validate.middleware";
 import {
@@ -50,5 +52,6 @@ router.post(
   validateBody(sendMessageSchema),
   sendMessage,
 );
+router.post("/:id/attachments", authMiddleware, requireVerifiedEmail, parser.single("image"), sendAttachment);
 
 export default router;

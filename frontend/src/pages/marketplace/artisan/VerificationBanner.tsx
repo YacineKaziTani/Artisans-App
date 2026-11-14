@@ -1,3 +1,4 @@
+import { BadgeCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRequestVerification } from "@/hooks/useShops";
 import { getErrorMessage } from "@/lib/errors";
@@ -8,8 +9,8 @@ export function VerificationBanner({ shop }: { shop: Shop }) {
 
   if (shop.verificationStatus === "verified") {
     return (
-      <div className="p-4 bg-sky-50 border border-sky-200 rounded-lg text-sm text-sky-800 flex items-center gap-2">
-        <span aria-hidden="true">✓</span>
+      <div className="alert-info flex items-center gap-2">
+        <BadgeCheck className="size-4 shrink-0" aria-hidden="true" />
         <span>Your shop is verified — the badge is visible to clients.</span>
       </div>
     );

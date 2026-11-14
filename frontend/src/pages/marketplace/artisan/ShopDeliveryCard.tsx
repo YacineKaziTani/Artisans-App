@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useUpdateShopDelivery } from "@/hooks/useShops";
 import { getErrorMessage } from "@/lib/errors";
 import type { Shop } from "@/types";
+import { toast } from "@/lib/toast";
 
 const asInput = (value: string | number | null | undefined) =>
   value === null || value === undefined || value === "" ? "" : String(Number(value));
@@ -28,7 +29,7 @@ export function ShopDeliveryCard({ shop }: { shop: Shop }) {
       deliveryFee: deliveryEnabled && deliveryFee !== "" ? Number(deliveryFee) : 0,
       freeDeliveryOver: deliveryEnabled && freeOver !== "" ? Number(freeOver) : null,
       deliveryArea: deliveryEnabled ? deliveryArea.trim() : "",
-    });
+    }, { onSuccess: () => toast.success("Delivery options saved") });
   };
 
   return (
@@ -44,7 +45,6 @@ export function ShopDeliveryCard({ shop }: { shop: Shop }) {
           {save.isError && (
             <p className="alert-error">{getErrorMessage(save.error, "Couldn't save delivery options.")}</p>
           )}
-          {save.isSuccess && !save.isPending && <p className="text-sm text-jade-600">Saved.</p>}
 
           <div className="flex flex-wrap gap-6">
             <label className="flex items-center gap-2 text-sm font-medium">

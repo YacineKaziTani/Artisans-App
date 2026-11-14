@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { NotificationBell } from "@/components/NotificationBell";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { useThemeStore, type ThemeMode } from "@/lib/theme";
 import { Link, NavLink } from "react-router";
 import {
   Hammer,
@@ -8,6 +10,9 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Monitor,
+  Moon,
+  Sun,
   ShoppingBag,
   Store,
   User,
@@ -51,6 +56,39 @@ function CountBadge({ count }: { count: number }) {
     <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground shadow-[var(--shadow-sm)] ring-2 ring-card">
       {count > 99 ? "99+" : count}
     </span>
+  );
+}
+
+const THEME_CHOICES: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "Auto", icon: Monitor },
+];
+
+/** Theme switch inside the phone menu (the header toggle is hidden there). */
+function MobileThemeRow() {
+  const mode = useThemeStore((s) => s.mode);
+  const setMode = useThemeStore((s) => s.setMode);
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:hidden" onClick={(e) => e.stopPropagation()}>
+      <span className="text-sm font-medium text-muted-foreground">Theme</span>
+      <div className="flex rounded-xl border border-border bg-muted/50 p-0.5" role="radiogroup" aria-label="Theme">
+        {THEME_CHOICES.map(({ value, label, icon: Icon }) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={mode === value}
+            onClick={() => setMode(value)}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${
+              mode === value ? "bg-card text-foreground shadow-[var(--shadow-xs)]" : "text-muted-foreground"
+            }`}
+          >
+            <Icon className="size-3.5" aria-hidden="true" /> {label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -107,6 +145,7 @@ export function MarketplaceNavbar() {
 
           {/* ── Actions ───────────────────────────────────────────── */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            <ThemeToggle className="hidden sm:inline-flex" />
             {isAuthenticated && <NotificationBell />}
 
             {isAuthenticated && (
@@ -255,6 +294,7 @@ export function MarketplaceNavbar() {
                 {label}
               </NavLink>
             ))}
+            <MobileThemeRow />
             {!isAuthenticated && (
               <div className="flex gap-2 pt-3">
                 <Button asChild variant="outline" className="flex-1">

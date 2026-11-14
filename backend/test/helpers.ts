@@ -1,4 +1,5 @@
 import { mock } from "node:test";
+import { Writable } from "node:stream";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import request from "supertest";
@@ -320,4 +321,35 @@ export function installFakeCloudinary() {
     destroyedUploads.push(publicId);
     return { result: "ok" };
   });
+  // multer-storage-cloudinary pipes each upload into upload_stream; swallow
+  // the bytes and answer like Cloudinary would.
+  let uploads = 0;
+  mock.method(
+    cloudinary.uploader,
+    "upload_stream",
+    (_options: unknown, callback: (err: unknown, result?: Record<string, unknown>) => void) => {
+      let bytes = 0;
+      return new Writable({
+        write(chunk: Buffer, _encoding, next) {
+          bytes += chunk.length;
+          next();
+        },
+        final(done) {
+          const id = `test/upload-${++uploads}`;
+          callback(null, {
+            public_id: id,
+            secure_url: `https://res.cloudinary.com/test/image/upload/v1/${id}.jpg`,
+            bytes,
+          });
+          done();
+        },
+      });
+    },
+  );
 }
+
+/** A tiny valid PNG to attach as an "image" field. */
+export const TEST_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+);

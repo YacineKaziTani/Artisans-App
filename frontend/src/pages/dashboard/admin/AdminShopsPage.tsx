@@ -1,3 +1,4 @@
+import { BadgeCheck, Store } from "lucide-react";
 import { useState } from "react";
 import {
   Card,
@@ -15,6 +16,7 @@ import { getErrorMessage } from "@/lib/errors";
 import type { Shop } from "@/types";
 import { ShopPreviewDialog } from "./ShopPreviewDialog";
 import { StatusBadge } from "@/components/StatusBadge";
+import { PageHeader } from "@/components/PageHeader";
 
 
 const STATUS_FILTERS: { value: Shop["status"] | undefined; label: string }[] = [
@@ -71,10 +73,7 @@ export default function AdminShopsPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Shops</h1>
-        <p className="text-muted-foreground">Approve new shops and moderate existing ones</p>
-      </div>
+      <PageHeader title="Shops" description="Approve new shops and moderate existing ones" icon={Store} />
 
       <div className="flex gap-2 flex-wrap">
         {STATUS_FILTERS.map((filter) => (
@@ -118,7 +117,7 @@ export default function AdminShopsPage() {
           )}
 
           {isError && (
-            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+            <p className="alert-error">
               Couldn't load shops.
             </p>
           )}
@@ -154,8 +153,8 @@ export default function AdminShopsPage() {
                       Preview
                     </Button>
                     {shop.verificationStatus === "verified" && (
-                      <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-sky-100 text-sky-800 border-sky-200">
-                        ✓ verified
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full border bg-info/10 text-info border-info/25">
+                        <BadgeCheck className="size-3.5" aria-hidden="true" /> verified
                       </span>
                     )}
                     {shop.verificationStatus === "pending" && (

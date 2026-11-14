@@ -35,6 +35,11 @@ export class Service {
   @Column({ default: true })
   isAvailable!: boolean;
 
+  // Places per session: 1 = a private appointment; more = a class or
+  // workshop several clients book into at the same start time.
+  @Column({ type: "int", default: 1 })
+  capacity!: number;
+
   // Set instead of deleting a service that already has bookings. Archived
   // services are hidden from the shop and can't be booked.
   @Column({ type: "timestamptz", nullable: true })

@@ -16,11 +16,12 @@ export const productKeys = {
 };
 
 /** One page of the public catalogue (`{ data, meta }`). */
-export function useProducts(params: ListProductsParams) {
+export function useProducts(params: ListProductsParams, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: productKeys.list(params),
     queryFn: () => productApi.listAll(params),
     placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -29,6 +30,23 @@ export function useProduct(id: string | undefined) {
     queryKey: ["products", "detail", id ?? ""],
     queryFn: () => productApi.getById(id!),
     enabled: Boolean(id),
+  });
+}
+
+export function useTrendingProducts(limit = 8) {
+  return useQuery({
+    queryKey: ["products", "trending", limit],
+    queryFn: () => productApi.trending(limit),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useSimilarProducts(id: string | undefined, limit = 8) {
+  return useQuery({
+    queryKey: ["products", "similar", id ?? "", limit],
+    queryFn: () => productApi.similar(id!, limit),
+    enabled: Boolean(id),
+    staleTime: 5 * 60_000,
   });
 }
 

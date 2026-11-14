@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ImagePlus, X } from "lucide-react";
+import { ImagePlus, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -15,6 +15,7 @@ import {
 import { useAuthStore } from "@/store/auth.store";
 import { ReportDialog } from "@/components/ReportDialog";
 import { ReviewCard } from "@/components/reviews/ReviewCard";
+import { Stars } from "@/components/Stars";
 import { useConfirm } from "@/hooks/useConfirm";
 import { getErrorMessage } from "@/lib/errors";
 import { img } from "@/lib/images";
@@ -33,10 +34,13 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
           role="radio"
           aria-checked={n === value}
           onClick={() => onChange(n)}
-          className={`text-2xl leading-none ${n <= value ? "text-amber-500" : "text-muted-foreground/50"}`}
+          className="rounded-md p-0.5 transition-transform hover:scale-110"
           aria-label={`${n} star${n > 1 ? "s" : ""}`}
         >
-          ★
+          <Star
+            className={`size-7 ${n <= value ? "fill-star text-star" : "text-muted-foreground/40"}`}
+            aria-hidden="true"
+          />
         </button>
       ))}
     </div>
@@ -128,7 +132,7 @@ function ReviewForm({
       className="bg-card border border-border rounded-xl p-5 space-y-4"
     >
       {Boolean(error) && (
-        <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
+        <div className="alert-error">
           {getErrorMessage(error, "Couldn't save your review. Please try again.")}
         </div>
       )}
@@ -275,11 +279,13 @@ export function ReviewsSection({
   shopId,
   shopName,
   ownerId,
+  className = "mt-12",
 }: {
   shopId: string;
   shopName?: string;
   /** The shop owner can reply to reviews. */
   ownerId?: string;
+  className?: string;
 }) {
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -294,6 +300,7 @@ export function ReviewsSection({
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [reportingReviewId, setReportingReviewId] = useState<string | null>(null);
+  const average = reviews?.length ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : null;
 
   const handleDelete = async (review: Review) => {
     const ok = await confirm({
@@ -306,8 +313,18 @@ export function ReviewsSection({
   };
 
   return (
-    <div className="mt-12">
-      <h2 className="text-3xl font-bold text-foreground mb-6">Reviews</h2>
+    <div className={className}>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <h2 className="font-display text-2xl font-semibold sm:text-3xl">What clients say</h2>
+        {average !== null && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Stars rating={average} />
+            <span>
+              {average.toFixed(1)} · {reviews!.length} review{reviews!.length === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
+      </div>
 
       {isLoading && (
         <div className="space-y-3">
@@ -318,13 +335,13 @@ export function ReviewsSection({
       )}
 
       {isError && (
-        <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4">
+        <p className="alert-error">
           Couldn't load reviews right now.
         </p>
       )}
 
       {!isLoading && !isError && (reviews ?? []).length === 0 && (
-        <p className="text-foreground/80 bg-card border border-border rounded-xl p-6 mb-6">No reviews yet.</p>
+        <p className="surface mb-6 p-6 text-muted-foreground">No reviews yet — they appear here after a purchase or booking.</p>
       )}
 
       {deleteReview.isError && (

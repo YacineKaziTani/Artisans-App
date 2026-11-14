@@ -87,7 +87,7 @@ export function ShopPhotosTab() {
         )}
 
         {isError && (
-          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+          <p className="alert-error">
             Couldn't load your photos right now.
           </p>
         )}

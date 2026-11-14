@@ -3,6 +3,7 @@ import {
   clearableInt,
   clearableMoney,
   money,
+  optionalBoolean,
   optionalInt,
   optionalMoney,
   optionalText,
@@ -17,18 +18,23 @@ const MAX_STOCK = 1_000_000;
 
 // stockQuantity: a count for products sold without variants; empty/null
 // means "not tracked" (made to order).
+// compareAtPrice: the "was" price for a sale (null clears it).
 export const createProductSchema = z.object({
   title: requiredText("Title", 150),
   description: optionalText("Description", 5000),
   basePrice: money("Price"),
+  compareAtPrice: clearableMoney("Original price", { min: 0.5 }),
   stockQuantity: clearableInt("Stock", 0, MAX_STOCK),
+  featured: optionalBoolean("Featured"),
 });
 
 export const updateProductSchema = z.object({
   title: requiredText("Title", 150).optional(),
   description: optionalText("Description", 5000),
   basePrice: optionalMoney("Price"),
+  compareAtPrice: clearableMoney("Original price", { min: 0.5 }),
   stockQuantity: clearableInt("Stock", 0, MAX_STOCK),
+  featured: optionalBoolean("Featured"),
 });
 
 export const createVariantOptionSchema = z.object({

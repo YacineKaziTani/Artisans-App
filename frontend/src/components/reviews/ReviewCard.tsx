@@ -2,14 +2,9 @@ import { Link } from "react-router";
 import { img } from "@/lib/images";
 import type { Review } from "@/types";
 
-export function Stars({ rating }: { rating: number }) {
-  return (
-    <span className="text-amber-500 text-sm" aria-label={`${rating} out of 5 stars`}>
-      {"★".repeat(Math.round(rating))}
-      <span className="text-muted-foreground/50">{"★".repeat(5 - Math.round(rating))}</span>
-    </span>
-  );
-}
+import { Stars } from "@/components/Stars";
+
+export { Stars };
 
 /**
  * One review: author, stars, what it's about, the text, photos and the

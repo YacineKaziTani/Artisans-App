@@ -7,6 +7,7 @@ import { useUpdateShopHours } from "@/hooks/useShops";
 import { getErrorMessage } from "@/lib/errors";
 import { allTimeZones, browserTimeZone, hasOpeningHours, WEEKDAYS, zoneLabel } from "@/lib/schedule";
 import type { OpeningHours, Shop, TimeRange, Weekday } from "@/types";
+import { toast } from "@/lib/toast";
 
 const DEFAULT_RANGE: TimeRange = { open: "09:00", close: "17:00" };
 
@@ -62,7 +63,7 @@ export function ShopHoursCard({ shop }: { shop: Shop }) {
       openingHours: fixedHours ? hours : null,
       bookingMinNoticeHours: Math.max(0, Math.min(168, Math.round(Number(minNotice) || 0))),
       bookingMaxDaysAhead: Math.max(1, Math.min(365, Math.round(Number(maxDays) || 365))),
-    });
+    }, { onSuccess: () => toast.success("Opening hours saved") });
   };
 
   return (
@@ -77,9 +78,6 @@ export function ShopHoursCard({ shop }: { shop: Shop }) {
         <form onSubmit={handleSubmit} className="space-y-5">
           {save.isError && (
             <p className="alert-error">{getErrorMessage(save.error, "Couldn't save your hours.")}</p>
-          )}
-          {save.isSuccess && !save.isPending && (
-            <p className="text-sm text-jade-600">Saved.</p>
           )}
 
           <div className="max-w-sm">

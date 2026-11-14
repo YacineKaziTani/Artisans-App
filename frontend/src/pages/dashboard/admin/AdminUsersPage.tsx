@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Users } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -19,11 +19,12 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { useAuthStore } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/errors";
 import type { User } from "@/types";
+import { PageHeader } from "@/components/PageHeader";
 
 const ROLE_STYLES: Record<User["role"], string> = {
   client: "bg-muted text-foreground/80 border-border",
   artisan: "bg-brand-100 text-primary border-border",
-  super_admin: "bg-purple-100 text-purple-800 border-purple-300",
+  super_admin: "bg-brand-100 text-brand-700 border-brand-200",
 };
 
 const ROLE_LABELS: Record<User["role"], string> = {
@@ -109,10 +110,7 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Users</h1>
-        <p className="text-muted-foreground">Manage accounts and permissions</p>
-      </div>
+      <PageHeader title="Users" description="Manage accounts and permissions" icon={Users} />
 
       <Card>
         <CardHeader className="space-y-4">
@@ -167,7 +165,7 @@ export default function AdminUsersPage() {
           )}
 
           {isError && (
-            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+            <p className="alert-error">
               Couldn't load users.
             </p>
           )}

@@ -40,7 +40,7 @@ export const getAllServices = async (req: Request, res: Response) => {
 
 export const createService = async (req: Request, res: Response) => {
   try {
-    const { name, description, price, duration, durationMinutes } = req.body;
+    const { name, description, price, duration, durationMinutes, capacity } = req.body;
 
     const shop = await shopRepo.findOne({
       where: { owner: { id: req.user!.id } },
@@ -56,6 +56,7 @@ export const createService = async (req: Request, res: Response) => {
         price,
         duration: duration || undefined,
         durationMinutes: durationMinutes ?? null,
+        capacity: capacity ?? 1,
         shop,
       }),
     );
@@ -75,13 +76,14 @@ export const updateService = async (req: Request, res: Response) => {
     if (!service) return res.status(404).json({ message: "Service not found" });
     if (!allowed) return res.status(403).json({ message: "Forbidden" });
 
-    const { name, description, price, duration, durationMinutes, isAvailable } =
+    const { name, description, price, duration, durationMinutes, capacity, isAvailable } =
       req.body;
     if (name !== undefined) service.name = name;
     if (description !== undefined) service.description = description;
     if (price !== undefined) service.price = price;
     if (duration !== undefined) service.duration = duration;
     if (durationMinutes !== undefined) service.durationMinutes = durationMinutes;
+    if (capacity !== undefined) service.capacity = capacity;
     if (isAvailable !== undefined) service.isAvailable = isAvailable;
 
     const saved = await serviceRepo.save(service);

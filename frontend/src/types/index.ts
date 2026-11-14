@@ -100,6 +100,10 @@ export interface Shop {
   address?: string;
   city?: string;
   logoUrl?: string;
+  /** Wide banner photo on the shop page. */
+  coverUrl?: string | null;
+  /** "Our story": the longer About text. */
+  story?: string | null;
   phone?: string;
   status: "active" | "suspended" | "pending" | "closed";
   averageRating: number;
@@ -126,6 +130,26 @@ export interface Shop {
   products?: Product[];
   photos?: Photo[];
   createdAt?: string;
+  /** Public shop page only. */
+  stats?: ShopPublicStats;
+}
+
+export interface ShopPublicStats {
+  reviewCount: number;
+  /** Clients who saved (follow) the shop. */
+  followerCount: number;
+  /** Fulfilled orders + completed bookings. */
+  salesCount: number;
+}
+
+/** GET /reviews/highlights — home page testimonials. */
+export interface ReviewHighlight {
+  id: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+  author: { name: string; avatarUrl: string | null };
+  shop: { id: string; shopName: string; logoUrl: string | null; city: string | null };
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -198,6 +222,8 @@ export interface Product {
   title: string;
   description?: string;
   basePrice: string | number;
+  /** "Was" price: shown crossed out when higher than basePrice (a sale). */
+  compareAtPrice?: string | number | null;
   /** For products sold without variants: units left, or null if not tracked. */
   stockQuantity?: number | null;
   imageUrl?: string;

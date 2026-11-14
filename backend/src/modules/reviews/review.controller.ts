@@ -186,6 +186,42 @@ export const createReview = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * GET /reviews/highlights — recent, well-rated reviews with something to
+ * say, for the home page. Only the author's first name is shown.
+ */
+export const getReviewHighlights = async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(12, Math.max(1, Number(req.query.limit) || 6));
+    const reviews = await reviewRepo
+      .createQueryBuilder("review")
+      .innerJoin("review.shop", "shop")
+      .addSelect(["shop.id", "shop.shopName", "shop.logoUrl", "shop.city"])
+      .innerJoin("review.author", "author")
+      .addSelect(["author.id", "author.name", "author.avatarUrl"])
+      .where("shop.status = 'active'")
+      .andWhere("review.rating >= 4")
+      .andWhere("char_length(coalesce(review.comment, '')) >= 30")
+      .orderBy("review.createdAt", "DESC")
+      .addOrderBy("review.id", "ASC")
+      .take(limit)
+      .getMany();
+    return res.json(
+      reviews.map((r) => ({
+        id: r.id,
+        rating: r.rating,
+        comment: r.comment,
+        createdAt: r.createdAt,
+        author: { name: r.author.name.trim().split(/\s+/)[0], avatarUrl: r.author.avatarUrl ?? null },
+        shop: { id: r.shop.id, shopName: r.shop.shopName, logoUrl: r.shop.logoUrl ?? null, city: r.shop.city ?? null },
+      })),
+    );
+  } catch (err) {
+    console.error("getReviewHighlights failed:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const getShopReviews = async (req: Request, res: Response) => {
   try {
     const reviews = await reviewRepo.find({

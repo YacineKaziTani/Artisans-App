@@ -1,3 +1,4 @@
+import { CheckCircle2 } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { useConnectStripe, useStripeStatus } from "@/hooks/useShops";
@@ -29,7 +30,7 @@ export function StripeConnectBanner({ shop }: { shop: Shop }) {
   if (status?.onboardingComplete || shop.stripeOnboardingComplete) {
     return (
       <div className="p-4 bg-jade-50 border border-jade-500/25 rounded-lg text-sm text-jade-600 flex items-center gap-2">
-        <span aria-hidden="true">✓</span>
+        <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
         <span>Payouts are set up — bookings and orders will pay out to your account.</span>
       </div>
     );

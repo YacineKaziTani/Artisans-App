@@ -1,3 +1,4 @@
+import { CheckCircle2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Elements } from "@stripe/react-stripe-js";
 import {
@@ -123,7 +124,7 @@ export function BuyProductDialog({
       <DialogContent className="sm:max-w-md">
         {confirmed ? (
           <div className="text-center py-6 space-y-3">
-            <div className="text-5xl">✅</div>
+            <CheckCircle2 className="mx-auto size-14 text-success" aria-hidden="true" />
             <DialogTitle>Payment Authorized</DialogTitle>
             <DialogDescription>
               Your card is on hold — nothing is charged yet. The artisan has been emailed
@@ -165,7 +166,7 @@ export function BuyProductDialog({
             </DialogHeader>
             <form onSubmit={handleRequestOrder} className="space-y-4">
               {createOrder.isError && (
-                <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
+                <div className="alert-error">
                   {getErrorMessage(
                     createOrder.error,
                     "Couldn't start the order. Please try again.",

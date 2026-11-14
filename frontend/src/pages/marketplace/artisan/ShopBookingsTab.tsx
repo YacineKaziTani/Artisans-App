@@ -35,7 +35,7 @@ export function ShopBookingsTab() {
         )}
 
         {isError && (
-          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+          <p className="alert-error">
             Couldn't load your bookings right now.
           </p>
         )}
@@ -92,7 +92,7 @@ export function ShopBookingsTab() {
                           (expired hold) looked like the button did nothing. */}
                       {updateStatus.isError &&
                         updateStatus.variables?.id === booking.id && (
-                          <p className="p-2 bg-destructive/10 border border-destructive/25 rounded text-destructive text-xs">
+                          <p className="alert-error px-3 py-2 text-xs">
                             {getErrorMessage(
                               updateStatus.error,
                               "Couldn't update this booking. Please try again.",

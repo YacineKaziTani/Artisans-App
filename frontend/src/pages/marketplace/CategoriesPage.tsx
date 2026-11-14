@@ -33,7 +33,7 @@ function ShopCard({
         <h3 className="font-display text-lg font-semibold">{shopName}</h3>
         {rating && rating > 0 ? (
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold">
-            <Star className="size-3 fill-current text-amber-500" />
+            <Star className="size-3 fill-star text-star" />
             {rating.toFixed(1)}
           </span>
         ) : null}

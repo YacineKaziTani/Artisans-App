@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   clearableInt,
+  int,
   money,
   optionalBoolean,
   optionalMoney,
@@ -19,6 +20,8 @@ export const createServiceSchema = z.object({
   price: money("Price", PRICE),
   duration: optionalText("Duration", 60),
   durationMinutes: clearableInt("Appointment length", ...DURATION_MINUTES),
+  // 1 = private appointment; more = a class with that many places.
+  capacity: int("Places per session", 1, 100).optional(),
 });
 
 export const updateServiceSchema = z.object({
@@ -27,5 +30,6 @@ export const updateServiceSchema = z.object({
   price: optionalMoney("Price", PRICE),
   duration: optionalText("Duration", 60),
   durationMinutes: clearableInt("Appointment length", ...DURATION_MINUTES),
+  capacity: int("Places per session", 1, 100).optional(),
   isAvailable: optionalBoolean("isAvailable"),
 });

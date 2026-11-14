@@ -45,6 +45,10 @@ export class Booking {
   @Column({ type: "timestamptz", nullable: true })
   endsAt?: Date | null;
 
+  // Places taken in a class/workshop (always 1 for private appointments).
+  @Column({ type: "int", default: 1 })
+  seats!: number;
+
   // The day-before reminder went out (so it's sent once).
   @Column({ type: "timestamptz", nullable: true })
   reminderSentAt?: Date | null;

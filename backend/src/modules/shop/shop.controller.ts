@@ -23,6 +23,9 @@ import { pageResult, parsePagination } from "../../middleware/validate.middlewar
 import { primaryFrontendUrl } from "../../lib/urls";
 import { isUniqueViolation } from "../../lib/db";
 import { notifyInBackground } from "../../notifications/deliver";
+import { destroyUpload, type CloudinaryFile } from "../../lib/uploads";
+import { Favorite, FavoriteTargetType } from "../favorites/favorite.entities";
+import { responseTimeMinutes } from "./shop-tools.controller";
 import {
   notifyShopStatusChanged,
   notifyVerificationResolved,
@@ -117,7 +120,7 @@ export const createShop = async (req: Request, res: Response) => {
 export const updateMyShop = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { shopName, description, address, city, phone, categoryId } =
+    const { shopName, description, story, address, city, phone, categoryId } =
       req.body as Record<string, string | undefined>;
 
     const shop = await shopRepo.findOne({
@@ -130,6 +133,7 @@ export const updateMyShop = async (req: Request, res: Response) => {
     // checks made it impossible to ever empty a field).
     if (shopName !== undefined) shop.shopName = shopName;
     if (description !== undefined) shop.description = description || null;
+    if (story !== undefined) shop.story = story || null;
     if (address !== undefined) shop.address = address || null;
     if (city !== undefined) shop.city = city || null;
     if (phone !== undefined) shop.phone = phone || null;
@@ -247,16 +251,84 @@ export const getShopById = async (req: Request, res: Response) => {
           variantOptions: { values: true },
           variants: { values: { option: true } },
         },
-        order: { createdAt: "DESC" },
+        // Featured products first.
+        order: { featured: "DESC", createdAt: "DESC" },
         relationLoadStrategy: "query",
       }),
     ]);
     shop.services = services;
     shop.products = products;
 
-    return res.json(shop);
+    return res.json({ ...shop.toJSON(), stats: await publicShopStats(id) });
   } catch (error) {
     console.error("getShopById failed:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * Social proof for the shop page: how many reviews, followers (clients who
+ * saved the shop) and completed sales it has.
+ */
+async function publicShopStats(shopId: string) {
+  const [reviewCount, followerCount, sales, replyMinutes] = await Promise.all([
+    AppDataSource.getRepository(Review).count({ where: { shop: { id: shopId } } }),
+    AppDataSource.getRepository(Favorite).count({
+      where: { targetType: FavoriteTargetType.SHOP, targetId: shopId },
+    }),
+    AppDataSource.query(
+      `SELECT
+         (SELECT COUNT(*) FROM orders WHERE "shopId" = $1 AND status = 'fulfilled')::int
+       + (SELECT COUNT(*) FROM bookings WHERE "shopId" = $1 AND status = 'completed')::int AS count`,
+      [shopId],
+    ) as Promise<{ count: number }[]>,
+    responseTimeMinutes(shopId),
+  ]);
+  return {
+    reviewCount,
+    followerCount,
+    salesCount: Number(sales[0]?.count ?? 0),
+    // Median time to answer a client (null until there's enough history).
+    responseTimeMinutes: replyMinutes,
+  };
+}
+
+/** PUT /shops/mine/cover (multipart "image"): sets or replaces the banner. */
+export const uploadMyCover = async (req: Request, res: Response) => {
+  const file = req.file as CloudinaryFile | undefined;
+  try {
+    if (!file?.path) return res.status(400).json({ message: "Choose an image to upload" });
+    const shop = await shopRepo.findOne({ where: { owner: { id: req.user!.id } } });
+    if (!shop) {
+      await destroyUpload(file.filename);
+      return res.status(404).json({ message: "Shop not found" });
+    }
+    const previous = shop.coverPublicId;
+    shop.coverUrl = file.path;
+    shop.coverPublicId = file.filename ?? null;
+    const saved = await shopRepo.save(shop);
+    if (previous && previous !== shop.coverPublicId) await destroyUpload(previous);
+    return res.json({ message: "Cover photo updated", shop: ownerShopView(saved) });
+  } catch (error) {
+    console.error("uploadMyCover failed:", error);
+    await destroyUpload(file?.filename);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** DELETE /shops/mine/cover */
+export const removeMyCover = async (req: Request, res: Response) => {
+  try {
+    const shop = await shopRepo.findOne({ where: { owner: { id: req.user!.id } } });
+    if (!shop) return res.status(404).json({ message: "Shop not found" });
+    const previous = shop.coverPublicId;
+    shop.coverUrl = null;
+    shop.coverPublicId = null;
+    const saved = await shopRepo.save(shop);
+    await destroyUpload(previous);
+    return res.json({ message: "Cover photo removed", shop: ownerShopView(saved) });
+  } catch (error) {
+    console.error("removeMyCover failed:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -677,7 +749,7 @@ const EARNINGS_ROWS = `
   SELECT 'order' AS kind, o.id, o."createdAt" AS date, o."totalAmount" AS amount,
          o."deliveryFee" AS "deliveryFee", o."paymentStatus"::text AS "paymentStatus",
          o.status::text AS status,
-         CONCAT(o.quantity, ' × ', COALESCE(p.title, 'item'),
+         CONCAT(o.quantity, ' × ', COALESCE(p.title, o.title, 'item'),
                 CASE WHEN o."variantLabel" IS NOT NULL THEN ' (' || o."variantLabel" || ')' ELSE '' END) AS title
     FROM orders o
     LEFT JOIN products p ON p.id = o."productId"

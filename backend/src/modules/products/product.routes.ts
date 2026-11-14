@@ -8,7 +8,12 @@ import {
   deleteProduct,
   addProductImage,
   removeProductImage,
+  getTrendingProducts,
+  getSimilarProducts,
 } from "./product.controller";
+import { exportMyProducts, importMyProducts, recordProductView } from "./catalog.controller";
+import express from "express";
+import { optionalAuth } from "../../middleware/auth.middleware";
 import {
   createVariantOption,
   deleteVariantOption,
@@ -43,6 +48,19 @@ const artisanOrAdmin = authorize(UserRole.ARTISAN, UserRole.SUPER_ADMIN);
 
 router.get("/", getAllProducts);
 router.get("/mine", authMiddleware, authorize(UserRole.ARTISAN), getMyProducts);
+router.get("/trending", getTrendingProducts);
+router.get("/mine/export", authMiddleware, authorize(UserRole.ARTISAN), exportMyProducts);
+router.post(
+  "/mine/import",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  // The spreadsheet itself is the body (a few hundred rows can pass the
+  // JSON parser's 100 KB default).
+  express.text({ type: ["text/csv", "text/plain", "application/vnd.ms-excel"], limit: "1mb" }),
+  importMyProducts,
+);
+router.post("/:id/view", optionalAuth, recordProductView);
+router.get("/:id/similar", getSimilarProducts);
 router.get("/:id", getProductById);
 router.post(
   "/",

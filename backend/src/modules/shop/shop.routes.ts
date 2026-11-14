@@ -19,6 +19,8 @@ import {
   getStripeAccountStatus,
   getMyShopStats,
   getShopAdmin,
+  uploadMyCover,
+  removeMyCover,
 } from "./shop.controller";
 import { authorize } from "../../middleware/authorize.middleware";
 import { authMiddleware, requireVerifiedEmail } from "../../middleware/auth.middleware";
@@ -34,6 +36,14 @@ import {
   updateShopSchema,
 } from "./shop.schemas";
 import { auditAdmin } from "../audit/audit";
+import {
+  getMyAnalytics,
+  getMyCalendarFeed,
+  resetMyCalendarFeed,
+  updateMyHoliday,
+  updateMyStockAlerts,
+} from "./shop-tools.controller";
+import { shopHolidaySchema, shopStockAlertsSchema } from "./shop.schemas";
 
 const router = Router();
 
@@ -68,6 +78,25 @@ router.put(
   validateBody(shopDeliverySchema),
   updateMyDelivery,
 );
+router.put("/mine/holiday", authMiddleware, authorize(UserRole.ARTISAN), validateBody(shopHolidaySchema), updateMyHoliday);
+router.put(
+  "/mine/stock-alerts",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  validateBody(shopStockAlertsSchema),
+  updateMyStockAlerts,
+);
+router.get("/mine/calendar", authMiddleware, authorize(UserRole.ARTISAN), getMyCalendarFeed);
+router.post("/mine/calendar/reset", authMiddleware, authorize(UserRole.ARTISAN), resetMyCalendarFeed);
+router.get("/mine/analytics", authMiddleware, authorize(UserRole.ARTISAN), getMyAnalytics);
+router.put(
+  "/mine/cover",
+  authMiddleware,
+  authorize(UserRole.ARTISAN),
+  parser.single("image"),
+  uploadMyCover,
+);
+router.delete("/mine/cover", authMiddleware, authorize(UserRole.ARTISAN), removeMyCover);
 router.put(
   "/mine",
   authMiddleware,

@@ -12,7 +12,17 @@ import {
 } from "lucide-react";
 import { FeaturedProductsSection } from "@/components/FeaturedProductsSection";
 import { Button } from "@/components/ui/button";
+import { ProductRow } from "@/components/ProductRow";
+import { ShopCard } from "@/components/ShopCard";
+import { Stars } from "@/components/Stars";
+import { PageMeta } from "@/components/PageMeta";
 import { useCategories } from "@/hooks/useCategories";
+import { useTrendingProducts } from "@/hooks/useProducts";
+import { useShops } from "@/hooks/useShops";
+import { useReviewHighlights } from "@/hooks/useReviews";
+import { useFavoriteIds } from "@/hooks/useFavorites";
+import { useAuthStore } from "@/store/auth.store";
+import { useRecentlyViewed } from "@/store/recently-viewed.store";
 import { themeForCategory } from "@/lib/categoryTheme";
 import { img } from "@/lib/images";
 
@@ -30,7 +40,7 @@ const STEPS = [
   {
     icon: ShieldCheck,
     title: "Complete",
-    body: "Your card is only charged once the artisan fulfils the work.",
+    body: "Checkout only places a hold on your card. You're charged when the artisan delivers — if they can't, the hold is released.",
   },
 ];
 
@@ -47,7 +57,7 @@ function HeroSearch() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = query.trim();
-    navigate(q ? `/categories?search=${encodeURIComponent(q)}` : "/categories");
+    navigate(q ? `/products?search=${encodeURIComponent(q)}` : "/products");
   };
 
   return (
@@ -58,8 +68,8 @@ function HeroSearch() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search makers, crafts or services…"
-          aria-label="Search artisans and services"
+          placeholder="Search handmade pieces or makers…"
+          aria-label="Search products and makers"
           className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground/70"
         />
         <Button type="submit" variant="gradient" className="shrink-0">
@@ -134,9 +144,84 @@ function CategoryStrip() {
   );
 }
 
+function TrendingSection() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const { data: products, isLoading } = useTrendingProducts(10);
+  const { data: favoriteIds } = useFavoriteIds("product", { enabled: isAuthenticated });
+  return (
+    <ProductRow
+      className="page-shell pt-16"
+      eyebrow="Trending"
+      title="Popular this week"
+      products={products}
+      isLoading={isLoading}
+      moreHref="/products"
+      moreLabel="All products"
+      favoriteIds={favoriteIds}
+    />
+  );
+}
+
+function FeaturedArtisans() {
+  const { data, isLoading } = useShops({ sort: "rating", limit: 6 });
+  const shops = data?.data ?? [];
+  if (!isLoading && shops.length === 0) return null;
+  return (
+    <section className="page-shell pt-16">
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <span className="eyebrow">Meet the makers</span>
+          <h2 className="section-title mt-3">Featured artisans</h2>
+        </div>
+        <Link to="/categories" className="hidden items-center gap-1.5 text-sm font-medium text-primary hover:underline sm:inline-flex">
+          Browse all <ArrowRight className="size-4" />
+        </Link>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {isLoading
+          ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="skeleton h-64" />)
+          : shops.map((shop) => <ShopCard key={shop.id} shop={shop} />)}
+      </div>
+    </section>
+  );
+}
+
+function Testimonials() {
+  const { data: reviews } = useReviewHighlights(6);
+  if (!reviews || reviews.length === 0) return null;
+  return (
+    <section className="page-shell pb-20">
+      <div className="mx-auto max-w-2xl text-center">
+        <span className="eyebrow">Real reviews</span>
+        <h2 className="section-title mt-4">Loved by people who buy handmade</h2>
+      </div>
+      <div className="mt-10 columns-1 gap-5 sm:columns-2 lg:columns-3">
+        {reviews.map((review) => (
+          <figure key={review.id} className="surface mb-5 break-inside-avoid p-6">
+            <Stars rating={review.rating} />
+            <blockquote className="mt-3 leading-relaxed text-foreground/85">“{review.comment}”</blockquote>
+            <figcaption className="mt-4 flex items-center justify-between gap-3 text-sm">
+              <span className="font-semibold">{review.author.name}</span>
+              <Link to={`/artisan/${review.shop.id}`} className="truncate text-muted-foreground hover:text-primary">
+                {review.shop.shopName}
+              </Link>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RecentlyViewedSection() {
+  const items = useRecentlyViewed((s) => s.items);
+  return <ProductRow className="page-shell pb-16" title="Recently viewed" products={items} />;
+}
+
 export default function HomePage() {
   return (
     <main>
+      <PageMeta />
       {/* ══ Hero ══════════════════════════════════════════════════ */}
       <section className="relative isolate overflow-hidden">
         <div className="aurora" aria-hidden="true" />
@@ -196,7 +281,13 @@ export default function HomePage() {
 
       <CategoryStrip />
 
-      <FeaturedProductsSection />
+      <TrendingSection />
+
+      <FeaturedArtisans />
+
+      <div className="pt-20">
+        <FeaturedProductsSection />
+      </div>
 
       {/* ══ How it works ══════════════════════════════════════════ */}
       <section className="page-shell py-20">
@@ -227,6 +318,10 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      <Testimonials />
+
+      <RecentlyViewedSection />
 
       {/* ══ Seller CTA ════════════════════════════════════════════ */}
       <section className="page-shell pb-8">

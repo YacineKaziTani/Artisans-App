@@ -1,3 +1,4 @@
+import { Tag } from "lucide-react";
 import { useState } from "react";
 import {
   Card,
@@ -18,6 +19,7 @@ import {
 import type { Category } from "@/types";
 import { useConfirm } from "@/hooks/useConfirm";
 import { getErrorMessage } from "@/lib/errors";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function AdminCategoriesPage() {
   const { data: categories, isLoading, isError } = useAdminCategories();
@@ -50,10 +52,7 @@ export default function AdminCategoriesPage() {
 
   return (
     <div className="space-y-8 max-w-3xl">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Categories</h1>
-        <p className="text-muted-foreground">Manage marketplace categories</p>
-      </div>
+      <PageHeader title="Categories" description="Manage marketplace categories" icon={Tag} />
 
       <Card>
         <CardHeader>
@@ -62,7 +61,7 @@ export default function AdminCategoriesPage() {
         <CardContent>
           <form onSubmit={handleCreate} className="space-y-4">
             {createCategory.isError && (
-              <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
+              <div className="alert-error">
                 {getErrorMessage(
                   createCategory.error,
                   "Couldn't create the category. Please try again.",
@@ -108,7 +107,7 @@ export default function AdminCategoriesPage() {
             </div>
           )}
           {isError && (
-            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+            <p className="alert-error">
               Couldn't load categories.
             </p>
           )}

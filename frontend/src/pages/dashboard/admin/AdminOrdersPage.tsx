@@ -1,3 +1,4 @@
+import { Package } from "lucide-react";
 import { useState } from "react";
 import { Pagination } from "@/components/Pagination";
 import {
@@ -9,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { useAdminOrders } from "@/hooks/useOrders";
 import { StatusBadge } from "@/components/StatusBadge";
+import { PageHeader } from "@/components/PageHeader";
 
 
 
@@ -19,10 +21,7 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Orders</h1>
-        <p className="text-muted-foreground">All product orders across the platform</p>
-      </div>
+      <PageHeader title="Orders" description="All product orders across the platform" icon={Package} />
 
       <Card>
         <CardHeader>
@@ -39,7 +38,7 @@ export default function AdminOrdersPage() {
           )}
 
           {isError && (
-            <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+            <p className="alert-error">
               Couldn't load orders.
             </p>
           )}

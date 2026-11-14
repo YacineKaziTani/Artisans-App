@@ -106,6 +106,10 @@ export class User {
   @Column({ type: "jsonb", nullable: true, select: false })
   twoFactorRecoveryCodes?: string[] | null;
 
+  // Saved chat answers ("Thanks! I'll get back to you today.").
+  @Column({ type: "jsonb", nullable: true, select: false })
+  quickReplies?: string[] | null;
+
   @Column({ type: "int", default: 0, select: false })
   failedLoginAttempts!: number;
 

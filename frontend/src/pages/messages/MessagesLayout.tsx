@@ -1,3 +1,4 @@
+import { MessageCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, Outlet, useParams } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -41,7 +42,7 @@ export default function MessagesLayout() {
         </Link>
 
         <div className="flex items-baseline gap-3 mb-6">
-          <h1 className="text-3xl font-bold text-foreground">Messages</h1>
+          <h1 className="font-display text-3xl font-semibold">Messages</h1>
           {totalUnread > 0 && (
             <span className="text-sm text-muted-foreground">
               {totalUnread} unread
@@ -85,9 +86,7 @@ export default function MessagesLayout() {
 
               {!isLoading && !isError && rows.length === 0 && (
                 <div className="p-6 text-center">
-                  <p className="text-3xl mb-2" aria-hidden="true">
-                    💬
-                  </p>
+                  <MessageCircle className="mx-auto mb-2 size-8 text-muted-foreground/60" aria-hidden="true" />
                   <p className="text-sm text-muted-foreground">
                     {filter
                       ? "No conversations match that search."

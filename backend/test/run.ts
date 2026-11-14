@@ -26,6 +26,8 @@ import { fixesTests } from "./fixes.test";
 import { highValueTests } from "./high-value.test";
 import { accountTests } from "./account.test";
 import { holdTests } from "./holds.test";
+import { storefrontTests } from "./storefront.test";
+import { marketplaceGrowthTests } from "./marketplace-growth.test";
 
 describe("Artisans API", () => {
   before(async () => {
@@ -62,4 +64,6 @@ describe("Artisans API", () => {
   highValueTests();
   accountTests();
   holdTests();
+  storefrontTests();
+  marketplaceGrowthTests();
 });

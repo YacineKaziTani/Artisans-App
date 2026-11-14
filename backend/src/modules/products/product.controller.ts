@@ -7,6 +7,28 @@ import { ProductImage } from "./product-image.entities";
 import { Shop, ShopStatus } from "../shop/shop.entities";
 import { Order } from "../orders/order.entities";
 import { canManageShopOf, findManageableProduct } from "./ownership";
+import { notifyInBackground } from "../../notifications/deliver";
+import { notifyFollowersOfNewProduct } from "../../notifications";
+
+/** How many products a shop can pin to the top of its page. */
+export const MAX_FEATURED = 6;
+
+/** A sale price only makes sense above the real price. */
+function compareAtProblem(price: number, compareAt: number | null | undefined) {
+  if (compareAt == null) return null;
+  return Number(compareAt) > Number(price)
+    ? null
+    : "The original price must be higher than the price — it's shown crossed out as a sale.";
+}
+
+async function featuredLimitReached(shopId: string, exceptProductId?: string) {
+  const count = await AppDataSource.getRepository(Product)
+    .createQueryBuilder("p")
+    .where('p."shopId" = :shopId AND p.featured = true AND p."archivedAt" IS NULL', { shopId })
+    .andWhere(exceptProductId ? "p.id <> :exceptProductId" : "TRUE", { exceptProductId })
+    .getCount();
+  return count >= MAX_FEATURED;
+}
 import {
   isUuid,
   pageResult,
@@ -58,17 +80,7 @@ export const getAllProducts = async (req: Request, res: Response) => {
       maxLimit: 48,
     });
 
-    const qb = productRepo
-      .createQueryBuilder("product")
-      .innerJoinAndSelect("product.shop", "shop")
-      // Just the id, so the page can tell an artisan which products are theirs.
-      .leftJoin("shop.owner", "owner")
-      .addSelect(["owner.id"])
-      .leftJoin("shop.category", "category")
-      .leftJoin("product.variantOptions", "variantOptions")
-      .addSelect(["variantOptions.id", "variantOptions.name"])
-      .where("shop.status = :status", { status: "active" })
-      .andWhere("product.archivedAt IS NULL");
+    const qb = listingQuery();
 
     if (shopId && isUuid(shopId)) {
       qb.andWhere("shop.id = :shopId", { shopId });
@@ -117,6 +129,93 @@ export const getAllProducts = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Error fetching products" });
   }
 };
+
+/**
+ * GET /products/trending?limit= — what's popular now: orders placed in
+ * the last 14 days (card held or charged) weigh most, then page views in
+ * the last 7, then the best-rated shops and the newest. A quiet
+ * marketplace still gets a sensible row.
+ */
+export const getTrendingProducts = async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(24, Math.max(1, Number(queryString(req.query.limit)) || 8));
+    const ranked: { id: string }[] = await AppDataSource.query(
+      `SELECT p.id
+         FROM products p
+         JOIN shops s ON s.id = p."shopId"
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) AS n FROM orders o
+            WHERE o."productId" = p.id
+              AND o."createdAt" > now() - interval '14 days'
+              AND o."paymentStatus" IN ('authorized', 'paid')
+         ) recent ON true
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(v.views), 0) AS n FROM product_views v
+            WHERE v."productId" = p.id AND v.day >= (now() AT TIME ZONE 'UTC')::date - 6
+         ) seen ON true
+        WHERE s.status = 'active' AND p."archivedAt" IS NULL
+        ORDER BY recent.n * 20 + seen.n DESC, s."averageRating" DESC, p."createdAt" DESC, p.id
+        LIMIT $1`,
+      [limit],
+    );
+    res.json(await productsInOrder(ranked.map((r) => r.id)));
+  } catch (error) {
+    console.error("getTrendingProducts failed:", error);
+    res.status(500).json({ message: "Error fetching products" });
+  }
+};
+
+/**
+ * GET /products/:id/similar?limit= — "You may also like": other live
+ * products in the same craft category, best-rated shops first.
+ */
+export const getSimilarProducts = async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(24, Math.max(1, Number(queryString(req.query.limit)) || 8));
+    const product = await productRepo.findOne({
+      where: { id: String(req.params.id) },
+      relations: { shop: { category: true } },
+    });
+    const categoryId = product?.shop?.category?.id;
+    if (!product || !categoryId) return res.json([]);
+
+    const similar = await listingQuery()
+      .andWhere("category.id = :categoryId", { categoryId })
+      .andWhere("product.id <> :id", { id: product.id })
+      .orderBy("shop.averageRating", "DESC")
+      .addOrderBy("product.createdAt", "DESC")
+      .addOrderBy("product.id", "ASC")
+      .take(limit)
+      .getMany();
+    res.json(similar);
+  } catch (error) {
+    console.error("getSimilarProducts failed:", error);
+    res.status(500).json({ message: "Error fetching products" });
+  }
+};
+
+/** The fields a product card needs, for live products of active shops. */
+function listingQuery() {
+  return productRepo
+    .createQueryBuilder("product")
+    .innerJoinAndSelect("product.shop", "shop")
+    // Just the id, so the page can tell an artisan which products are theirs.
+    .leftJoin("shop.owner", "owner")
+    .addSelect(["owner.id"])
+    .leftJoin("shop.category", "category")
+    .leftJoin("product.variantOptions", "variantOptions")
+    .addSelect(["variantOptions.id", "variantOptions.name"])
+    .where("shop.status = :status", { status: "active" })
+    .andWhere("product.archivedAt IS NULL");
+}
+
+/** Listing cards for these ids, in the given order. */
+async function productsInOrder(ids: string[]) {
+  if (ids.length === 0) return [];
+  const found = await listingQuery().andWhere("product.id IN (:...ids)", { ids }).getMany();
+  const byId = new Map(found.map((p) => [p.id, p]));
+  return ids.map((id) => byId.get(id)).filter((p): p is Product => Boolean(p));
+}
 
 export const getMyProducts = async (req: Request, res: Response) => {
   try {
@@ -179,7 +278,7 @@ export const getProductById = async (req: Request, res: Response) => {
 export const createProduct = async (req: Request, res: Response) => {
   const file = req.file as CloudinaryFile | undefined;
   try {
-    const { title, description, basePrice, stockQuantity } = req.body;
+    const { title, description, basePrice, stockQuantity, compareAtPrice, featured } = req.body;
 
     const shop = await shopRepo.findOne({
       where: { owner: { id: req.user!.id } },
@@ -189,13 +288,24 @@ export const createProduct = async (req: Request, res: Response) => {
       await destroyUpload(file?.filename);
       return res.status(404).json({ message: "You don't have a shop yet" });
     }
+    const problem =
+      compareAtProblem(basePrice, compareAtPrice) ??
+      (featured && (await featuredLimitReached(shop.id))
+        ? `You can feature at most ${MAX_FEATURED} products — unfeature one first.`
+        : null);
+    if (problem) {
+      await destroyUpload(file?.filename);
+      return res.status(400).json({ message: problem });
+    }
 
     const saved = await productRepo.save(
       productRepo.create({
         title,
         description: description || undefined,
         basePrice,
+        compareAtPrice: compareAtPrice ?? null,
         stockQuantity: stockQuantity ?? null,
+        featured: featured ?? false,
         imageUrl: file?.path,
         shop,
       }),
@@ -209,6 +319,11 @@ export const createProduct = async (req: Request, res: Response) => {
           product: saved,
         }),
       );
+    }
+
+    // Followers hear about it (at most one alert every few hours per shop).
+    if (shop.status === ShopStatus.ACTIVE) {
+      notifyInBackground(() => notifyFollowersOfNewProduct(saved.id));
     }
 
     return res.status(201).json(saved);
@@ -228,12 +343,23 @@ export const updateProduct = async (req: Request, res: Response) => {
     if (!product) return res.status(404).json({ message: "Product not found" });
     if (!allowed) return res.status(403).json({ message: "Forbidden" });
 
-    const { title, description, basePrice, stockQuantity } = req.body;
+    const { title, description, basePrice, stockQuantity, compareAtPrice, featured } = req.body;
     const changes: Partial<Product> = {};
     if (title !== undefined) changes.title = title;
     if (description !== undefined) changes.description = description;
     if (basePrice !== undefined) changes.basePrice = basePrice;
     if (stockQuantity !== undefined) changes.stockQuantity = stockQuantity;
+    if (compareAtPrice !== undefined) changes.compareAtPrice = compareAtPrice;
+    if (featured !== undefined) changes.featured = featured;
+
+    const problem = compareAtProblem(
+      changes.basePrice ?? product.basePrice,
+      compareAtPrice !== undefined ? compareAtPrice : product.compareAtPrice,
+    );
+    if (problem) return res.status(400).json({ message: problem });
+    if (featured && !product.featured && (await featuredLimitReached(product.shop.id, product.id))) {
+      return res.status(400).json({ message: `You can feature at most ${MAX_FEATURED} products — unfeature one first.` });
+    }
 
     // update(), not save(): save() writes back the stock it read a moment
     // ago, which could undo a reservation a checkout made in between.

@@ -17,6 +17,7 @@ import {
   exportMyData,
 } from "../controller/user.controller";
 import { getEmailStatus, sendTestEmail } from "../controller/admin-email.controller";
+import { getMyQuickReplies, updateMyQuickReplies, MAX_QUICK_REPLIES } from "../controller/quick-replies.controller";
 import { UserRole } from "../entities/user.entities";
 import { parser } from "../../../config/cloudinary";
 import {
@@ -54,6 +55,21 @@ router.post(
 router.get("/mine", authMiddleware, getMe);
 router.get("/mine/referrals", authMiddleware, getMyReferrals);
 router.get("/mine/export", authMiddleware, exportMyData);
+router.get("/mine/quick-replies", authMiddleware, getMyQuickReplies);
+router.put(
+  "/mine/quick-replies",
+  authMiddleware,
+  validateBody(
+    z.object({
+      replies: z
+        .array(z.string({ error: "Replies must be text" }).trim().max(500, "Keep each reply under 500 characters"), {
+          error: "replies must be a list",
+        })
+        .max(MAX_QUICK_REPLIES, `Save at most ${MAX_QUICK_REPLIES} replies`),
+    }),
+  ),
+  updateMyQuickReplies,
+);
 // Before the /:id routes ("mine" isn't an id).
 router.delete(
   "/mine",

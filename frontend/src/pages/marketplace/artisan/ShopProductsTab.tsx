@@ -74,7 +74,7 @@ function AddProductForm() {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           {createProduct.isError && (
-            <div className="p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-sm">
+            <div className="alert-error">
               {getErrorMessage(
                 createProduct.error,
                 "Couldn't add the product. Please try again.",
@@ -215,7 +215,7 @@ export function ShopProductsTab() {
         )}
 
         {isError && (
-          <p className="text-destructive bg-destructive/10 border border-destructive/25 rounded-lg p-4 text-sm">
+          <p className="alert-error">
             Couldn't load your products right now.
           </p>
         )}

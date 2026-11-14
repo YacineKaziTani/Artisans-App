@@ -21,6 +21,14 @@ export class Message {
   @Column({ type: "text" })
   content!: string;
 
+  // Photos sent in the chat (stored on Cloudinary).
+  @Column({ type: "jsonb", nullable: true })
+  attachments?: { url: string; publicId: string }[] | null;
+
+  // Sent by the app on the artisan's behalf (holiday auto-reply).
+  @Column({ type: "boolean", default: false })
+  isAutomatic!: boolean;
+
   @ManyToOne(() => Conversation, (c) => c.messages, { onDelete: "CASCADE" })
   conversation!: Conversation;
 

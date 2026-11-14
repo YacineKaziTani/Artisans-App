@@ -11,6 +11,8 @@ import {
 } from "../../middleware/validate.middleware";
 import { User } from "../users/entities/user.entities";
 import { MAX_MESSAGE_LENGTH } from "./message.limits";
+import { broadcastNewMessage } from "../../realtime/socket";
+import { destroyUpload, type CloudinaryFile } from "../../lib/uploads";
 
 export { MAX_MESSAGE_LENGTH };
 
@@ -102,21 +104,71 @@ export async function persistMessage(
   conversation: Conversation,
   userId: string,
   content: string,
+  extra: { attachments?: { url: string; publicId: string }[]; isAutomatic?: boolean } = {},
 ) {
   const message = messageRepo.create({
     conversation,
     sender: { id: userId } as User,
     content: content.trim(),
+    attachments: extra.attachments?.length ? extra.attachments : null,
+    isAutomatic: extra.isAutomatic ?? false,
   });
   await messageRepo.save(message);
 
+  // Only the timestamp: save() would write back every field of this
+  // in-memory copy, undoing changes made since it was loaded (such as the
+  // holiday auto-reply marker).
   conversation.updatedAt = new Date();
-  await conversationRepo.save(conversation);
+  await conversationRepo.update(conversation.id, { updatedAt: conversation.updatedAt });
 
   return messageRepo.findOne({
     where: { id: message.id },
     relations: ["sender"],
   });
+}
+
+/**
+ * Saves a message, pushes it to whoever has the thread open, and — if the
+ * client wrote to a shop that's away — sends the shop's automatic reply
+ * (once per conversation per holiday).
+ */
+export async function deliverMessage(
+  conversation: Conversation,
+  senderId: string,
+  content: string,
+  attachments?: { url: string; publicId: string }[],
+) {
+  const saved = await persistMessage(conversation, senderId, content, { attachments });
+  broadcastNewMessage(conversation.id, saved, otherParticipantId(conversation, senderId));
+  const auto = await holidayAutoReply(conversation, senderId);
+  if (auto) broadcastNewMessage(conversation.id, auto, conversation.client.id);
+  return saved;
+}
+
+async function holidayAutoReply(conversation: Conversation, senderId: string) {
+  const shop = conversation.shop;
+  if (senderId !== conversation.client.id || !shop.owner) return null;
+  if (!shop.holidayUntil || shop.holidayUntil.getTime() <= Date.now()) return null;
+  // Claim the reply first so two quick messages can't both trigger one.
+  // Both timestamps come from this server's clock (holidayStartedAt is set
+  // the same way), so a database clock that differs can't cause repeats.
+  const claimed: unknown[] = await AppDataSource.query(
+    `UPDATE conversations SET "autoRepliedAt" = $3
+      WHERE id = $1 AND ("autoRepliedAt" IS NULL OR "autoRepliedAt" < $2)
+      RETURNING id`,
+    [conversation.id, shop.holidayStartedAt ?? new Date(0), new Date()],
+  ).then((r) => (Array.isArray(r[0]) ? r[0] : r));
+  if (!claimed.length) return null;
+  const back = shop.holidayUntil.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: shop.timezone || "UTC",
+  });
+  const text =
+    shop.holidayMessage?.trim() ||
+    `Thanks for your message! I'm away until ${back} and will reply when I'm back.`;
+  return persistMessage(conversation, shop.owner.id, `${text}\n\n(Automatic reply — back ${back})`, { isAutomatic: true });
 }
 
 export function otherParticipantId(
@@ -262,11 +314,42 @@ export const sendMessage = async (req: Request, res: Response) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const saved = await persistMessage(conversation, userId, content);
+    const saved = await deliverMessage(conversation, userId, content);
     return res.status(201).json(saved);
   } catch (error) {
     console.error("sendMessage failed:", error);
     return res.status(500).json({ message: "Error sending message" });
+  }
+};
+
+/**
+ * POST /conversations/:id/attachments (multipart "image", optional
+ * "content" caption) — a photo in the chat.
+ */
+export const sendAttachment = async (req: Request, res: Response) => {
+  const file = req.file as CloudinaryFile | undefined;
+  try {
+    if (!file?.path) return res.status(400).json({ message: "Choose a photo to send" });
+    const userId = req.user!.id;
+    const caption = typeof req.body?.content === "string" ? req.body.content : "";
+    const refuse = async (status: number, message: string) => {
+      await destroyUpload(file.filename);
+      return res.status(status).json({ message });
+    };
+    if (caption.length > MAX_MESSAGE_LENGTH) {
+      return refuse(400, `Messages are limited to ${MAX_MESSAGE_LENGTH} characters`);
+    }
+    const { conversation, allowed } = await findConversationForParticipant(String(req.params.id), userId);
+    if (!conversation) return refuse(404, "Conversation not found");
+    if (!allowed) return refuse(403, "Forbidden");
+    const saved = await deliverMessage(conversation, userId, caption, [
+      { url: file.path, publicId: file.filename ?? "" },
+    ]);
+    return res.status(201).json(saved);
+  } catch (error) {
+    console.error("sendAttachment failed:", error);
+    await destroyUpload(file?.filename);
+    return res.status(500).json({ message: "Couldn't send that photo" });
   }
 };
 

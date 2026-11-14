@@ -179,7 +179,7 @@ export const getAllDisputesAdmin = async (req: Request, res: Response) => {
     for (const o of orders) {
       summaries.set(o.id, {
         id: o.id,
-        title: `${o.quantity} × ${o.product?.title ?? "item"}${o.variantLabel ? ` (${o.variantLabel})` : ""}`,
+        title: `${o.quantity} × ${o.product?.title ?? o.title ?? "item"}${o.variantLabel ? ` (${o.variantLabel})` : ""}`,
         status: o.status,
         paymentStatus: o.paymentStatus,
         totalAmount: o.totalAmount,
